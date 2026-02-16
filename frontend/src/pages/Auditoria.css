@@ -1,0 +1,206 @@
+/* ===========================
+   Auditoría
+   =========================== */
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+
+  /* ✅ FIX VISUAL */
+  padding: 12px;
+  box-sizing: border-box;
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+/* Inputs y selects */
+.filters select,
+.filters input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 40px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: #fff;
+  font-size: 14px;
+}
+
+/* Focus */
+.filters select:focus,
+.filters input:focus {
+  outline: none;
+  border-color: #f5b301;
+  box-shadow: 0 0 0 2px rgba(245, 179, 1, 0.25);
+}
+
+/* Disabled (se ve limpio, no feo) */
+.filters select:disabled,
+.filters input:disabled {
+  background: #f7f7f7;
+  color: #6b7280;
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+/* Botones */
+.filters .btn {
+  grid-column: span 2;
+  height: 42px;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Botón principal */
+.filters .btn.primary {
+  background: #f5b301;
+  border: none;
+  color: #111;
+}
+
+.filters .btn.primary:hover {
+  background: #e0a600;
+}
+
+/* Botón secundario */
+.filters .btn.ghost {
+  background: #f3f4f6;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  color: #333;
+}
+
+.filters .btn.ghost:hover {
+  background: #e5e7eb;
+}
+
+/* ===========================
+   Tabla Auditoría
+   =========================== */
+
+.table td {
+  font-size: 13px;
+  vertical-align: top;
+}
+
+.table td:nth-child(6) {
+  max-width: 360px;
+}
+
+.table td pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  background: #f8fafc;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+
+/* ===========================
+   Estados (acción)
+   =========================== */
+
+.audit-action {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.audit-action.CREATE {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.audit-action.UPDATE {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.audit-action.DELETE {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* ===========================
+   Fila interactiva
+   =========================== */
+
+.auditRow {
+  cursor: pointer;
+}
+
+.auditRow:hover {
+  background: rgba(245, 179, 1, 0.08);
+}
+
+/* ===========================
+   Detalle + botón
+   =========================== */
+
+.auditDetailCell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.auditSentence {
+  display: inline-block;
+  max-width: 520px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #111827;
+}
+
+.auditViewBtn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: #fff;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.auditViewBtn:hover {
+  border-color: rgba(245, 179, 1, 0.8);
+  box-shadow: 0 0 0 2px rgba(245, 179, 1, 0.2);
+}
+
+/* ===========================
+   Responsive
+   =========================== */
+
+@media (max-width: 900px) {
+  .filters {
+    grid-template-columns: 1fr;
+  }
+
+  .filters .btn {
+    grid-column: span 1;
+  }
+
+  .table td:nth-child(6) {
+    max-width: unset;
+  }
+
+  .auditDetailCell {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .auditSentence {
+    max-width: 100%;
+  }
+}
+

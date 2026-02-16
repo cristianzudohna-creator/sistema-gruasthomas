@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16
+    container_name: sistema_camiones_db
+    environment:
+      POSTGRES_USER: camiones
+      POSTGRES_PASSWORD: camiones123
+      POSTGRES_DB: sistema_camiones
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

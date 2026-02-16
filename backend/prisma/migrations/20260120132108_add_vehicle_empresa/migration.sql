@@ -1,0 +1,6 @@
+-- CreateEnum
+CREATE TYPE "Empresa" AS ENUM ('GRUAS_THOMAS', 'INSPROTEL');
+
+-- AlterTable
+ALTER TABLE "Vehicle" ADD COLUMN     "empresa" "Empresa" NOT NULL DEFAULT 'GRUAS_THOMAS',
+ALTER COLUMN "type" DROP DEFAULT;

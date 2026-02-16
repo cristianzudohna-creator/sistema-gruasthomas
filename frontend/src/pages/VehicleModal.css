@@ -1,0 +1,93 @@
+.vModalOverlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  z-index: 9999;
+}
+
+.vModal{
+  width: min(640px, 100%);
+  background: #0f172a;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 14px;
+  box-shadow: 0 30px 80px rgba(0,0,0,.45);
+  overflow: hidden;
+}
+
+.vModalHeader{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+
+.vModalHeader h3{
+  margin: 0;
+  font-size: 16px;
+  color: #e2e8f0;
+}
+
+.vModalClose{
+  background: transparent;
+  border: 0;
+  color: #e2e8f0;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 10px;
+}
+
+.vModalClose:hover{
+  background: rgba(255,255,255,.06);
+}
+
+.vModalBody{
+  padding: 14px 16px 16px;
+  color: #cbd5e1;
+}
+
+.vField{
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.vField label{
+  font-size: 13px;
+  color: #cbd5e1;
+}
+
+.vField input{
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: #e2e8f0;
+  outline: none;
+}
+
+.vField input:focus{
+  border-color: rgba(255,255,255,.18);
+}
+
+.vError{
+  margin-top: 6px;
+  background: rgba(239,68,68,.12);
+  border: 1px solid rgba(239,68,68,.25);
+  color: #fecaca;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+}
+
+.vActions{
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}

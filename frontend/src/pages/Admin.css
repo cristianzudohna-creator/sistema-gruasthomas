@@ -1,0 +1,1627 @@
+/* Paleta corporativa */
+:root {
+  --gt-yellow: #f5b800;
+  --gt-yellow-hover: #e0aa00;
+  --gt-black: #0b0b0b;
+  --gt-bg: #f4f5f7;
+  --gt-white: #ffffff;
+  --gt-border: rgba(0, 0, 0, 0.08);
+  --gt-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+  --radius: 14px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* =========================
+   LAYOUT ADMIN
+   ========================= */
+
+.admin-layout {
+  min-height: 100vh;
+  background: var(--gt-bg);
+  display: grid;
+  grid-template-columns: 280px 1fr;
+}
+
+/* Sidebar */
+.admin-sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  background: #0f1115;
+  color: rgba(255, 255, 255, 0.92);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  overflow: auto; /* ✅ si el menú crece */
+}
+
+.sb-brand {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sb-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--gt-yellow);
+  color: var(--gt-black);
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+}
+
+.sb-title {
+  font-weight: 900;
+  line-height: 1.1;
+}
+.sb-subtitle {
+  font-size: 12px;
+  opacity: 0.75;
+  margin-top: 2px;
+}
+
+.sb-nav {
+  margin-top: 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.sb-item {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.92);
+  padding: 10px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: transform 80ms ease, background 120ms ease, border-color 120ms ease;
+}
+.sb-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+.sb-item:active {
+  transform: translateY(1px);
+}
+.sb-item.active {
+  background: rgba(245, 184, 0, 0.12);
+  border-color: rgba(245, 184, 0, 0.35);
+}
+.sb-ico {
+  width: 20px;
+  text-align: center;
+}
+
+.sb-pill {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(245, 184, 0, 0.2);
+  border: 1px solid rgba(245, 184, 0, 0.35);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sb-footer {
+  margin-top: auto;
+  padding-top: 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.sb-logout {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.92);
+  padding: 10px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+.sb-logout:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.sb-small {
+  font-size: 12px;
+  opacity: 0.65;
+}
+
+/* Main */
+.admin-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Topbar */
+.topbar {
+  height: 64px;
+  background: var(--gt-white);
+  border-bottom: 1px solid var(--gt-border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 18px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.icon-btn {
+  display: none;
+  border: 1px solid var(--gt-border);
+  background: #fff;
+  border-radius: 12px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.topbar-search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--gt-border);
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: #fff;
+}
+
+.search-input {
+  border: none;
+  outline: none;
+  width: 100%;
+  font-size: 14px;
+  color: #111;
+  background: transparent;
+}
+.search-ico {
+  opacity: 0.65;
+}
+
+.topbar-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: rgba(245, 184, 0, 0.18);
+  border: 1px solid rgba(245, 184, 0, 0.35);
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  color: #111;
+}
+.user-name {
+  font-weight: 900;
+  font-size: 14px;
+}
+.user-role {
+  font-size: 12px;
+  opacity: 0.65;
+  margin-top: 1px;
+}
+
+/* Content */
+.content {
+  padding: 18px;
+  display: grid;
+  gap: 16px;
+}
+
+.page-title h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 900;
+  color: #111;
+}
+.page-title p {
+  margin: 6px 0 0;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+/* =========================
+   CARDS
+   ========================= */
+
+.cards {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.card {
+  background: var(--gt-white);
+  border: 1px solid var(--gt-border);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.06);
+  padding: 14px;
+  transition: transform 80ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.card-ico {
+  font-size: 18px;
+}
+.card-title {
+  font-weight: 900;
+  color: #111;
+}
+.card-value {
+  font-size: 26px;
+  font-weight: 900;
+  margin-top: 10px;
+}
+.card-sub {
+  margin-top: 4px;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.card:hover {
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.08);
+}
+
+.card.danger {
+  border-left: 6px solid #ef4444;
+}
+.card.warn {
+  border-left: 6px solid #f59e0b;
+}
+.card.ok {
+  border-left: 6px solid #22c55e;
+}
+
+/* seleccionado */
+.card-active {
+  border-color: rgba(245, 184, 0, 0.45);
+  box-shadow: 0 0 0 2px rgba(245, 184, 0, 0.35), 0 10px 22px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+
+/* =========================
+   PANEL + TABLE
+   ========================= */
+
+.panel {
+  background: var(--gt-white);
+  border: 1px solid var(--gt-border);
+  border-radius: var(--radius);
+  box-shadow: var(--gt-shadow);
+}
+
+.panel-head {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 14px;
+  border-bottom: 1px solid var(--gt-border);
+}
+
+.panel-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 900;
+}
+.panel-head p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+/* Botones base */
+.btn {
+  border: none;
+  background: var(--gt-yellow);
+  color: var(--gt-black);
+  font-weight: 900;
+  padding: 10px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 80ms ease, background 120ms ease;
+}
+.btn:hover {
+  background: var(--gt-yellow-hover);
+}
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn.ghost {
+  background: #fff;
+  border: 1px solid var(--gt-border);
+}
+.btn.ghost:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+/* Acciones del panel */
+.panel-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.panel-actions .btn {
+  width: auto;
+  min-width: 160px;
+}
+
+@media (max-width: 720px) {
+  .panel-actions {
+    justify-content: flex-start;
+  }
+  .panel-actions .btn {
+    min-width: 140px;
+  }
+}
+
+/* Tabla */
+.table-wrap {
+  overflow-x: auto; /* ✅ si es muy ancha */
+  overflow-y: visible; /* ✅ sin scroll vertical interno */
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 740px;
+}
+
+.table th,
+.table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table th {
+  font-size: 12px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.table td {
+  font-size: 14px;
+  color: #111;
+}
+
+.table tbody tr:nth-child(even) {
+  background: rgba(0, 0, 0, 0.015);
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+}
+
+/* ✅ acciones en tabla (tu JSX usa .table-actions) */
+.table-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.table-actions .gt-btn {
+  height: 40px;
+  padding: 10px 12px;
+}
+
+/* Status pills */
+.status {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  border: 1px solid;
+}
+.status.danger {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: #b91c1c;
+}
+.status.warn {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.28);
+  color: #92400e;
+}
+.status.ok {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.28);
+  color: #166534;
+}
+
+/* Footer panel */
+.panel-foot {
+  padding: 12px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.muted {
+  color: rgba(0, 0, 0, 0.6);
+  font-size: 13px;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pager-btn {
+  border: 1px solid var(--gt-border);
+  background: #fff;
+  border-radius: 10px;
+  padding: 6px 10px;
+}
+.pager-page {
+  font-weight: 900;
+}
+
+/* Empty */
+.empty {
+  padding: 20px 14px;
+  text-align: center;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+/* =========================
+   Tabs empresa (Camiones)
+   ========================= */
+.empresa-tabs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 8px 0 14px;
+}
+
+.empresa-tab {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.75);
+  border-radius: 999px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.empresa-tab-badge {
+  min-width: 32px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  font-size: 12px;
+}
+
+.empresa-tab.active {
+  background: rgba(245, 184, 0, 0.16);
+  border-color: rgba(245, 184, 0, 0.45);
+}
+
+/* Fila clickeable */
+.vehicle-row {
+  cursor: pointer;
+}
+.vehicle-row:hover {
+  background: rgba(245, 184, 0, 0.07);
+}
+.vehicle-row:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 2px rgba(245, 184, 0, 0.35);
+}
+
+/* =========================
+   FORM UI (reutilizable)
+   ========================= */
+.gt-form-grid {
+  display: grid;
+  gap: 10px;
+}
+.gt-field {
+  display: grid;
+  gap: 6px;
+}
+
+.gt-field label {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.65);
+  font-weight: 800;
+}
+
+.gt-input,
+.gt-select {
+  border: 1px solid var(--gt-border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  outline: none;
+  background: #fff;
+  font-size: 14px;
+}
+
+.gt-input:focus,
+.gt-select:focus {
+  border-color: rgba(245, 184, 0, 0.55);
+  box-shadow: 0 0 0 3px rgba(245, 184, 0, 0.18);
+}
+
+.gt-error {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.1);
+  color: #b91c1c;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+/* Botones GT (modales) */
+.gt-btn {
+  border: 1px solid var(--gt-border);
+  background: #fff;
+  border-radius: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.gt-btn-primary {
+  border: none;
+  background: var(--gt-yellow);
+  color: var(--gt-black);
+}
+.gt-btn-primary:hover {
+  background: var(--gt-yellow-hover);
+}
+
+.gt-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Roles */
+.role-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-weight: 900;
+  font-size: 12px;
+  letter-spacing: 0.2px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(0, 0, 0, 0.03);
+  color: #111;
+  white-space: nowrap;
+}
+
+/* =========================
+   Vehicle Detail Modal
+   ========================= */
+
+.vdetail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+}
+
+.vdetail-modal {
+  width: min(920px, 96vw);
+  background: #fff;
+  border-radius: 18px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.vdetail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.vdetail-head h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.vdetail-head p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.vdetail-x {
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 12px;
+  width: 38px;
+  height: 38px;
+  cursor: pointer;
+}
+
+.vdetail-body {
+  padding: 16px 18px 8px;
+}
+
+.vdetail-grid {
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 14px;
+  padding: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.vdetail-field.wide {
+  grid-column: 1 / -1;
+}
+
+.vdetail-label {
+  font-size: 12px;
+  font-weight: 900;
+  color: rgba(0, 0, 0, 0.65);
+  margin-bottom: 6px;
+}
+
+.vdetail-value {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  font-size: 14px;
+}
+
+.vdetail-tip {
+  margin: 12px 2px 0;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+@media (max-width: 720px) {
+  .vdetail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* acciones modal */
+.vdetail-actions {
+  padding: 14px 18px 18px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  display: grid;
+  gap: 10px;
+}
+
+.vdetail-actions-row {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.vdetail-actions-row .btn {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.vdetail-actions-close {
+  grid-template-columns: 1fr !important;
+  justify-items: center;
+}
+
+.vdetail-actions-close .btn {
+  width: auto !important;
+  min-width: 140px !important;
+  opacity: 0.92;
+}
+
+@media (max-width: 640px) {
+  .vdetail-actions-row {
+    grid-template-columns: 1fr !important;
+  }
+  .vdetail-actions-close .btn {
+    width: 100% !important;
+  }
+}
+
+/* =========================
+   RESPONSIVE
+   ========================= */
+
+.admin-overlay {
+  display: none;
+}
+
+@media (max-width: 960px) {
+  .admin-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    transform: translateX(-105%);
+    transition: transform 180ms ease;
+    z-index: 50;
+    width: 280px;
+  }
+
+  .admin-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .admin-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 160ms ease;
+    z-index: 40;
+  }
+
+  .admin-overlay.show {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .cards {
+    grid-template-columns: 1fr;
+  }
+
+  .table {
+    min-width: 680px;
+  }
+}
+
+@media (max-width: 560px) {
+  .gt-btn {
+    padding: 10px 10px;
+  }
+}
+
+/* ==================================================
+   MENÚ ⋮ (gt-actions) — PRO y sin cortar
+   ================================================== */
+
+.gt-actions-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+details.gt-actions {
+  position: relative;
+}
+
+.gt-actions-btn {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: #fff;
+  font-weight: 900;
+}
+
+details.gt-actions summary::-webkit-details-marker {
+  display: none;
+}
+
+.gt-actions-menu {
+  position: absolute;
+  right: 0;
+  top: 44px;
+
+  min-width: 190px;
+  padding: 8px;
+  border-radius: 14px;
+
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.18);
+
+  z-index: 999999;
+}
+
+.gt-actions-item {
+  width: 100%;
+  display: block;
+
+  padding: 10px 10px;
+  border-radius: 10px;
+
+  font-size: 14px;
+  text-align: left;
+
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: #111;
+  text-decoration: none;
+}
+
+.gt-actions-item:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.gt-actions-item.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.gt-actions-item.danger {
+  color: #b91c1c;
+}
+
+.gt-actions-item.danger:hover {
+  background: rgba(185, 28, 28, 0.1);
+}
+
+/* ===========================
+   Portal Trabajador (pt-*)
+   =========================== */
+
+.pt-page {
+  padding: 18px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.pt-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 16px 14px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(245, 184, 0, 0.16), rgba(0, 0, 0, 0));
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  margin-bottom: 14px;
+}
+
+.pt-hero__text h1 {
+  margin: 0;
+  font-size: 30px;
+  letter-spacing: -0.3px;
+}
+
+.pt-hero__text p {
+  margin: 6px 0 0;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.pt-hero__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  font-weight: 900;
+  color: rgba(0, 0, 0, 0.65);
+}
+
+.pt-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+@media (max-width: 900px) {
+  .pt-hero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .pt-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pt-card {
+  width: 100%;
+  text-align: left;
+  border-radius: 18px;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
+  padding: 14px;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+
+.pt-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.08);
+  border-color: rgba(245, 184, 0, 0.35);
+}
+
+.pt-card:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(245, 184, 0, 0.28), 0 14px 30px rgba(0, 0, 0, 0.08);
+  border-color: rgba(245, 184, 0, 0.45);
+}
+
+.pt-card__top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pt-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  flex: 0 0 auto;
+}
+
+.pt-card__titles {
+  min-width: 0;
+  flex: 1;
+}
+
+.pt-card__title {
+  font-weight: 1000;
+  font-size: 16px;
+  color: rgba(0, 0, 0, 0.85);
+}
+
+.pt-card__sub {
+  margin-top: 4px;
+  font-weight: 800;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.pt-badge {
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  border-radius: 999px;
+  font-weight: 1000;
+  font-size: 12px;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.pt-badge--off {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.pt-card__desc {
+  margin-top: 10px;
+  font-weight: 800;
+  color: rgba(0, 0, 0, 0.62);
+  line-height: 1.35;
+}
+
+.pt-card__cta {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 1000;
+  color: rgba(0, 0, 0, 0.7);
+  padding-top: 10px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.pt-card--disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.pt-card--disabled:hover {
+  transform: none;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+/* ===========================
+   Portal Trabajador: sesión
+   =========================== */
+
+.pt-hero__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pt-hero__account {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.pt-hero__avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  font-weight: 1000;
+  color: #111;
+  background: rgba(245, 184, 0, 0.22);
+  border: 1px solid rgba(245, 184, 0, 0.35);
+}
+
+.pt-hero__who {
+  display: grid;
+  line-height: 1.05;
+}
+
+.pt-hero__name {
+  font-weight: 1000;
+  color: rgba(0, 0, 0, 0.82);
+  font-size: 13px;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pt-hero__meta {
+  margin-top: 4px;
+  font-weight: 900;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.pt-logout {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: #fff;
+  border-radius: 999px;
+  padding: 10px 12px;
+  cursor: pointer;
+  font-weight: 1000;
+  color: rgba(0, 0, 0, 0.75);
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.pt-logout:hover {
+  background: rgba(0, 0, 0, 0.04);
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+
+.pt-logout:active {
+  transform: translateY(0px);
+}
+
+@media (max-width: 900px) {
+  .pt-hero__account {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .pt-logout {
+    width: 100%;
+  }
+}
+
+/* ==================================================
+   FIX: Tabla DocumentosModal (gt-docs-table)
+   Evita que "Tipo" empuje el layout y rompe columnas
+   ================================================== */
+
+.gt-docs-wrap {
+  overflow-x: auto;
+}
+
+.gt-docs-table {
+  width: 100%;
+  table-layout: fixed; /* ✅ clave */
+}
+
+/* Reset controlado solo para esta tabla */
+.gt-docs-table th,
+.gt-docs-table td {
+  white-space: nowrap; /* mantenemos ordenado */
+  vertical-align: middle;
+}
+
+/* Anchos fijos para columnas chicas */
+.gt-docs-table .col-vence {
+  width: 130px;
+}
+
+.gt-docs-table .col-estado {
+  width: 140px;
+}
+
+.gt-docs-table .col-actions {
+  width: 110px;
+  text-align: right;
+}
+
+/* "Tipo" NO debe romper el layout: ellipsis */
+.gt-docs-table .col-tipo,
+.gt-docs-table td.col-tipo,
+.gt-docs-table td.mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 0; /* ✅ necesario con table-layout: fixed */
+}
+
+/* Asegura que el menú ⋮ quede por encima del modal */
+.gt-docs-table .gt-actions {
+  position: relative;
+}
+
+.gt-docs-table .gt-actions-menu {
+  z-index: 9999999;
+}
+
+/* ================================
+   AJUSTE FINO – DocumentosModal
+   ================================ */
+
+/* Centrar columnas chicas */
+.gt-docs-table th.col-vence,
+.gt-docs-table td:nth-child(2) {
+  text-align: center;
+}
+
+.gt-docs-table th.col-estado,
+.gt-docs-table td:nth-child(3) {
+  text-align: center;
+}
+
+.gt-docs-table th.col-actions,
+.gt-docs-table td:nth-child(4) {
+  text-align: center;
+}
+
+/* Reducir protagonismo visual de "Tipo" */
+.gt-docs-table td.mono {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111;
+}
+
+/* Estado pill mejor centrado */
+.gt-docs-table .status {
+  margin-inline: auto;
+}
+
+/* Acciones: botón más compacto visualmente */
+.gt-docs-table .gt-actions-btn {
+  margin-inline: auto;
+}
+
+/* =========================
+   WorkOrders header fix
+   ========================= */
+
+.wo-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.wo-left {
+  flex: 1;
+  min-width: 220px;
+}
+
+.wo-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wo-select {
+  height: 40px;
+  min-width: 190px;
+  border: 1px solid var(--gt-border);
+  border-radius: 12px;
+  padding: 0 10px;
+  background: #fff;
+  font-weight: 800;
+}
+
+.wo-search {
+  height: 40px;
+  min-width: 260px;
+}
+
+.wo-new {
+  height: 40px;
+  width: auto !important; /* ✅ evita que se estire */
+  min-width: 160px;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* =========================
+   CreateWorkOrderModal (OT)
+   SIN duplicados
+   ========================= */
+
+.ot-box {
+  background: #fff;
+  border: 2px solid rgba(0, 0, 0, 0.22);
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
+}
+
+.ot-box-title {
+  font-weight: 900;
+  margin-bottom: 10px;
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.85);
+}
+
+.ot-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.ot-check {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  background: rgba(0, 0, 0, 0.04);
+  font-weight: 900;
+}
+
+@media (max-width: 920px) {
+  .ot-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+.gt-input-error {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18) !important;
+}
+
+.gt-error-text {
+  font-size: 12px;
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+/* ==================================================
+   ✅ NUEVO: Vista Trabajador - Órdenes (tw-*)
+   NO rompe Admin, NO rompe Portal
+   ================================================== */
+
+.tw-page {
+  padding: 18px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.tw-topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+
+  padding: 14px 14px;
+  background: linear-gradient(180deg, rgba(245, 184, 0, 0.12), rgba(0, 0, 0, 0));
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 18px;
+}
+
+.tw-topbar h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 1000;
+  letter-spacing: -0.2px;
+  color: #111;
+}
+
+.tw-sub {
+  margin-top: 6px;
+  font-weight: 800;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.tw-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* 🔥 clave: en la vista trabajador NO queremos botones gigantes */
+.tw-actions .btn,
+.tw-actions .gt-btn {
+  min-width: 0 !important;
+  width: auto !important;
+  padding: 10px 14px !important;
+  height: 42px;
+}
+
+/* Cards mini */
+.tw-cards {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.tw-card {
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.06);
+}
+
+.tw-card-title {
+  font-size: 12px;
+  font-weight: 1000;
+  opacity: 0.7;
+}
+
+.tw-card-value {
+  font-size: 26px;
+  font-weight: 1000;
+  margin-top: 6px;
+}
+
+.tw-card-sub {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 800;
+  opacity: 0.65;
+}
+
+/* Chip "Nueva" */
+.tw-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-weight: 1000;
+  font-size: 12px;
+  border: 1px solid rgba(245, 184, 0, 0.55);
+  background: rgba(245, 184, 0, 0.12);
+}
+
+/* Tabla Worker: menos rígida, más bonita */
+.tw-table .table {
+  min-width: 980px;
+}
+
+.tw-table .table td {
+  font-weight: 700;
+}
+
+.tw-table .table td strong {
+  font-weight: 1000;
+}
+
+.tw-table .table tbody tr:hover {
+  background: rgba(245, 184, 0, 0.07);
+}
+
+/* acción derecha más compacta */
+.tw-table .btn.ghost {
+  height: 36px;
+  padding: 8px 12px;
+  min-width: 0 !important;
+}
+
+/* responsive */
+@media (max-width: 980px) {
+  .tw-cards {
+    grid-template-columns: 1fr;
+  }
+  .tw-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+/* ============================= */
+/* FORM INPUT STYLE GLOBAL FIX  */
+/* ✅ ARREGLADO: no pisar buscador topbar-search ni componentes específicos */
+/* ============================= */
+
+/* Solo inputs “de formulario” dentro de panel, NO la barra de búsqueda */
+.panel input:not(.search-input):not([type="checkbox"]):not([type="radio"]),
+.panel select,
+.panel textarea {
+  width: 100%;
+  height: 46px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  outline: none;
+  transition: all 0.18s ease;
+  box-sizing: border-box;
+}
+
+/* Focus bonito como Camiones */
+.panel input:not(.search-input):not([type="checkbox"]):focus,
+.panel select:focus,
+.panel textarea:focus {
+  border-color: #f5b301;
+  box-shadow: 0 0 0 3px rgba(245, 179, 1, 0.18);
+}
+
+/* Placeholder más suave */
+.panel input::placeholder,
+.panel textarea::placeholder {
+  color: rgba(0, 0, 0, 0.45);
+  font-weight: 500;
+}
+
+/* =========================
+   Trabajadores - Filtros (grid pro)
+   ========================= */
+
+.workers-filters {
+  margin-bottom: 14px;
+  display: grid;
+  gap: 12px;
+  align-items: center;
+  grid-template-columns: minmax(260px, 1fr) 160px 220px 220px;
+}
+
+/* Que el buscador se vea igual de “caja” que los selects */
+.workers-filters .topbar-search {
+  height: 46px;
+  padding: 0 14px;
+  border-radius: 14px;
+}
+
+/* Ajuste interno del input para que no se descuadre */
+.workers-filters .search-input {
+  height: 44px;
+}
+
+/* Responsive */
+@media (max-width: 1100px) {
+  .workers-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .workers-filters {
+    grid-template-columns: 1fr;
+  }
+}
+/* =========================
+   ✅ OVERRIDES DEFINITIVOS: Trabajadores filtros
+   (pegar al FINAL del Admin.css)
+   ========================= */
+
+.workers-filters .topbar-search{
+  border-radius: 14px !important;
+  height: 46px !important;
+  padding: 0 14px !important;
+}
+
+.workers-filters .search-ico{
+  display: inline-flex !important;
+  align-items: center !important;
+}
+
+.workers-filters .search-input{
+  height: 46px !important;
+  line-height: 46px !important;
+  padding: 0 !important;
+}
+
+/* Asegura que los selects queden idénticos */
+.workers-filters select.gt-select,
+.workers-filters .gt-select{
+  height: 46px !important;
+  border-radius: 14px !important;
+  padding: 0 14px !important;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,101 @@
+:root {
+  --gt-yellow: #f5b800;
+  --gt-yellow-hover: #e0aa00;
+  --gt-black: #0b0b0b;
+  --gt-gray: #2b2b2b;
+  --gt-border: rgba(0, 0, 0, 0.08);
+  --gt-bg: #f4f5f7;
+  --gt-white: #ffffff;
+
+  --radius: 12px;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: var(--gt-bg);
+  color: var(--gt-black);
+}
+/* =========================
+   FIX DEFINITIVO: Scroll GLOBAL de la página
+   - sidebar fija (sticky) OK
+   - el contenido derecho puede crecer y la página scrollea
+   ========================= */
+
+/* ✅ El grid NO debe forzar alturas raras */
+.admin-layout {
+  min-height: 100vh;
+  height: auto;              /* ✅ importante */
+  overflow: visible;         /* ✅ importante */
+}
+
+/* ✅ El main NO debe limitar altura ni ocultar overflow */
+.admin-main {
+  min-width: 0;
+  height: auto;              /* ✅ importante */
+  overflow: visible;         /* ✅ importante */
+}
+
+/* ✅ El contenedor content NO debe tener overflow hidden */
+.content {
+  overflow: visible;         /* ✅ importante */
+}
+
+/* ✅ Panel NO debe generar scroll interno raro */
+.panel {
+  overflow: visible;         /* ✅ importante (antes estaba hidden) */
+}
+
+/* ✅ Tabla: SOLO horizontal si se necesita */
+.table-wrap.no-inner-scroll {
+  overflow-x: auto;
+  overflow-y: visible;
+  max-height: none;
+}
+
+/* ✅ Por si quedó scroll interno viejo */
+.table-scroll {
+  overflow: visible !important;
+  max-height: none !important;
+}
+
+/* Toolbar derecha en panel */
+.panel-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.panel-actions .btn {
+  width: auto !important;
+  min-width: 160px;
+}
+
+@media (max-width: 720px) {
+  .panel-actions {
+    justify-content: flex-start;
+  }
+  .panel-actions .btn {
+    min-width: 140px;
+  }
+}
+
+

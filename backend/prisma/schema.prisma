@@ -1,0 +1,525 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  SUPERADMIN
+  CONTROL_FLOTA
+  ADMINISTRADORA
+  TRABAJADOR
+}
+
+enum AuditEntity {
+  USER
+  VEHICLE
+  DOCUMENT
+  MAINTENANCE
+  WORK_ORDER
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  TOGGLE
+  LOGIN
+  RESTORE
+}
+
+enum VehicleType {
+  CAMION
+  AUTO
+  CAMIONETA
+}
+
+enum DocumentType {
+  SOAP
+  REVISION_TECNICA
+  PERMISO_CIRCULACION
+  SEGURO
+  OTRO
+}
+
+enum MaintenanceType {
+  CAMBIO_ACEITE
+  CAMBIO_FILTROS
+  FRENOS
+  NEUMATICOS
+  BATERIA
+  ALINEACION_BALANCEO
+  OTRO
+}
+
+enum Empresa {
+  GRUAS_THOMAS
+  INSPROTEL
+}
+
+/**
+ * ✅ estado operativo del vehículo
+ * - OPERATIVO: sí debe generar alertas
+ * - EN_PANA / PARADO: NO debe generar alertas
+ */
+enum VehicleOperationalStatus {
+  OPERATIVO
+  EN_PANA
+  PARADO
+}
+
+enum WorkerType {
+  CONDUCTOR
+  RIGGER
+  OPERADOR
+  MECANICO
+
+  ADMINISTRACION
+  ASEO
+  AYUDANTE_DE_MECANICO
+  CASA_PARTICULAR
+  LAVADOR_EQUIPOS
+  MECANICO_HIDRAULICO
+  NOCHERO
+  PREVENCION
+  SOLDADOR
+  SUPERVISOR
+
+  OTRO
+}
+
+
+model User {
+  id       String  @id @default(uuid())
+  email    String  @unique
+  password String
+  nombre   String
+  apellido String
+  rut      String? @unique
+  role     Role    @default(TRABAJADOR)
+  activo   Boolean @default(true)
+
+  // ✅ empresa del usuario (para filtrar vehículos al trabajador)
+  empresa Empresa?
+
+  // ✅ NUEVO: tipo de trabajador (solo aplica a TRABAJADOR)
+  workerType WorkerType?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  passwordResetTokens PasswordResetToken[]
+  auditLogs           AuditLog[]
+
+  // ✅ INVERSA: registros de horómetro hechos por este usuario
+  horometers HorometerRecord[] @relation("UserHorometers")
+
+  // ✅ INVERSAS: Work Orders
+  workOrdersCreated   WorkOrder[]         @relation("WorkOrderCreatedBy")
+  workOrdersAssigned  WorkOrder[]         @relation("WorkOrderAssignedTo")
+  workOrdersCompleted WorkOrder[]         @relation("WorkOrderCompletedBy")
+  workOrdersApproved  WorkOrder[]         @relation("WorkOrderApprovedBy")
+  workOrderEvidences  WorkOrderEvidence[]
+
+  @@index([empresa])
+  @@index([workerType])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model AuditLog {
+  id       String      @id @default(uuid())
+  entity   AuditEntity
+  entityId String
+  action   AuditAction
+
+  actorId    String?
+  actorEmail String?
+
+  ip        String?
+  userAgent String?
+
+  data      Json?
+  createdAt DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+  @@index([actorId])
+  @@index([createdAt])
+}
+
+model Vehicle {
+  id          String  @id @default(uuid())
+  patente     String  @unique
+  marcaModelo String
+  conductor   String?
+
+  type         VehicleType
+  tipoVehiculo String?
+  year         Int?
+
+  empresa Empresa @default(GRUAS_THOMAS)
+
+  // ✅ estado operativo
+  estadoOperativo VehicleOperationalStatus @default(OPERATIVO)
+
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  documents    VehicleDocument[]
+  maintenances VehicleMaintenance[]
+
+  // ✅ INVERSA: registros de horómetro de este vehículo
+  horometers HorometerRecord[]
+
+  // ✅ INVERSA: órdenes asociadas a este vehículo
+  workOrders WorkOrder[]
+
+  @@index([empresa])
+  @@index([estadoOperativo])
+  @@index([activo])
+}
+
+model VehicleDocument {
+  id               String       @id @default(uuid())
+  vehicleId        String
+  type             DocumentType
+  nombre           String?
+  fechaVencimiento DateTime?
+  observacion      String?
+  archivoUrl       String?
+
+  // ✅ archivo subido
+  filePath     String
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+
+  createdAt DateTime @default(now())
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId])
+  @@index([type])
+  @@index([fechaVencimiento])
+
+  // 🚫 OJO:
+  // NO pongas @@unique([vehicleId, type]) aquí,
+  // porque queremos permitir múltiples OTRO y además Prisma no soporta unique parcial en schema.
+  // La restricción real la haremos con un índice UNIQUE parcial en una migración SQL.
+}
+
+model VehicleMaintenance {
+  id             String          @id @default(uuid())
+  vehicleId      String
+  type           MaintenanceType
+  nombre         String?
+  fechaRealizada DateTime
+  fechaProxima   DateTime?
+  observacion    String?
+  archivoUrl     String?
+
+  // ✅ archivo subido (para nombre real en Excel)
+  filePath     String?
+  originalName String?
+  mimeType     String?
+  sizeBytes    Int?
+
+  createdAt DateTime @default(now())
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId])
+  @@index([type])
+  @@index([fechaProxima])
+}
+
+model HorometerRecord {
+  id String @id @default(uuid())
+
+  // Relación vehículo
+  vehicleId String
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  // Relación trabajador (usuario)
+  trabajadorId String
+  trabajador   User   @relation("UserHorometers", fields: [trabajadorId], references: [id], onDelete: Restrict)
+
+  // Snapshot trabajador (para auditoría)
+  trabajadorNombre   String
+  trabajadorApellido String
+  trabajadorRut      String?
+  trabajadorEmail    String
+
+  // Empresa (snapshot)
+  empresa Empresa
+
+  // Datos horómetro
+  horas      Int
+  comentario String?
+
+  // Evidencia
+  fotoUrl      String
+  filePath     String
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+
+  createdAt DateTime @default(now())
+
+  @@index([vehicleId])
+  @@index([trabajadorId])
+  @@index([empresa])
+  @@index([createdAt])
+}
+
+model CompanySettings {
+  id      String  @id @default(uuid())
+  empresa Empresa @unique
+
+  nombre        String
+  emailContacto String?
+  telefono      String?
+  direccion     String?
+  logoUrl       String?
+
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+// =========================
+// ✅ CLIENTES (AUTOCOMPLETE)
+// =========================
+
+model Client {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Para filtrar/compartimentar clientes por empresa
+  empresa Empresa
+
+  // Datos básicos del cliente
+  nombre String
+  rut    String?
+
+  // Opcionales (por si después quieres autollenar más)
+  giro      String?
+  telefono  String?
+  direccion String?
+  comuna    String?
+  ciudad    String?
+
+  // INVERSA
+  workOrders WorkOrder[]
+
+  @@unique([empresa, rut], name: "client_empresa_rut_unique")
+  @@index([empresa])
+  @@index([nombre])
+}
+
+// =========================
+// ORDENES DE TRABAJO
+// =========================
+
+enum WorkOrderStatus {
+  ABIERTA
+  EN_PROCESO
+  COMPLETADA
+  APROBADA
+  RECHAZADA
+  CERRADA
+}
+
+enum WorkOrderPriority {
+  BAJA
+  MEDIA
+  ALTA
+}
+
+enum WorkOrderType {
+  MANTENCION
+  REPARACION
+  DOCUMENTO
+  OTRO
+}
+
+model WorkOrder {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  empresa  Empresa
+  status   WorkOrderStatus   @default(ABIERTA)
+  priority WorkOrderPriority @default(MEDIA)
+  type     WorkOrderType     @default(OTRO)
+
+  // ✅ Relación a Cliente (para autocomplete)
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  // ✅ Campos “Registro manual” (tu modal)
+  cliente       String?
+  rut           String?
+  giro          String?
+  solicitadoPor String?
+  direccion     String?
+  comuna        String?
+  ciudad        String?
+
+  telefonoCliente String?
+  direccionFaena  String?
+
+  lugar    String?
+  horario  String?
+  mapsLink String?
+
+  camion    String?
+  conductor String?
+  operador  String?
+  rigger    String?
+  sinJib    Boolean @default(false)
+
+  // ✅ Días que va a trabajar (ej: ["LUN","MAR","MIE"])
+  diasTrabajo String[] @default([])
+
+  nota String?
+
+  // ✅ Si después quieres usar “título/descripcion” (opcional por ahora)
+  titulo      String?
+  descripcion String?
+
+  // Programación
+  fechaProgramada DateTime?
+
+  // Relaciones
+  vehicleId String?
+  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+
+  // Admin que crea
+  createdById String
+  createdBy   User   @relation("WorkOrderCreatedBy", fields: [createdById], references: [id])
+
+  // Trabajador asignado (opcional)
+  assignedToId String?
+  assignedTo   User? @relation("WorkOrderAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  // Trabajo realizado (lo completa el trabajador)
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  horasTrabajo    Int?
+  comentarioFinal String?
+
+  // ✅ Reporte que completa el trabajador
+  workerReport  Json?
+  completedAt   DateTime?
+  completedById String?
+  completedBy   User? @relation("WorkOrderCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+
+  // ✅ Visto bueno administradora / superadmin
+  approvedAt      DateTime?
+  approvedById    String?
+  approvedBy      User? @relation("WorkOrderApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvalComment String?
+  rejectReason    String?
+
+  // Checklist y evidencias
+  items     WorkOrderItem[]
+  evidences WorkOrderEvidence[]
+
+  // ✅ SOFT DELETE (PAPELERA)
+  activo    Boolean  @default(true)
+  deletedAt DateTime?
+
+  @@index([empresa])
+  @@index([status])
+  @@index([assignedToId])
+  @@index([vehicleId])
+  @@index([completedAt])
+  @@index([completedById])
+  @@index([approvedAt])
+  @@index([approvedById])
+  @@index([clientId])
+
+  // ✅ índices extra para papelera / filtros
+  @@index([activo])
+  @@index([empresa, activo])
+  @@index([deletedAt])
+}
+
+model WorkOrderItem {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  workOrderId String
+  workOrder   WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  titulo      String
+  obligatorio Boolean @default(false)
+
+  // lo marca el trabajador
+  done   Boolean   @default(false)
+  doneAt DateTime?
+
+  @@index([workOrderId])
+}
+
+model WorkOrderEvidence {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  workOrderId String
+  workOrder   WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  // quién subió
+  uploadedById String
+  uploadedBy   User @relation(fields: [uploadedById], references: [id])
+
+  // Archivo
+  fileUrl      String
+  filePath     String
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+
+  @@index([workOrderId])
+  @@index([uploadedById])
+}
+enum AlertKind {
+  DOCUMENT
+  MAINTENANCE
+}
+
+model AlertDispatchLog {
+  id            String    @id @default(uuid())
+  createdAt     DateTime  @default(now())
+
+  kind          AlertKind
+  entityId      String
+  thresholdDays Int
+
+  recipient     String?
+  subject       String?
+  messageId     String?
+
+  @@unique([kind, entityId, thresholdDays])
+  @@index([createdAt])
+  @@index([thresholdDays])
+}
+

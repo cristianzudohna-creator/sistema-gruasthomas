@@ -1,0 +1,18 @@
+-- AlterTable
+ALTER TABLE "WorkOrder" ADD COLUMN     "camion" TEXT,
+ADD COLUMN     "ciudad" TEXT,
+ADD COLUMN     "cliente" TEXT,
+ADD COLUMN     "comuna" TEXT,
+ADD COLUMN     "conductor" TEXT,
+ADD COLUMN     "diasTrabajo" TEXT[] DEFAULT ARRAY[]::TEXT[],
+ADD COLUMN     "direccion" TEXT,
+ADD COLUMN     "giro" TEXT,
+ADD COLUMN     "horario" TEXT,
+ADD COLUMN     "lugar" TEXT,
+ADD COLUMN     "mapsLink" TEXT,
+ADD COLUMN     "nota" TEXT,
+ADD COLUMN     "operador" TEXT,
+ADD COLUMN     "rigger" TEXT,
+ADD COLUMN     "rut" TEXT,
+ADD COLUMN     "sinJib" BOOLEAN NOT NULL DEFAULT false,
+ALTER COLUMN "titulo" DROP NOT NULL;
