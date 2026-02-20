@@ -1,13 +1,21 @@
 // ✅ Archivo: src/vehicles/vehicle-maintenances.service.ts
-// (COMPLETO) ✅ Mantenciones con respaldo al eliminar:
+// (COMPLETO)
+// ✅ Mantenciones con respaldo al eliminar:
 // - Si el archivo era físico: se MUEVE a /uploads/archive/vehicle-maint/
 // - Se registra auditoría con snapshot completo (before) y archivedUrl
 // - Luego se elimina el registro en BD
+//
+// ✅ NUEVO (SCOPING):
+// - Roles globales: SUPERADMIN, CONTROL_FLOTA => pueden ver/editar todo
+// - Roles scoped: ADMIN, ADMINISTRADORA, TRABAJADOR => solo su empresa
+// - Si vehículo está inactivo => NotFound
+// - Se valida empresa del vehículo antes de listar/crear/editar/eliminar
 
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  ForbiddenException,
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
@@ -15,10 +23,14 @@ import { AuditAction, AuditEntity, MaintenanceType } from "@prisma/client";
 import { unlink, rename, mkdir } from "fs/promises";
 import { join, extname } from "path";
 
+type Empresa = "GRUAS_THOMAS" | "INSPROTEL";
+
 type ActorLike =
   | {
       id?: string;
       email?: string;
+      role?: string;
+      empresa?: Empresa | null;
     }
   | null;
 
@@ -34,7 +46,7 @@ type CreateMaintenanceDto = {
   observacion?: string;
   archivoUrl?: string;
 
-  // ✅ NUEVO: metadata de archivo (para nombre real en Excel)
+  // ✅ metadata de archivo (para nombre real en Excel)
   filePath?: string;
   originalName?: string;
   mimeType?: string;
@@ -52,7 +64,7 @@ type UpdateMaintenanceDto = {
   observacion?: string;
   archivoUrl?: string;
 
-  // ✅ NUEVO: metadata de archivo (para nombre real en Excel)
+  // ✅ metadata de archivo (para nombre real en Excel)
   filePath?: string;
   originalName?: string;
   mimeType?: string;
@@ -104,6 +116,87 @@ export class VehicleMaintenancesService {
   constructor(private prisma: PrismaService, private audit: AuditService) {}
 
   // =========================
+  // 🔒 SCOPING POR EMPRESA / ROLES
+  // =========================
+
+  private roleUpper(actor?: ActorLike) {
+    return String(actor?.role || "").toUpperCase();
+  }
+
+  private isGlobalRole(actor?: ActorLike) {
+    const r = this.roleUpper(actor);
+    return r === "SUPERADMIN" || r === "CONTROL_FLOTA";
+  }
+
+  private empresaFromActorOrThrow(actor: ActorLike): Empresa {
+    const emp = actor?.empresa as Empresa | undefined | null;
+    if (!emp) {
+      throw new ForbiddenException("No se pudo determinar la empresa del usuario.");
+    }
+    return emp;
+  }
+
+  private normalizeEmpresaFromRow(value: any): Empresa {
+    return String(value) === "INSPROTEL" ? "INSPROTEL" : "GRUAS_THOMAS";
+  }
+
+  private assertEmpresaAccess(actor: ActorLike, resourceEmpresa: Empresa) {
+    // ✅ roles globales => todo
+    if (this.isGlobalRole(actor)) return;
+
+    const role = this.roleUpper(actor);
+
+    // ✅ roles scoped => solo su empresa
+    if (
+      role === "ADMIN" ||
+      role === "ADMINISTRADORA" ||
+      role === "TRABAJADOR"
+    ) {
+      const myEmp = this.empresaFromActorOrThrow(actor);
+      if (String(myEmp) !== String(resourceEmpresa)) {
+        throw new ForbiddenException("No tienes permisos para acceder a otra empresa.");
+      }
+      return;
+    }
+
+    throw new ForbiddenException("No tienes permisos.");
+  }
+
+  // ✅ asegura acceso a vehículo (incluye activo=true)
+  private async ensureVehicleAccessOrThrow(vehicleId: string, actor?: ActorLike) {
+    const v = await this.prisma.vehicle.findUnique({
+      where: { id: vehicleId },
+      select: { id: true, patente: true, empresa: true as any, activo: true as any },
+    });
+
+    if (!v) throw new NotFoundException("Vehículo no encontrado");
+    if ((v as any).activo === false) throw new NotFoundException("Vehículo no encontrado");
+
+    const emp = this.normalizeEmpresaFromRow((v as any).empresa);
+    if (actor) this.assertEmpresaAccess(actor, emp);
+
+    return v;
+  }
+
+  // ✅ asegura acceso a mantención (resuelve vehículo + empresa + activo)
+  private async ensureMaintenanceAccessOrThrow(id: string, actor?: ActorLike) {
+    const m = await this.prisma.vehicleMaintenance.findUnique({
+      where: { id },
+      include: {
+        vehicle: { select: { id: true, patente: true, empresa: true as any, activo: true as any } },
+      },
+    });
+
+    if (!m) throw new NotFoundException("Mantención no encontrada");
+    if ((m.vehicle as any)?.activo === false) throw new NotFoundException("Mantención no encontrada");
+
+    const emp = this.normalizeEmpresaFromRow((m.vehicle as any).empresa);
+    if (actor) this.assertEmpresaAccess(actor, emp);
+
+    return m;
+  }
+
+  // =========================
   // ✅ helpers archivo físico
   // =========================
 
@@ -131,9 +224,9 @@ export class VehicleMaintenancesService {
   // =========================
   // List
   // =========================
-  async listByVehicle(vehicleId: string) {
-    const v = await this.prisma.vehicle.findUnique({ where: { id: vehicleId } });
-    if (!v) throw new NotFoundException("Vehículo no encontrado");
+  async listByVehicle(vehicleId: string, actor?: ActorLike) {
+    // ✅ valida acceso + activo
+    await this.ensureVehicleAccessOrThrow(vehicleId, actor);
 
     const items = await this.prisma.vehicleMaintenance.findMany({
       where: { vehicleId },
@@ -153,8 +246,8 @@ export class VehicleMaintenancesService {
   // Create
   // =========================
   async create(vehicleId: string, dto: CreateMaintenanceDto, actor?: ActorLike) {
-    const v = await this.prisma.vehicle.findUnique({ where: { id: vehicleId } });
-    if (!v) throw new NotFoundException("Vehículo no encontrado");
+    // ✅ valida acceso + activo
+    const v = await this.ensureVehicleAccessOrThrow(vehicleId, actor);
 
     if (!dto.fechaRealizada) {
       throw new BadRequestException("Fecha realizada es obligatoria");
@@ -220,10 +313,11 @@ export class VehicleMaintenancesService {
   // Update
   // =========================
   async update(id: string, dto: UpdateMaintenanceDto, actor?: ActorLike) {
-    const current = await this.prisma.vehicleMaintenance.findUnique({ where: { id } });
-    if (!current) throw new NotFoundException("Mantención no encontrada");
+    // ✅ valida acceso + activo (incluye vehículo)
+    const existing = await this.ensureMaintenanceAccessOrThrow(id, actor);
+    const current = existing; // alias
 
-    const v = await this.prisma.vehicle.findUnique({ where: { id: current.vehicleId } });
+    const v = existing.vehicle; // ya viene
 
     const nextType = dto.type ?? current.type;
 
@@ -299,7 +393,7 @@ export class VehicleMaintenancesService {
       actor: safeActor(actor),
       meta: {
         title: "Editó Mantención",
-        targetLabel: v?.patente || updated.vehicleId,
+        targetLabel: (v as any)?.patente || updated.vehicleId,
         before: {
           id: current.id,
           type: current.type,
@@ -339,13 +433,12 @@ export class VehicleMaintenancesService {
 
   // =========================
   // Remove
-  // ✅ CAMBIO: respaldo + mover archivo a archive
+  // ✅ respaldo + mover archivo a archive
   // =========================
   async remove(id: string, actor?: ActorLike) {
-    const current = await this.prisma.vehicleMaintenance.findUnique({ where: { id } });
-    if (!current) throw new NotFoundException("Mantención no encontrada");
-
-    const v = await this.prisma.vehicle.findUnique({ where: { id: current.vehicleId } });
+    // ✅ valida acceso + activo (incluye vehículo)
+    const current = await this.ensureMaintenanceAccessOrThrow(id, actor);
+    const v = current.vehicle;
 
     const oldFilePath = (current as any).filePath || current.archivoUrl || null;
 
@@ -375,7 +468,7 @@ export class VehicleMaintenancesService {
       actor: safeActor(actor),
       meta: {
         title: "Eliminó Mantención (respaldo)",
-        targetLabel: v?.patente || current.vehicleId,
+        targetLabel: (v as any)?.patente || current.vehicleId,
         before: {
           id: current.id,
           type: current.type,
@@ -420,6 +513,7 @@ export class VehicleMaintenancesService {
     return { ok: true, archivedUrl };
   }
 }
+
 
 
 

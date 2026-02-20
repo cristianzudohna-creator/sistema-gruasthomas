@@ -6,23 +6,34 @@ export default function AuditDetailsModal({ open, onClose, item }) {
 
   const accionHumana = humanAction(item?.action);
   const entidadHumana = humanEntity(item?.entity);
+
   const registroAfectado = getTargetLabel(item);
+  const tituloEvento = getTitleLabel(item);
 
   const beforeObj = normalizeObject(item?.before);
   const afterObj = normalizeObject(item?.after);
 
   const diffs = diffObjects(beforeObj, afterObj);
 
-  const title = `${accionHumana} ${entidadHumana}${registroAfectado ? `: ${registroAfectado}` : ""}`;
+  // ✅ título del modal: prioriza title, luego targetLabel
+  const titleBase = `${accionHumana} ${entidadHumana}`;
+  const title =
+    tituloEvento
+      ? `${titleBase} • ${tituloEvento}`
+      : registroAfectado
+      ? `${titleBase}: ${registroAfectado}`
+      : titleBase;
+
   const subtitle = item?.createdAt ? new Date(item.createdAt).toLocaleString() : "";
 
   const footer = (
-    <>
-      <button className="gt-btn" type="button" onClick={onClose}>
-        Cerrar
-      </button>
-    </>
+    <button className="gt-btn" type="button" onClick={onClose}>
+      Cerrar
+    </button>
   );
+
+  const actor = item?.userEmail || item?.userId || "-";
+  const isLogin = String(item?.action || "").toUpperCase() === "LOGIN";
 
   return (
     <Modal open={open} onClose={onClose} title={title} subtitle={subtitle} width={980} footer={footer}>
@@ -42,21 +53,34 @@ export default function AuditDetailsModal({ open, onClose, item }) {
           >
             <div style={{ display: "grid", gap: 6 }}>
               <div>
+                <b>Evento:</b> {tituloEvento || "—"}
+              </div>
+              <div>
                 <b>Registro afectado:</b> {registroAfectado || "—"}
               </div>
-
               <div>
-                <b>Realizado por:</b> {item.userEmail || item.userId || "-"}
+                <b>Realizado por:</b> {actor}
               </div>
-
               <div>
                 <b>Fecha:</b> {item.createdAt ? new Date(item.createdAt).toLocaleString() : "-"}
               </div>
             </div>
           </div>
 
-          {/* Cambios */}
-          {diffs.length > 0 ? (
+          {/* ✅ Caso especial: LOGIN normalmente no tiene before/after */}
+          {isLogin && diffs.length === 0 ? (
+            <div
+              style={{
+                border: "1px solid rgba(0,0,0,.08)",
+                borderRadius: 14,
+                padding: 12,
+                background: "rgba(0,0,0,.02)",
+              }}
+            >
+              <div style={{ fontWeight: 900, marginBottom: 8 }}>Detalle</div>
+              <pre style={preStyle()}>{formatJson(item.detail || item)}</pre>
+            </div>
+          ) : diffs.length > 0 ? (
             <div>
               <div style={{ fontWeight: 900, marginBottom: 8 }}>Cambios</div>
 
@@ -133,20 +157,51 @@ function humanAction(action) {
   if (a === "CREATE") return "Creó";
   if (a === "UPDATE") return "Editó";
   if (a === "DELETE") return "Eliminó";
-  return "Acción";
+  if (a === "RESTORE") return "Restauró";
+  if (a === "TOGGLE") return "Cambió estado";
+  if (a === "LOGIN") return "Inició sesión";
+  return action || "Acción";
 }
 
 function humanEntity(entity) {
   const e = (entity || "").toUpperCase();
   if (e === "USER") return "Usuario";
-  if (e === "TRABAJADOR" || e === "WORKER") return "Trabajador";
-  if (e === "TRUCK" || e === "CAMION" || e === "VEHICLE") return "Vehículo";
-  if (e === "DOCUMENT") return "Documento";
   if (e === "VEHICLE") return "Vehículo";
-  return "Registro";
+  if (e === "DOCUMENT") return "Documento";
+  if (e === "MAINTENANCE") return "Mantención";
+  if (e === "WORK_ORDER") return "Orden de trabajo";
+  if (e === "HOROMETER") return "Horómetro";
+  if (e === "CLIENT") return "Cliente";
+  return entity || "Registro";
+}
+
+/* ===========================
+   Labels: title / targetLabel
+   =========================== */
+
+function getTitleLabel(item) {
+  // ✅ Prioridad: data.title -> item.title -> detail.title
+  const data = normalizeObject(item?.detail || item?.data || null);
+  const v =
+    cleanStr(data?.title) ||
+    cleanStr(item?.title) ||
+    cleanStr(data?.meta?.title);
+
+  return v || "";
 }
 
 function getTargetLabel(item) {
+  // ✅ Prioridad real del backend: data.targetLabel
+  const data = normalizeObject(item?.detail || item?.data || null);
+
+  const explicit =
+    cleanStr(data?.targetLabel) ||
+    cleanStr(item?.target) ||
+    cleanStr(data?.target);
+
+  if (explicit) return explicit;
+
+  // fallback por objetos
   const candidates = [item?.after, item?.before, item?.detail, item?.data];
 
   for (const c of candidates) {
@@ -154,20 +209,32 @@ function getTargetLabel(item) {
     const obj = typeof c === "string" ? tryParseJson(c) : c;
     if (!obj) continue;
 
-    if (obj?.patente) return obj.patente;
-    if (obj?.name) return obj.name;
-    if (obj?.nombre && obj?.apellido) return `${obj.nombre} ${obj.apellido}`;
-    if (obj?.email) return obj.email;
+    // Work Order
+    if (obj?.titulo) return String(obj.titulo);
+    if (obj?.cliente) return String(obj.cliente);
 
+    // Vehículo / Usuario
+    if (obj?.patente) return String(obj.patente);
+    if (obj?.email) return String(obj.email);
+    if (obj?.nombre && obj?.apellido) return `${obj.nombre} ${obj.apellido}`;
+    if (obj?.nombre) return String(obj.nombre);
+
+    // wrappers comunes
     if (obj?.created) {
       const created = obj.created;
-      if (created?.patente) return created.patente;
-      if (created?.name) return created.name;
-      if (created?.email) return created.email;
+      if (created?.patente) return String(created.patente);
+      if (created?.email) return String(created.email);
+      if (created?.nombre && created?.apellido) return `${created.nombre} ${created.apellido}`;
+      if (created?.nombre) return String(created.nombre);
     }
   }
 
   return "";
+}
+
+function cleanStr(v) {
+  const s = String(v ?? "").trim();
+  return s.length ? s : null;
 }
 
 /* ===========================
@@ -186,25 +253,44 @@ function normalizeObject(value) {
 
 function diffObjects(before, after, basePath = "") {
   const diffs = [];
-  const keys = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
+  const b = before || {};
+  const a = after || {};
+
+  const keys = new Set([...Object.keys(b), ...Object.keys(a)]);
 
   for (const key of keys) {
     const path = basePath ? `${basePath}.${key}` : key;
-    const b = before?.[key];
-    const a = after?.[key];
+    const bv = b?.[key];
+    const av = a?.[key];
 
-    const bIsObj = isPlainObject(b);
-    const aIsObj = isPlainObject(a);
+    // Arrays: compara JSON completo (simple y efectivo para auditoría)
+    if (Array.isArray(bv) || Array.isArray(av)) {
+      const bs = safeJson(bv);
+      const as = safeJson(av);
+      if (bs !== as) diffs.push({ path, before: bv, after: av });
+      continue;
+    }
+
+    const bIsObj = isPlainObject(bv);
+    const aIsObj = isPlainObject(av);
 
     if (bIsObj || aIsObj) {
-      diffs.push(...diffObjects(bIsObj ? b : {}, aIsObj ? a : {}, path));
+      diffs.push(...diffObjects(bIsObj ? bv : {}, aIsObj ? av : {}, path));
     } else {
-      if (!isEqual(b, a)) diffs.push({ path, before: b, after: a });
+      if (!isEqual(bv, av)) diffs.push({ path, before: bv, after: av });
     }
   }
 
   diffs.sort((x, y) => x.path.localeCompare(y.path));
   return diffs;
+}
+
+function safeJson(v) {
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v ?? "");
+  }
 }
 
 function isPlainObject(v) {
@@ -231,15 +317,29 @@ function humanField(path) {
   const map = {
     role: "Rol",
     email: "Correo",
-    name: "Nombre",
     nombre: "Nombre",
     apellido: "Apellido",
+    rut: "RUT",
+    empresa: "Empresa",
+    workerType: "Tipo trabajador",
     patente: "Patente",
     telefono: "Teléfono",
+    telefonoCliente: "Teléfono cliente",
     activo: "Activo",
     type: "Tipo",
     marcaModelo: "Marca/Modelo",
     conductor: "Conductor",
+    status: "Estado",
+    priority: "Prioridad",
+    solicitadoPor: "Solicitado por",
+    direccion: "Dirección",
+    comuna: "Comuna",
+    ciudad: "Ciudad",
+    diasTrabajo: "Días de trabajo",
+    nota: "Nota",
+    titulo: "Título",
+    descripcion: "Descripción",
+    fechaProgramada: "Fecha programada",
   };
 
   const last = path.split(".").pop();
@@ -268,6 +368,7 @@ function formatJson(value) {
     return typeof value === "string" ? value : JSON.stringify(value, null, 2);
   }
 }
+
 
 
 

@@ -5,8 +5,9 @@ import { AuditController } from "./audit.controller";
 
 @Module({
   imports: [PrismaModule],
-  providers: [AuditService],
   controllers: [AuditController],
-  exports: [AuditService],
+  providers: [AuditService],
+  exports: [AuditService], // ✅ IMPORTANTE para usarlo en otros módulos
 })
 export class AuditModule {}
+

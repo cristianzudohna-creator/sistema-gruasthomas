@@ -8,6 +8,7 @@ import {
   ArrayUnique,
   IsIn,
   IsUUID,
+  IsDateString,
 } from "class-validator";
 
 export const DIAS_TRABAJO_VALIDOS = [
@@ -130,7 +131,7 @@ export class CreateWorkOrderDto {
   sinJib?: boolean;
 
   // =========================================
-  // ✅ Días de trabajo
+  // ✅ Días de trabajo (compat)
   // =========================================
   @IsOptional()
   @IsArray()
@@ -139,12 +140,23 @@ export class CreateWorkOrderDto {
   diasTrabajo?: DiaTrabajo[];
 
   // =========================================
+  // ✅ NUEVO: Días programados (calendario)
+  // - Array de fechas ISO: ["2026-02-19", "2026-02-20", ...]
+  // =========================================
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsDateString({}, { each: true })
+  diasProgramados?: string[];
+
+  // =========================================
   // Nota
   // =========================================
   @IsOptional()
   @IsString()
   nota?: string;
 }
+
 
 
 

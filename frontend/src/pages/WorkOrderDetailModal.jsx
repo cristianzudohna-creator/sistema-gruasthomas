@@ -4,6 +4,14 @@
 // 2) Quita “Empresa” del subtitle y chips (no es dato del cliente en este modal)
 // 3) Muestra KMs por tramo (kmSalidaPlanta, kmLlegadaFaena, kmSalidaFaena, kmLlegadaPlanta, kmColacion)
 //    + compatibilidad legacy (kmSalida/kmLlegada)
+// ✅ CAMBIO:
+// - “Creada por” -> “Solicitado por” (CONTACTO DEL CLIENTE / quien solicitó)
+// - Se agregan fallbacks extra por si el backend lo manda como solicitadoPor / requestedBy
+// ✅ NUEVO (fechas):
+// - Si viene data.diasProgramados (["2026-02-19", ...]) se muestra como fechas (Jue 19-02-2026 | ...)
+// - Si NO viene, se mantiene como antes (LUN, MAR, ...)
+// ✅ NUEVO (OBRA):
+// - Muestra inicioServicioObra + terminoServicioObra desde workerReport.detalleHoras
 
 import { useEffect, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -72,23 +80,6 @@ function pick(...vals) {
   return "";
 }
 
-function extractTelefonoFromNota(nota) {
-  const t = String(nota || "");
-  if (!t.trim()) return "";
-  const m = t.match(/Tel[eé]fono\s*cliente\s*:\s*(.+)/i);
-  return m?.[1]?.trim() || "";
-}
-
-function stripTelefonoLine(nota) {
-  const t = String(nota || "");
-  if (!t.trim()) return "";
-  return t
-    .split("\n")
-    .filter((line) => !/Tel[eé]fono\s*cliente\s*:/i.test(line))
-    .join("\n")
-    .trim();
-}
-
 function Field({ label, value, right, valueContainerStyle }) {
   const isEmpty =
     value === null ||
@@ -118,7 +109,9 @@ function Field({ label, value, right, valueContainerStyle }) {
         {isEmpty ? "—" : value}
       </div>
 
-      {right ? <div style={{ position: "absolute", right: 10, top: 10 }}>{right}</div> : null}
+      {right ? (
+        <div style={{ position: "absolute", right: 10, top: 10 }}>{right}</div>
+      ) : null}
     </div>
   );
 }
@@ -134,7 +127,14 @@ function Section({ title, children, right }) {
         background: "rgba(0,0,0,0.02)",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+        }}
+      >
         <div style={{ fontWeight: 900, marginBottom: 8 }}>{title}</div>
         {right ? <div style={{ marginBottom: 8 }}>{right}</div> : null}
       </div>
@@ -237,8 +237,59 @@ function mapsPrettyLabel(url) {
   }
 }
 
+/* =========================
+   ✅ Helpers fechas (diasProgramados)
+========================= */
+function isValidISODate(s) {
+  const v = String(s || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = new Date(v + "T00:00:00");
+  return !Number.isNaN(d.getTime());
+}
+
+function uniqueSortedISO(arr) {
+  const clean = (Array.isArray(arr) ? arr : [])
+    .map((x) => String(x || "").slice(0, 10))
+    .filter((x) => isValidISODate(x));
+  const set = new Set(clean);
+  const out = Array.from(set);
+  out.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  return out;
+}
+
+const WEEKDAYS_SHORT = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+function dowLabelFromISO(iso) {
+  if (!isValidISODate(iso)) return "";
+  const d = new Date(iso + "T00:00:00");
+  const jsDow = d.getDay(); // 0..6
+  const idx = jsDow === 0 ? 6 : jsDow - 1; // Lun..Dom
+  return WEEKDAYS_SHORT[idx] || "";
+}
+
+function fmtDDMMYYYYFromISO(iso) {
+  if (!isValidISODate(iso)) return iso || "";
+  const [y, m, d] = iso.split("-");
+  return `${d}-${m}-${y}`;
+}
+
+function diasProgramadosPretty(arrISO) {
+  const arr = uniqueSortedISO(arrISO);
+  if (!arr.length) return "";
+  const max = 10;
+  const shown = arr.slice(0, max);
+  const rest = arr.length - shown.length;
+
+  const txt = shown
+    .map((iso) => `${dowLabelFromISO(iso)} ${fmtDDMMYYYYFromISO(iso)}`)
+    .join(" | ");
+
+  return rest > 0 ? `${txt} +${rest}` : txt;
+}
+
 function LabeledInput({ label, placeholder, value, onChange, disabled, error, className = "" }) {
-  const errStyle = error ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220,38,38,.15)" } : undefined;
+  const errStyle = error
+    ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220,38,38,.15)" }
+    : undefined;
 
   return (
     <div className={className}>
@@ -246,13 +297,22 @@ function LabeledInput({ label, placeholder, value, onChange, disabled, error, cl
         {label}
         {error ? <span style={{ color: "#dc2626" }}> • {error}</span> : null}
       </div>
-      <input className="gt-input" placeholder={placeholder} value={value} onChange={onChange} disabled={disabled} style={errStyle} />
+      <input
+        className="gt-input"
+        placeholder={placeholder}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        style={errStyle}
+      />
     </div>
   );
 }
 
 function LabeledTextarea({ label, placeholder, value, onChange, disabled, error, className = "" }) {
-  const errStyle = error ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220,38,38,.15)" } : undefined;
+  const errStyle = error
+    ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220,38,38,.15)" }
+    : undefined;
 
   return (
     <div className={className}>
@@ -260,7 +320,14 @@ function LabeledTextarea({ label, placeholder, value, onChange, disabled, error,
         {label}
         {error ? <span style={{ color: "#dc2626" }}> • {error}</span> : null}
       </div>
-      <textarea className="gt-input ot-textarea" placeholder={placeholder} value={value} onChange={onChange} disabled={disabled} style={errStyle} />
+      <textarea
+        className="gt-input ot-textarea"
+        placeholder={placeholder}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        style={errStyle}
+      />
     </div>
   );
 }
@@ -286,25 +353,37 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
   const conductor = pick(data?.conductor);
   const rigger = pick(data?.rigger);
 
+  // ✅ días: prioriza fechas si existen
+  const diasProgramadosArr = Array.isArray(data?.diasProgramados) ? data.diasProgramados : [];
+  const diasProgramadosTxt = diasProgramadosPretty(diasProgramadosArr);
+
   const diasArr = Array.isArray(data?.diasTrabajo) ? data.diasTrabajo : [];
-  const dias = diasArr.length ? diasArr.join(", ") : "—";
+  const diasTrabajoTxt = diasArr.length ? diasArr.join(", ") : "—";
 
-  const createdBy =
-    (data?.createdBy
-      ? (
-          `${pick(data.createdBy?.nombre)}${pick(data.createdBy?.apellido) ? " " + pick(data.createdBy?.apellido) : ""}`.trim() ||
-          pick(data.createdBy?.email) ||
-          ""
-        )
-      : "") ||
-    pick(data?.createdByName, data?.creadoPor, data?.createdByEmail) ||
-    "—";
+  const diasLabel = diasProgramadosTxt ? "Días programados" : "Días de trabajo";
+  const diasValue = diasProgramadosTxt || diasTrabajoTxt;
 
-  const notaRaw = pick(data?.descripcion, data?.nota);
-  const telefono = pick(data?.telefonoCliente, extractTelefonoFromNota(notaRaw));
-  const nota = stripTelefonoLine(notaRaw);
+  // ✅ “Solicitado por”
+  const solicitadoPor =
+    pick(
+      data?.solicitadoPor,
+      data?.solicitadoPorNombre,
+      data?.requestedByName,
+      data?.requestedBy,
+      data?.contactoSolicitante,
+      data?.nombreSolicitante
+    ) || "—";
 
-  const modalTitle = `OT • ${pick(cliente, direccionFaena, lugar, direccionCliente, data?.titulo, "Detalle")}`;
+  const nota = pick(data?.descripcion, data?.nota);
+
+  const modalTitle = `OT • ${pick(
+    cliente,
+    direccionFaena,
+    lugar,
+    direccionCliente,
+    data?.titulo,
+    "Detalle"
+  )}`;
 
   const rejectReason = String(pick(data?.rejectReason) || "").trim();
   const approvalComment = String(pick(data?.approvalComment) || "").trim();
@@ -313,7 +392,9 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
   const approvedBy =
     data?.approvedBy
       ? (
-          `${pick(data.approvedBy?.nombre)}${pick(data.approvedBy?.apellido) ? " " + pick(data.approvedBy?.apellido) : ""}`.trim() ||
+          `${pick(data.approvedBy?.nombre)}${
+            pick(data.approvedBy?.apellido) ? " " + pick(data.approvedBy?.apellido) : ""
+          }`.trim() ||
           pick(data.approvedBy?.email) ||
           ""
         )
@@ -331,7 +412,9 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
   const completedBy =
     data?.completedBy
       ? (
-          `${pick(data.completedBy?.nombre)}${pick(data.completedBy?.apellido) ? " " + pick(data.completedBy?.apellido) : ""}`.trim() ||
+          `${pick(data.completedBy?.nombre)}${
+            pick(data.completedBy?.apellido) ? " " + pick(data.completedBy?.apellido) : ""
+          }`.trim() ||
           pick(data.completedBy?.email) ||
           ""
         )
@@ -368,6 +451,11 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
   const [adminF, setAdminF] = useState({
     salidaPlanta: "",
     llegadaFaena: "",
+
+    // ✅ NUEVO OBRA
+    inicioServicioObra: "",
+    terminoServicioObra: "",
+
     salidaFaena: "",
     llegadaPlanta: "",
     colacion: "",
@@ -394,13 +482,17 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
     const rep = safeParseWorkerReport(data?.workerReport);
     const dh = rep?.detalleHoras || {};
 
-    // ✅ legacy support
     const legacyKmSalida = normalizeText(dh?.kmSalida);
     const legacyKmLlegada = normalizeText(dh?.kmLlegada);
 
     setAdminF({
       salidaPlanta: normalizeText(dh?.salidaPlanta),
       llegadaFaena: normalizeText(dh?.llegadaFaena),
+
+      // ✅ NUEVO OBRA
+      inicioServicioObra: normalizeText(dh?.inicioServicioObra),
+      terminoServicioObra: normalizeText(dh?.terminoServicioObra),
+
       salidaFaena: normalizeText(dh?.salidaFaena),
       llegadaPlanta: normalizeText(dh?.llegadaPlanta),
       colacion: normalizeText(dh?.colacion),
@@ -418,11 +510,20 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
 
   function adminValidate() {
     const e = {};
-    const hourFields = ["salidaPlanta", "llegadaFaena", "salidaFaena", "llegadaPlanta"];
+    const hourFields = [
+      "salidaPlanta",
+      "llegadaFaena",
+      "inicioServicioObra",
+      "terminoServicioObra",
+      "salidaFaena",
+      "llegadaPlanta",
+    ];
+
     for (const k of hourFields) {
       const v = normalizeText(adminF[k]);
       if (v && !isValidHora(v)) e[k] = "HH:MM";
     }
+
     if (!normalizeText(adminF.movimientos)) e.movimientos = "Obligatorio";
 
     setAdminFieldErr(e);
@@ -447,6 +548,11 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
         detalleHoras: {
           salidaPlanta: normalizeText(adminF.salidaPlanta) || null,
           llegadaFaena: normalizeText(adminF.llegadaFaena) || null,
+
+          // ✅ NUEVO OBRA
+          inicioServicioObra: normalizeText(adminF.inicioServicioObra) || null,
+          terminoServicioObra: normalizeText(adminF.terminoServicioObra) || null,
+
           salidaFaena: normalizeText(adminF.salidaFaena) || null,
           llegadaPlanta: normalizeText(adminF.llegadaPlanta) || null,
           colacion: normalizeText(adminF.colacion) || null,
@@ -459,6 +565,9 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
         movimientos: normalizeText(adminF.movimientos),
         // ✅ mantener firma si existía
         signature: workerReport?.signature || undefined,
+        // ✅ mantener recibí conforme si existía
+        recibiConforme:
+          workerReport?.recibiConforme || workerReport?.recibeConforme || undefined,
       };
 
       const updated = await apiPatch(`/work-orders/${data.id}/admin-report`, {
@@ -521,6 +630,10 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
   const kmLlegadaFaena = normalizeText(pick(detalleHoras?.kmLlegadaFaena));
   const kmSalidaFaena = normalizeText(pick(detalleHoras?.kmSalidaFaena));
   const kmLlegadaPlanta = normalizeText(pick(detalleHoras?.kmLlegadaPlanta, detalleHoras?.kmLlegada));
+
+  // ✅ NUEVO OBRA
+  const inicioServicioObra = normalizeText(pick(detalleHoras?.inicioServicioObra));
+  const terminoServicioObra = normalizeText(pick(detalleHoras?.terminoServicioObra));
 
   return (
     <Modal
@@ -617,8 +730,9 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
             <Field label="RUT" value={rut} />
             <Field label="Giro" value={giro} />
 
-            <Field label="Creada por" value={createdBy} />
-            <Field label="Días de trabajo" value={dias} />
+            <Field label="Solicitado por" value={solicitadoPor} />
+            <Field label={diasLabel} value={diasValue} />
+
             <Field
               label="Horario llegada"
               value={horario}
@@ -651,7 +765,6 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
             }}
           >
             <Field label="Dirección de la faena" value={pick(direccionFaena, lugar)} />
-            <Field label="Teléfono cliente" value={telefono} />
             <Field label="Link Maps" value={mapsValue} valueContainerStyle={{ marginTop: 8 }} />
 
             <Field label="Dirección (cliente)" value={direccionCliente} />
@@ -697,7 +810,12 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
                         cursor: "zoom-in",
                       }}
                     >
-                      <img src={src} alt={p.filename || "foto"} style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />
+                      <img
+                        src={src}
+                        alt={p.filename || "foto"}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        loading="lazy"
+                      />
                     </button>
                   );
                 })}
@@ -709,7 +827,9 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
 
           {/* ===== NOTA ===== */}
           <Section title="Descripción / Nota">
-            <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{nota || "—"}</div>
+            <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
+              {String(nota || "").trim() ? nota : "—"}
+            </div>
             {!mapsLink ? (
               <div style={{ marginTop: 10 }}>
                 <span className="muted">Sin link Maps</span>
@@ -719,7 +839,19 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
 
           {/* ===== REPORTE ===== */}
           {workerReport ? (
-            <Section title="Reporte del trabajador (completado)">
+            <Section
+              title="Reporte del trabajador (completado)"
+              right={
+                <button
+                  className="gt-btn ghost"
+                  type="button"
+                  onClick={() => setAdminEditOpen((v) => !v)}
+                  style={{ height: 34, fontWeight: 900 }}
+                >
+                  ✏️ Corregir reporte
+                </button>
+              }
+            >
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
                 <Badge>Completada: {fmtDate(data?.completedAt)}</Badge>
                 <Badge>Por: {completedBy || "—"}</Badge>
@@ -769,6 +901,24 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
                       disabled={adminSaving}
                       error={adminFieldErr.llegadaFaena}
                     />
+
+                    <LabeledInput
+                      label="Hora inicio servicio en obra"
+                      placeholder="Ej: 21:10"
+                      value={adminF.inicioServicioObra}
+                      onChange={(e) => adminSetField("inicioServicioObra", e.target.value)}
+                      disabled={adminSaving}
+                      error={adminFieldErr.inicioServicioObra}
+                    />
+                    <LabeledInput
+                      label="Hora término servicio en obra"
+                      placeholder="Ej: 04:30"
+                      value={adminF.terminoServicioObra}
+                      onChange={(e) => adminSetField("terminoServicioObra", e.target.value)}
+                      disabled={adminSaving}
+                      error={adminFieldErr.terminoServicioObra}
+                    />
+
                     <LabeledInput
                       label="Hora salida faena"
                       placeholder="Ej: 05:00"
@@ -796,8 +946,21 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
                     error={adminFieldErr.movimientos}
                   />
 
+                  <LabeledTextarea
+                    label="Comentario final (opcional)"
+                    placeholder="Ej: observaciones..."
+                    value={adminF.comentarioFinal}
+                    onChange={(e) => adminSetField("comentarioFinal", e.target.value)}
+                    disabled={adminSaving}
+                  />
+
                   <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 12 }}>
-                    <button className="gt-btn" type="button" onClick={() => setAdminEditOpen(false)} disabled={adminSaving}>
+                    <button
+                      className="gt-btn"
+                      type="button"
+                      onClick={() => setAdminEditOpen(false)}
+                      disabled={adminSaving}
+                    >
                       Cancelar
                     </button>
                     <button
@@ -813,12 +976,18 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
                 </div>
               ) : null}
 
-              <div style={{ fontWeight: 900, marginTop: 6, marginBottom: 6, opacity: 0.85 }}>Detalle de horas</div>
+              <div style={{ fontWeight: 900, marginTop: 6, marginBottom: 6, opacity: 0.85 }}>
+                Detalle de horas
+              </div>
 
-              {/* ✅ horas + kms por tramo */}
+              {/* ✅ horas + kms + ✅ NUEVO OBRA */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
                 <Field label="Salida planta" value={pick(detalleHoras?.salidaPlanta)} />
                 <Field label="Llegada faena" value={pick(detalleHoras?.llegadaFaena)} />
+
+                <Field label="Inicio servicio en obra" value={inicioServicioObra} />
+                <Field label="Término servicio en obra" value={terminoServicioObra} />
+
                 <Field label="Salida faena" value={pick(detalleHoras?.salidaFaena)} />
                 <Field label="Llegada planta" value={pick(detalleHoras?.llegadaPlanta)} />
                 <Field label="Colación" value={pick(detalleHoras?.colacion)} />
@@ -829,7 +998,9 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
                 <Field label="Km llegada planta" value={kmLlegadaPlanta} />
               </div>
 
-              <div style={{ fontWeight: 900, marginTop: 12, marginBottom: 6, opacity: 0.85 }}>Movimientos / ¿Qué se hizo?</div>
+              <div style={{ fontWeight: 900, marginTop: 12, marginBottom: 6, opacity: 0.85 }}>
+                Movimientos / ¿Qué se hizo?
+              </div>
 
               <div
                 style={{
@@ -844,7 +1015,9 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
                 {String(movimientos || "").trim() ? movimientos : "—"}
               </div>
 
-              <div style={{ fontWeight: 900, marginTop: 14, marginBottom: 8, opacity: 0.9 }}>Firma del cliente</div>
+              <div style={{ fontWeight: 900, marginTop: 14, marginBottom: 8, opacity: 0.9 }}>
+                Firma del cliente
+              </div>
 
               {signatureDataUrl && String(signatureDataUrl).startsWith("data:image/") ? (
                 <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
@@ -885,7 +1058,9 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
 
               {String(comentarioFinal || "").trim() ? (
                 <>
-                  <div style={{ fontWeight: 900, marginTop: 12, marginBottom: 6, opacity: 0.85 }}>Comentario final</div>
+                  <div style={{ fontWeight: 900, marginTop: 12, marginBottom: 6, opacity: 0.85 }}>
+                    Comentario final
+                  </div>
                   <div
                     style={{
                       whiteSpace: "pre-wrap",
@@ -903,14 +1078,20 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
 
               {workerReport?.raw ? (
                 <>
-                  <div style={{ fontWeight: 900, marginTop: 12, marginBottom: 6, opacity: 0.85 }}>Reporte (raw)</div>
-                  <div style={{ whiteSpace: "pre-wrap", fontFamily: "monospace", fontSize: 12 }}>{workerReport.raw}</div>
+                  <div style={{ fontWeight: 900, marginTop: 12, marginBottom: 6, opacity: 0.85 }}>
+                    Reporte (raw)
+                  </div>
+                  <div style={{ whiteSpace: "pre-wrap", fontFamily: "monospace", fontSize: 12 }}>
+                    {workerReport.raw}
+                  </div>
                 </>
               ) : null}
             </Section>
           ) : (
             <Section title="Reporte del trabajador">
-              <div style={{ fontWeight: 900, opacity: 0.75 }}>Aún no hay reporte completado por el trabajador.</div>
+              <div style={{ fontWeight: 900, opacity: 0.75 }}>
+                Aún no hay reporte completado por el trabajador.
+              </div>
             </Section>
           )}
 
@@ -964,7 +1145,12 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
                 <img
                   src={photoViewer.src}
                   alt="Foto OT"
-                  style={{ display: "block", maxWidth: "95vw", maxHeight: "95vh", objectFit: "contain" }}
+                  style={{
+                    display: "block",
+                    maxWidth: "95vw",
+                    maxHeight: "95vh",
+                    objectFit: "contain",
+                  }}
                 />
               </div>
             </div>
@@ -1020,7 +1206,13 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
                 <img
                   src={signatureViewer.src}
                   alt="Firma cliente"
-                  style={{ display: "block", maxWidth: "95vw", maxHeight: "95vh", objectFit: "contain", background: "#fff" }}
+                  style={{
+                    display: "block",
+                    maxWidth: "95vw",
+                    maxHeight: "95vh",
+                    objectFit: "contain",
+                    background: "#fff",
+                  }}
                 />
               </div>
             </div>
@@ -1030,6 +1222,11 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
     </Modal>
   );
 }
+
+
+
+
+
 
 
 

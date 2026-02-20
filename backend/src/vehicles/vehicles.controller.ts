@@ -264,9 +264,7 @@ export class VehiclesController {
     const status = body?.status ? String(body.status).trim().toUpperCase() : "";
 
     if (status !== "OPERATIVO" && status !== "EN_PANA" && status !== "PARADO") {
-      throw new BadRequestException(
-        "status debe ser OPERATIVO, EN_PANA o PARADO"
-      );
+      throw new BadRequestException("status debe ser OPERATIVO, EN_PANA o PARADO");
     }
 
     const actor = this.getActor(req);
@@ -420,13 +418,8 @@ export class VehiclesController {
 
     if (String(actor?.role || "").toUpperCase() === "CONTROL_FLOTA") {
       if (actor?.empresa) {
-        if (
-          normalized.empresa !== undefined &&
-          normalized.empresa !== actor.empresa
-        ) {
-          throw new BadRequestException(
-            "CONTROL_FLOTA no puede cambiar empresa del vehículo."
-          );
+        if (normalized.empresa !== undefined && normalized.empresa !== actor.empresa) {
+          throw new BadRequestException("CONTROL_FLOTA no puede cambiar empresa del vehículo.");
         }
       }
     }
@@ -451,7 +444,7 @@ export class VehiclesController {
   async listDocs(@Req() req: Request, @Param("id") id: string) {
     const actor = this.getActor(req);
     await this.vehicles.ensureVehicleAccessOrThrow(id, actor);
-    return this.vehicleDocs.listByVehicle(id);
+    return this.vehicleDocs.listByVehicle(id, actor);
   }
 
   @Post(":id/documents")
@@ -593,18 +586,19 @@ export class VehiclesController {
   }
 
   // =====================
-  // MANTENCIONES
+  // ✅ MANTENCIONES (CAMBIADO)
   // =====================
+
   @Get(":id/maintenances")
-  @Roles("SUPERADMIN", "CONTROL_FLOTA")
+  @Roles("SUPERADMIN", "CONTROL_FLOTA", "ADMIN", "ADMINISTRADORA", "TRABAJADOR")
   async listMaintenances(@Req() req: Request, @Param("id") id: string) {
     const actor = this.getActor(req);
-    await this.vehicles.ensureVehicleAccessOrThrow(id, actor);
-    return this.vehicleMaint.listByVehicle(id);
+    // ✅ ya valida empresa + activo dentro del service
+    return this.vehicleMaint.listByVehicle(id, actor);
   }
 
   @Post(":id/maintenances/upload")
-  @Roles("SUPERADMIN", "CONTROL_FLOTA")
+  @Roles("SUPERADMIN", "CONTROL_FLOTA", "ADMIN", "ADMINISTRADORA", "TRABAJADOR")
   @UseInterceptors(
     FileInterceptor("file", {
       storage: diskStorage({
@@ -630,7 +624,6 @@ export class VehiclesController {
     if (!file) throw new BadRequestException("Falta el archivo");
 
     const actor = this.getActor(req);
-    await this.vehicles.ensureVehicleAccessOrThrow(id, actor);
 
     const archivoUrl = `/uploads/vehicle-maint/${file.filename}`;
     const filePath = archivoUrl;
@@ -654,7 +647,7 @@ export class VehiclesController {
   }
 
   @Patch("maintenances/:maintenanceId/upload")
-  @Roles("SUPERADMIN", "CONTROL_FLOTA")
+  @Roles("SUPERADMIN", "CONTROL_FLOTA", "ADMIN", "ADMINISTRADORA", "TRABAJADOR")
   @UseInterceptors(
     FileInterceptor("file", {
       storage: diskStorage({
@@ -680,7 +673,6 @@ export class VehiclesController {
     if (!file) throw new BadRequestException("Falta el archivo");
 
     const actor = this.getActor(req);
-    await this.vehicles.ensureMaintenanceAccessOrThrow(maintenanceId, actor);
 
     const archivoUrl = `/uploads/vehicle-maint/${file.filename}`;
     const filePath = archivoUrl;
@@ -704,7 +696,7 @@ export class VehiclesController {
   }
 
   @Post(":id/maintenances")
-  @Roles("SUPERADMIN", "CONTROL_FLOTA")
+  @Roles("SUPERADMIN", "CONTROL_FLOTA", "ADMIN", "ADMINISTRADORA", "TRABAJADOR")
   async createMaintenance(
     @Req() req: Request,
     @Param("id") id: string,
@@ -713,18 +705,17 @@ export class VehiclesController {
       type: MaintenanceType;
       nombre?: string;
       fechaRealizada: string;
-      fechaProxima: string;
+      fechaProxima?: string | null;
       observacion?: string;
       archivoUrl?: string;
     }
   ) {
     const actor = this.getActor(req);
-    await this.vehicles.ensureVehicleAccessOrThrow(id, actor);
     return this.vehicleMaint.create(id, body as any, actor);
   }
 
   @Patch("maintenances/:maintenanceId")
-  @Roles("SUPERADMIN", "CONTROL_FLOTA")
+  @Roles("SUPERADMIN", "CONTROL_FLOTA", "ADMIN", "ADMINISTRADORA", "TRABAJADOR")
   async updateMaintenance(
     @Req() req: Request,
     @Param("maintenanceId") maintenanceId: string,
@@ -733,27 +724,26 @@ export class VehiclesController {
       type?: MaintenanceType;
       nombre?: string;
       fechaRealizada?: string;
-      fechaProxima?: string;
+      fechaProxima?: string | null;
       observacion?: string;
       archivoUrl?: string;
     }
   ) {
     const actor = this.getActor(req);
-    await this.vehicles.ensureMaintenanceAccessOrThrow(maintenanceId, actor);
     return this.vehicleMaint.update(maintenanceId, body as any, actor);
   }
 
   @Delete("maintenances/:maintenanceId")
-  @Roles("SUPERADMIN", "CONTROL_FLOTA")
+  @Roles("SUPERADMIN", "CONTROL_FLOTA", "ADMIN", "ADMINISTRADORA", "TRABAJADOR")
   async deleteMaintenance(
     @Req() req: Request,
     @Param("maintenanceId") maintenanceId: string
   ) {
     const actor = this.getActor(req);
-    await this.vehicles.ensureMaintenanceAccessOrThrow(maintenanceId, actor);
     return this.vehicleMaint.remove(maintenanceId, actor);
   }
 }
+
 
 
 

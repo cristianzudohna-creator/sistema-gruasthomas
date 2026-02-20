@@ -1,6 +1,12 @@
+// ✅ Archivo: frontend/src/pages/ChangePassword.jsx (COMPLETO)
+// ✅ FIX: al cambiar contraseña -> set user.mustChangePassword = false en localStorage
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Login.css";
+
+function norm(v) {
+  return String(v || "").trim().toUpperCase();
+}
 
 export default function ChangePassword() {
   const navigate = useNavigate();
@@ -64,6 +70,15 @@ export default function ChangePassword() {
       const data = await res.json();
       setOk(data?.message || "Contraseña actualizada correctamente");
 
+      // ✅ IMPORTANTÍSIMO: quitar flag mustChangePassword en localStorage
+      try {
+        const user = JSON.parse(localStorage.getItem("user") || "null");
+        if (user && typeof user === "object") {
+          user.mustChangePassword = false;
+          localStorage.setItem("user", JSON.stringify(user));
+        }
+      } catch {}
+
       // limpiar
       setCurrentPassword("");
       setNewPassword("");
@@ -71,8 +86,11 @@ export default function ChangePassword() {
 
       // volver al panel según rol
       const user = JSON.parse(localStorage.getItem("user") || "null");
-      const to = user?.role === "TRABAJADOR" ? "/trabajador" : "/admin";
-      setTimeout(() => navigate(to), 900);
+      const role = norm(user?.role);
+
+      const to = role === "TRABAJADOR" ? "/trabajador" : "/admin";
+
+      setTimeout(() => navigate(to, { replace: true }), 700);
     } catch {
       setError("Error de conexión con el servidor");
     } finally {
@@ -176,3 +194,4 @@ export default function ChangePassword() {
     </div>
   );
 }
+

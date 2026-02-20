@@ -9,6 +9,18 @@
 // - Modo admin: NO se edita firma, NO se muestra "Empresa", NO dice "Enviar a administración"
 // - Admin guarda en /admin-report y NO cambia estado
 // - Admin preserva firma existente
+//
+// ✅ CAMBIO NUEVO (para PDF):
+// - Se quita "Teléfono cliente" del detalle (solo lectura)
+// - Se agrega "Recibí Conforme": Nombre + RUT (obligatorios en modo trabajador)
+// - Se guarda en workerReport.recibiConforme { nombre, rut }
+//
+// ✅ NUEVO (OBRA):
+// - Trabajador debe ingresar Hora inicio servicio en obra + Hora término servicio en obra
+// - Se guarda en workerReport.detalleHoras: { inicioServicioObra, terminoServicioObra }
+//
+// ✅ FIX NUEVO:
+// - Se muestra "Solicitado por" en Detalle OT (solo lectura)
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -30,9 +42,7 @@ async function readError(res) {
       if (Array.isArray(data?.message)) return data.message.join(" | ");
       if (typeof data?.message === "string") return data.message;
       return JSON.stringify(data);
-    } catch {
-      // sigue a texto
-    }
+    } catch {}
   }
 
   try {
@@ -137,16 +147,25 @@ function Box({ title, children }) {
   );
 }
 
-function Resumen({ f, firmaOk, mode }) {
+function Resumen({ f, firmaOk, mode, recibi }) {
   const isAdmin = mode === "admin";
+  const recNombre = normalizeText(recibi?.nombre) || "—";
+  const recRut = normalizeText(recibi?.rut) || "—";
+
   return (
     <div style={{ paddingTop: 6 }}>
       <div style={{ fontWeight: 900, marginBottom: 8 }}>
         {isAdmin ? "Resumen de corrección" : "Resumen"}
       </div>
+
       <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 14, padding: 12 }}>
         <Row label="Hora salida planta" value={normalizeText(f.salidaPlanta) || "—"} />
         <Row label="Hora llegada faena" value={normalizeText(f.llegadaFaena) || "—"} />
+
+        {/* ✅ NUEVO OBRA */}
+        <Row label="Hora inicio servicio en obra" value={normalizeText(f.inicioServicioObra) || "—"} />
+        <Row label="Hora término servicio en obra" value={normalizeText(f.terminoServicioObra) || "—"} />
+
         <Row label="Hora salida faena" value={normalizeText(f.salidaFaena) || "—"} />
         <Row label="Hora llegada planta" value={normalizeText(f.llegadaPlanta) || "—"} />
         <Row label="Horas colación (opcional)" value={normalizeText(f.colacion) || "—"} />
@@ -158,7 +177,13 @@ function Resumen({ f, firmaOk, mode }) {
 
         <Row label="Movimientos / ¿Qué se hizo?" value={normalizeText(f.movimientos) || "—"} />
 
-        {!isAdmin ? <Row label="Firma cliente" value={firmaOk ? "✅ Firmada" : "❌ Falta firma"} /> : null}
+        {!isAdmin ? (
+          <>
+            <Row label="Recibí Conforme (nombre)" value={recNombre} />
+            <Row label="Recibí Conforme (RUT)" value={recRut} />
+            <Row label="Firma cliente" value={firmaOk ? "✅ Firmada" : "❌ Falta firma"} />
+          </>
+        ) : null}
       </div>
     </div>
   );
@@ -175,7 +200,7 @@ function Row({ label, value }) {
 
 function LabeledInput({ label, placeholder, value, onChange, disabled, error, className = "" }) {
   const errStyle = error
-    ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220,38,38,.15)" }
+    ? { borderColor: "#dc2626", boxShadow: "0 0,0 2px rgba(220,38,38,.15)" }
     : undefined;
 
   return (
@@ -240,7 +265,7 @@ function SignaturePad({ value, onChange, disabled, helperText }) {
     const rect = c.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
 
-    const old = c.toDataURL("image/png"); // preserva si ya había algo
+    const old = c.toDataURL("image/png");
 
     c.width = Math.round(rect.width * dpr);
     c.height = Math.round(rect.height * dpr);
@@ -254,7 +279,6 @@ function SignaturePad({ value, onChange, disabled, helperText }) {
     ctx.lineJoin = "round";
     ctx.strokeStyle = "#111";
 
-    // re-dibuja imagen previa
     if (value || (old && old.length > 50)) {
       const img = new Image();
       img.onload = () => {
@@ -414,10 +438,22 @@ export default function WorkOrderCompleteModal({
   // firma (solo se edita en worker)
   const [signature, setSignature] = useState("");
 
-  // ✅ AHORA: kms por tramo (compatibles con PDF)
+  // ✅ NUEVO: Recibí Conforme (solo worker)
+  const [recibi, setRecibi] = useState({ nombre: "", rut: "" });
+  function setRecibiField(k, v) {
+    setRecibi((p) => ({ ...p, [k]: v }));
+    setErrors((prev) => ({ ...prev, [k]: undefined }));
+  }
+
+  // ✅ kms por tramo + ✅ NUEVO OBRA
   const [f, setF] = useState({
     salidaPlanta: "",
     llegadaFaena: "",
+
+    // ✅ NUEVO OBRA
+    inicioServicioObra: "",
+    terminoServicioObra: "",
+
     salidaFaena: "",
     llegadaPlanta: "",
     colacion: "",
@@ -447,13 +483,17 @@ export default function WorkOrderCompleteModal({
     const rep = safeParseWorkerReport(workOrder?.workerReport);
     const dh = rep?.detalleHoras || {};
 
-    // ✅ soporte legacy (por si ya tenías guardado kmSalida/kmLlegada)
     const legacyKmSalida = normalizeText(dh?.kmSalida);
     const legacyKmLlegada = normalizeText(dh?.kmLlegada);
 
     setF({
       salidaPlanta: normalizeText(dh?.salidaPlanta),
       llegadaFaena: normalizeText(dh?.llegadaFaena),
+
+      // ✅ NUEVO OBRA
+      inicioServicioObra: normalizeText(dh?.inicioServicioObra),
+      terminoServicioObra: normalizeText(dh?.terminoServicioObra),
+
       salidaFaena: normalizeText(dh?.salidaFaena),
       llegadaPlanta: normalizeText(dh?.llegadaPlanta),
       colacion: normalizeText(dh?.colacion),
@@ -466,19 +506,32 @@ export default function WorkOrderCompleteModal({
       movimientos: normalizeText(rep?.movimientos),
     });
 
-    // ✅ firma existente (para worker se puede editar; admin solo visualizará)
+    // firma existente
     setSignature(normalizeText(rep?.signature?.dataUrl));
+
+    // ✅ recibí conforme existente
+    const rc = rep?.recibiConforme || rep?.recibeConforme || {};
+    setRecibi({
+      nombre: normalizeText(rc?.nombre),
+      rut: normalizeText(rc?.rut),
+    });
   }, [open, workOrder?.id]);
 
   function validateAll() {
     const e = {};
 
-    // mantenemos requisitos de horas + movimientos como estaban
     if (!normalizeText(f.salidaPlanta)) e.salidaPlanta = "Obligatorio";
     else if (!isValidHora(f.salidaPlanta)) e.salidaPlanta = "HH:MM";
 
     if (!normalizeText(f.llegadaFaena)) e.llegadaFaena = "Obligatorio";
     else if (!isValidHora(f.llegadaFaena)) e.llegadaFaena = "HH:MM";
+
+    // ✅ NUEVO OBRA (obligatorios)
+    if (!normalizeText(f.inicioServicioObra)) e.inicioServicioObra = "Obligatorio";
+    else if (!isValidHora(f.inicioServicioObra)) e.inicioServicioObra = "HH:MM";
+
+    if (!normalizeText(f.terminoServicioObra)) e.terminoServicioObra = "Obligatorio";
+    else if (!isValidHora(f.terminoServicioObra)) e.terminoServicioObra = "HH:MM";
 
     if (!normalizeText(f.salidaFaena)) e.salidaFaena = "Obligatorio";
     else if (!isValidHora(f.salidaFaena)) e.salidaFaena = "HH:MM";
@@ -490,8 +543,12 @@ export default function WorkOrderCompleteModal({
 
     if (!normalizeText(f.movimientos)) e.movimientos = "Obligatorio";
 
-    // ✅ firma solo obligatoria en modo trabajador
     if (!isAdmin) {
+      // ✅ recibí conforme obligatorio
+      if (!normalizeText(recibi.nombre)) e.recibiNombre = "Obligatorio";
+      if (!normalizeText(recibi.rut)) e.recibiRut = "Obligatorio";
+
+      // ✅ firma obligatoria
       const firmaOkLocal = !!normalizeText(signature) && String(signature).startsWith("data:image/");
       if (!firmaOkLocal) e.signature = "Falta firma";
     }
@@ -522,17 +579,20 @@ export default function WorkOrderCompleteModal({
       setSaving(true);
       setFormErr("");
 
-      // ✅ preservamos firma existente si ya venía guardada
       const prev = safeParseWorkerReport(workOrder?.workerReport);
       const prevSignature = prev?.signature;
 
-      // ✅ payload compatible con PDF (kms por tramo)
       const workerReportPayload = {
         movimientos: normalizeText(f.movimientos),
 
         detalleHoras: {
           salidaPlanta: normalizeText(f.salidaPlanta),
           llegadaFaena: normalizeText(f.llegadaFaena),
+
+          // ✅ NUEVO OBRA
+          inicioServicioObra: normalizeText(f.inicioServicioObra),
+          terminoServicioObra: normalizeText(f.terminoServicioObra),
+
           salidaFaena: normalizeText(f.salidaFaena),
           llegadaPlanta: normalizeText(f.llegadaPlanta),
 
@@ -544,9 +604,15 @@ export default function WorkOrderCompleteModal({
           kmLlegadaPlanta: normalizeText(f.kmLlegadaPlanta) || null,
         },
 
-        // ✅ firma:
-        // - worker: se guarda lo que firmó (y se setea signedAt)
-        // - admin: se mantiene la firma existente (NO editable)
+        // ✅ NUEVO: Recibí Conforme (solo worker)
+        recibiConforme: isAdmin
+          ? prev?.recibiConforme || prev?.recibeConforme || undefined
+          : {
+              nombre: normalizeText(recibi.nombre),
+              rut: normalizeText(recibi.rut),
+              at: new Date().toISOString(),
+            },
+
         signature: isAdmin
           ? prevSignature || undefined
           : {
@@ -556,12 +622,10 @@ export default function WorkOrderCompleteModal({
       };
 
       if (isAdmin) {
-        // ✅ ADMIN: corregir reporte (NO cambia estado)
         await apiPatch(`/work-orders/${workOrder.id}/admin-report`, {
           workerReport: workerReportPayload,
         });
       } else {
-        // ✅ WORKER: completar y enviar a administración
         await apiPatch(`/work-orders/${workOrder.id}/complete`, {
           workerReport: workerReportPayload,
           marcarCompletada: true,
@@ -594,12 +658,14 @@ export default function WorkOrderCompleteModal({
   const ro = useMemo(() => {
     const d = workOrder || {};
     return {
-      // ✅ empresa eliminada a propósito (no es dato del cliente)
       cliente: pick(d?.cliente, d?.clienteNombre, d?.razonSocial),
       rut: pick(d?.rut, d?.clienteRut),
       giro: pick(d?.giro),
+
+      // ✅ FIX: traer "Solicitado por"
+      solicitadoPor: pick(d?.solicitadoPor),
+
       direccionFaena: pick(d?.direccionFaena, d?.lugar, d?.ubicacion),
-      telefono: pick(d?.telefonoCliente),
       direccionCliente: pick(d?.direccion),
       comuna: pick(d?.comuna),
       ciudad: pick(d?.ciudad),
@@ -652,14 +718,16 @@ export default function WorkOrderCompleteModal({
                   gap: 10,
                 }}
               >
-                {/* ✅ Empresa eliminada */}
                 <FieldRO label="Cliente" value={ro.cliente} />
                 <FieldRO label="RUT" value={ro.rut} />
                 <FieldRO label="Giro" value={ro.giro} />
 
+                {/* ✅ NUEVO: solicitado por */}
+                <FieldRO label="Solicitado por" value={ro.solicitadoPor} />
+
                 <FieldRO label="Días de trabajo" value={ro.diasTrabajo} />
                 <FieldRO label="Horario llegada" value={ro.horario} />
-                <FieldRO label="Teléfono cliente" value={ro.telefono} />
+                {/* ✅ QUITADO: Teléfono cliente */}
 
                 <div style={{ gridColumn: "1 / -1" }}>
                   <FieldRO label="Dirección de la faena" value={ro.direccionFaena} />
@@ -734,6 +802,25 @@ export default function WorkOrderCompleteModal({
                   error={errors.llegadaFaena}
                 />
 
+                {/* ✅ NUEVO OBRA */}
+                <LabeledInput
+                  label="Hora inicio servicio en obra"
+                  placeholder="Ej: 21:10"
+                  value={f.inicioServicioObra}
+                  onChange={(e) => setField("inicioServicioObra", e.target.value)}
+                  disabled={saving}
+                  error={errors.inicioServicioObra}
+                />
+
+                <LabeledInput
+                  label="Hora término servicio en obra"
+                  placeholder="Ej: 04:30"
+                  value={f.terminoServicioObra}
+                  onChange={(e) => setField("terminoServicioObra", e.target.value)}
+                  disabled={saving}
+                  error={errors.terminoServicioObra}
+                />
+
                 <LabeledInput
                   label="Hora salida faena"
                   placeholder="Ej: 05:00"
@@ -761,7 +848,6 @@ export default function WorkOrderCompleteModal({
                   error={errors.colacion}
                 />
 
-                {/* ✅ KMs por tramo (para PDF) */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                   <LabeledInput
                     label="Km salida planta (opcional)"
@@ -809,9 +895,33 @@ export default function WorkOrderCompleteModal({
               />
             </Box>
 
+            <Box title="Recibí Conforme (cliente)">
+              {isAdmin ? (
+                <div style={{ fontWeight: 900, opacity: 0.75 }}>Solo lectura en modo administración.</div>
+              ) : (
+                <div className="ot-grid-2">
+                  <LabeledInput
+                    label="Nombre quien recibe conforme (obligatorio)"
+                    placeholder="Ej: Juan Pérez"
+                    value={recibi.nombre}
+                    onChange={(e) => setRecibiField("nombre", e.target.value)}
+                    disabled={saving}
+                    error={errors.recibiNombre}
+                  />
+                  <LabeledInput
+                    label="RUT quien recibe conforme (obligatorio)"
+                    placeholder="Ej: 12.345.678-9"
+                    value={recibi.rut}
+                    onChange={(e) => setRecibiField("rut", e.target.value)}
+                    disabled={saving}
+                    error={errors.recibiRut}
+                  />
+                </div>
+              )}
+            </Box>
+
             {/* ✅ FIRMA */}
             <Box title="Firma del cliente">
-              {/* MODO WORKER: editable */}
               {!isAdmin ? (
                 <>
                   {errors.signature ? (
@@ -832,7 +942,6 @@ export default function WorkOrderCompleteModal({
                   </div>
                 </>
               ) : (
-                // ✅ MODO ADMIN: solo lectura
                 <>
                   {firmaOk ? (
                     <div
@@ -843,9 +952,7 @@ export default function WorkOrderCompleteModal({
                         padding: 12,
                       }}
                     >
-                      <div style={{ fontWeight: 900, opacity: 0.85, marginBottom: 10 }}>
-                        Firma registrada (solo lectura)
-                      </div>
+                      <div style={{ fontWeight: 900, opacity: 0.85, marginBottom: 10 }}>Firma registrada (solo lectura)</div>
 
                       <div
                         style={{
@@ -859,21 +966,13 @@ export default function WorkOrderCompleteModal({
                           background: "#fff",
                         }}
                       >
-                        <img
-                          src={signature}
-                          alt="Firma cliente"
-                          style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
-                        />
+                        <img src={signature} alt="Firma cliente" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
                       </div>
 
-                      <div style={{ marginTop: 10, fontSize: 12, fontWeight: 900, opacity: 0.7 }}>
-                        Estado firma: ✅ Firmada
-                      </div>
+                      <div style={{ marginTop: 10, fontSize: 12, fontWeight: 900, opacity: 0.7 }}>Estado firma: ✅ Firmada</div>
                     </div>
                   ) : (
-                    <div style={{ fontWeight: 900, opacity: 0.75 }}>
-                      Sin firma registrada.
-                    </div>
+                    <div style={{ fontWeight: 900, opacity: 0.75 }}>Sin firma registrada.</div>
                   )}
                 </>
               )}
@@ -891,11 +990,13 @@ export default function WorkOrderCompleteModal({
         loading={saving}
         onConfirm={handleConfirm}
         onClose={() => !saving && setConfirmOpen(false)}
-        description={<Resumen f={f} firmaOk={firmaOk} mode={mode} />}
+        description={<Resumen f={f} firmaOk={firmaOk} mode={mode} recibi={recibi} />}
       />
     </>
   );
 }
+
+
 
 
 

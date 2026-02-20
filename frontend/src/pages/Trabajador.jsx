@@ -1,14 +1,16 @@
 // ✅ Archivo: src/pages/Trabajador.jsx (COMPLETO)
 // ✅ FIX:
-// 1) Los filtros Empresa/Tipo ahora se mandan al backend (evita “no hay resultados” por paginación)
-// 2) Las cards usan un fetch extra (stats) para contar sobre TODO el set (no solo la página actual)
-// 3) Card “Operadores” (en vez de Conductores)
-// 4) ✅ UI: filtros alineados y responsivos (no quedan como bloques feos)
+// - Quita cards: Conductor, Casa particular, Otros y Sin tipo
+// - Vuelven a aparecer SUPERADMIN / CONTROL_FLOTA / ADMINISTRADORA (ya no forzamos role=TRABAJADOR)
+// ✅ NUEVO:
+// - Filtro por ROL (ALL/TRABAJADOR/CONTROL_FLOTA/ADMINISTRADORA/SUPERADMIN)
+// - Cards por tipo (Operadores/Riggers) cuentan sobre el set global SOLO cuando aplica
 
 import { useEffect, useMemo, useState } from "react";
 import { getToken, getUser, logout } from "../auth/auth";
 import TrabajadorModal from "./TrabajadorModal";
 import ConfirmModal from "../components/ui/ConfirmModal";
+import Modal from "../components/ui/Modal";
 import "./Admin.css";
 
 const API_URL = "http://localhost:3000";
@@ -30,7 +32,19 @@ function norm(v) {
   return String(v || "").trim().toUpperCase();
 }
 
-// ✅ Label bonito para WorkerType (incluye nuevos)
+function roleLabel(v) {
+  const r = norm(v);
+  if (!r) return "—";
+  const map = {
+    SUPERADMIN: "SUPERADMIN",
+    CONTROL_FLOTA: "CONTROL FLOTA",
+    ADMINISTRADORA: "ADMINISTRADORA",
+    TRABAJADOR: "TRABAJADOR",
+  };
+  return map[r] || r;
+}
+
+// ✅ Label bonito para WorkerType
 function workerTypeLabel(v) {
   const t = norm(v);
   if (!t) return "—";
@@ -88,6 +102,9 @@ export default function Trabajador() {
   // ✅ filtro empresa
   const [empresaFilter, setEmpresaFilter] = useState("ALL"); // ALL | GRUAS_THOMAS | INSPROTEL | NONE
 
+  // ✅ NUEVO: filtro rol
+  const [roleFilter, setRoleFilter] = useState("ALL"); // ALL | TRABAJADOR | CONTROL_FLOTA | ADMINISTRADORA | SUPERADMIN
+
   // ✅ filtro tipo
   const [tipoFilter, setTipoFilter] = useState("ALL"); // ALL | ... | NONE
 
@@ -99,7 +116,20 @@ export default function Trabajador() {
 
   // ✅ stats (cards)
   const [statsLoading, setStatsLoading] = useState(false);
-  const [stats, setStats] = useState({ totalTrab: 0, operadores: 0, riggers: 0 });
+  const [stats, setStats] = useState({
+    totalTrab: 0,
+    operadores: 0,
+    riggers: 0,
+  });
+
+  // ✅ Cards permitidas (solo estas)
+  const TYPE_CARDS = useMemo(
+    () => [
+      { value: "OPERADOR", label: "Operadores", icon: "🏗️", variant: "ok" },
+      { value: "RIGGER", label: "Riggers", icon: "🪝", variant: "warn" },
+    ],
+    []
+  );
 
   // modal create/edit
   const [modalOpen, setModalOpen] = useState(false);
@@ -115,6 +145,15 @@ export default function Trabajador() {
   const [deleteUser, setDeleteUser] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  // reset password modal
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetUser, setResetUser] = useState(null);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetTempPassword, setResetTempPassword] = useState("");
+
+  // ✅ helper: cuando el rol seleccionado incluye trabajadores
+  const includesWorkers = roleFilter === "ALL" || roleFilter === "TRABAJADOR";
+
   // -------------------------
   // ✅ build params (tabla)
   // -------------------------
@@ -126,20 +165,22 @@ export default function Trabajador() {
     params.set("page", String(page));
     params.set("limit", String(limit));
 
-    // módulo: trabajadores
-    params.set("role", "TRABAJADOR");
+    // ✅ YA NO forzamos TRABAJADOR
+    if (roleFilter !== "ALL") params.set("role", roleFilter);
 
     // empresa (backend)
     if (empresaFilter === "GRUAS_THOMAS") params.set("empresa", "GRUAS_THOMAS");
     if (empresaFilter === "INSPROTEL") params.set("empresa", "INSPROTEL");
 
-    // tipo (backend)
-    if (tipoFilter !== "ALL" && tipoFilter !== "NONE") {
-      params.set("workerType", tipoFilter);
+    // tipo (backend) -> solo tiene sentido si estamos mirando trabajadores
+    if (includesWorkers) {
+      if (tipoFilter !== "ALL" && tipoFilter !== "NONE") {
+        params.set("workerType", tipoFilter);
+      }
     }
 
     return params.toString();
-  }, [q, activo, page, limit, empresaFilter, tipoFilter]);
+  }, [q, activo, page, limit, empresaFilter, roleFilter, tipoFilter, includesWorkers]);
 
   // -------------------------
   // Fetch tabla
@@ -161,7 +202,7 @@ export default function Trabajador() {
 
       if (!res.ok) {
         const msg = await readError(res);
-        throw new Error(msg || "Error al listar trabajadores");
+        throw new Error(msg || "Error al listar usuarios");
       }
 
       const data = await res.json();
@@ -171,7 +212,9 @@ export default function Trabajador() {
 
       // NONE en front
       if (empresaFilter === "NONE") list = list.filter((u) => !u.empresa);
-      if (tipoFilter === "NONE") list = list.filter((u) => !u.workerType);
+
+      // tipo NONE solo cuando estamos mirando trabajadores
+      if (includesWorkers && tipoFilter === "NONE") list = list.filter((u) => !u.workerType);
 
       setItems(list);
       setMeta(m);
@@ -183,9 +226,16 @@ export default function Trabajador() {
   }
 
   // -------------------------
-  // Stats cards (count global)
+  // Stats cards (count global) para Trabajadores/Operadores/Riggers
+  // - solo calcula cuando incluyeWorkers (ALL o TRABAJADOR)
   // -------------------------
   async function fetchStats() {
+    // si NO estamos viendo trabajadores, dejamos cards en 0
+    if (!includesWorkers) {
+      setStats({ totalTrab: 0, operadores: 0, riggers: 0 });
+      return;
+    }
+
     setStatsLoading(true);
 
     try {
@@ -193,6 +243,7 @@ export default function Trabajador() {
       if (q.trim()) params.set("q", q.trim());
       if (activo !== "") params.set("activo", activo);
 
+      // ✅ stats siempre para trabajadores
       params.set("role", "TRABAJADOR");
 
       if (empresaFilter === "GRUAS_THOMAS") params.set("empresa", "GRUAS_THOMAS");
@@ -245,18 +296,12 @@ export default function Trabajador() {
   useEffect(() => {
     fetchStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, activo, empresaFilter]);
+  }, [q, activo, empresaFilter, roleFilter]);
 
   function openToggleConfirm(u) {
     setError("");
     setConfirmUser(u);
     setConfirmOpen(true);
-  }
-
-  function closeToggleConfirm() {
-    if (confirmLoading) return;
-    setConfirmOpen(false);
-    setConfirmUser(null);
   }
 
   async function toggleActivoConfirmed() {
@@ -282,7 +327,9 @@ export default function Trabajador() {
         throw new Error(msg || "Error al activar/desactivar");
       }
 
-      closeToggleConfirm();
+      setConfirmOpen(false);
+      setConfirmUser(null);
+
       await fetchUsers();
       await fetchStats();
     } catch (e) {
@@ -297,12 +344,6 @@ export default function Trabajador() {
     setError("");
     setDeleteUser(u);
     setDeleteOpen(true);
-  }
-
-  function closeDeleteConfirm() {
-    if (deleteLoading) return;
-    setDeleteOpen(false);
-    setDeleteUser(null);
   }
 
   async function deleteUserConfirmed() {
@@ -328,7 +369,8 @@ export default function Trabajador() {
         throw new Error(msg || "Error al eliminar usuario");
       }
 
-      closeDeleteConfirm();
+      setDeleteOpen(false);
+      setDeleteUser(null);
 
       const nextCount = Math.max(0, items.length - 1);
       if (nextCount === 0 && page > 1) setPage((p) => Math.max(1, p - 1));
@@ -342,99 +384,140 @@ export default function Trabajador() {
     }
   }
 
+  // reset clave
+  function openReset(u) {
+    setError("");
+    setResetUser(u);
+    setResetTempPassword("");
+    setResetOpen(true);
+  }
+
+  async function doResetPassword() {
+    if (!resetUser) return;
+
+    setResetLoading(true);
+    setError("");
+
+    try {
+      const res = await fetch(`${API_URL}/users/${resetUser.id}/reset-password`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({}),
+      });
+
+      if (res.status === 401) {
+        logout();
+        window.location.href = "/login";
+        return;
+      }
+
+      if (!res.ok) {
+        const msg = await readError(res);
+        throw new Error(msg || "Error al resetear contraseña");
+      }
+
+      const data = await res.json();
+      setResetTempPassword(data?.tempPassword || "");
+    } catch (e) {
+      setError(e?.message || "Error inesperado");
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
+  async function copyTempPassword() {
+    try {
+      await navigator.clipboard.writeText(resetTempPassword || "");
+    } catch {}
+  }
+
   const canPrev = page > 1;
   const canNext = page < (meta.pages || 1);
 
-  const confirmTitle = confirmUser?.activo ? "Desactivar trabajador" : "Activar trabajador";
+  const confirmTitle = confirmUser?.activo ? "Desactivar usuario" : "Activar usuario";
   const confirmText = confirmUser?.activo ? "Desactivar" : "Activar";
 
   return (
     <>
       <div className="page-title">
-        <h1>Trabajadores</h1>
+        <h1>Usuarios</h1>
         <p>Sesión: {user?.email}</p>
       </div>
 
-      {/* ✅ Cards */}
-      <div className="cards">
-        <div
-          className="card"
-          style={{ cursor: "pointer" }}
-          onClick={() => {
-            setPage(1);
-            setTipoFilter("ALL");
-          }}
-          role="button"
-          title="Ver todos los trabajadores"
-        >
-          <div className="card-top">
-            <div className="card-ico" aria-hidden="true">
-              🧰
+      {/* ✅ Cards (solo las que quieres) */}
+      {includesWorkers ? (
+        <div className="cards">
+          <div
+            className="card"
+            style={{ cursor: "pointer" }}
+            onClick={() => {
+              setPage(1);
+              setRoleFilter("TRABAJADOR");
+              setTipoFilter("ALL");
+            }}
+            role="button"
+            title="Ver todos los trabajadores"
+          >
+            <div className="card-top">
+              <div className="card-ico" aria-hidden="true">
+                🧰
+              </div>
+              <div className="card-title">Trabajadores</div>
             </div>
-            <div className="card-title">Trabajadores</div>
+            <div className="card-value">{statsLoading ? "…" : stats.totalTrab}</div>
+            <div className="card-sub">Rol TRABAJADOR</div>
           </div>
-          <div className="card-value">{statsLoading ? "…" : stats.totalTrab}</div>
-          <div className="card-sub">Rol TRABAJADOR</div>
-        </div>
 
-        <div
-          className="card ok"
-          style={{ cursor: "pointer" }}
-          onClick={() => {
-            setPage(1);
-            setTipoFilter("OPERADOR");
-          }}
-          role="button"
-          title="Filtrar Operadores"
-        >
-          <div className="card-top">
-            <div className="card-ico" aria-hidden="true">
-              🏗️
+          {TYPE_CARDS.map((c) => (
+            <div
+              key={c.value}
+              className={c.variant ? `card ${c.variant}` : "card"}
+              style={{ cursor: "pointer" }}
+              onClick={() => {
+                setPage(1);
+                setRoleFilter("TRABAJADOR");
+                setTipoFilter(c.value);
+              }}
+              role="button"
+              title={`Filtrar: ${c.label}`}
+            >
+              <div className="card-top">
+                <div className="card-ico" aria-hidden="true">
+                  {c.icon}
+                </div>
+                <div className="card-title">{c.label}</div>
+              </div>
+              <div className="card-value">{statsLoading ? "…" : c.value === "OPERADOR" ? stats.operadores : stats.riggers}</div>
+              <div className="card-sub">Tipo {c.value}</div>
             </div>
-            <div className="card-title">Operadores</div>
-          </div>
-          <div className="card-value">{statsLoading ? "…" : stats.operadores}</div>
-          <div className="card-sub">Tipo OPERADOR</div>
+          ))}
         </div>
-
-        <div
-          className="card warn"
-          style={{ cursor: "pointer" }}
-          onClick={() => {
-            setPage(1);
-            setTipoFilter("RIGGER");
-          }}
-          role="button"
-          title="Filtrar Riggers"
-        >
-          <div className="card-top">
-            <div className="card-ico" aria-hidden="true">
-              🪝
-            </div>
-            <div className="card-title">Riggers</div>
-          </div>
-          <div className="card-value">{statsLoading ? "…" : stats.riggers}</div>
-          <div className="card-sub">Tipo RIGGER</div>
-        </div>
-      </div>
+      ) : null}
 
       <div className="panel">
         <div className="panel-head">
           <div>
-            <h2>Listado de Trabajadores</h2>
+            <h2>Listado de Usuarios</h2>
             <p>Gestiona usuarios, roles, empresa y tipo</p>
 
-            {tipoFilter !== "ALL" ? (
+            {tipoFilter !== "ALL" || roleFilter !== "ALL" ? (
               <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                <span className="status ok">
-                  Filtrado: {tipoFilter === "NONE" ? "Sin tipo" : workerTypeLabel(tipoFilter)}
-                </span>
+                {roleFilter !== "ALL" ? (
+                  <span className="status ok">Rol: {roleLabel(roleFilter)}</span>
+                ) : null}
+
+                {tipoFilter !== "ALL" ? (
+                  <span className="status ok">
+                    Tipo: {tipoFilter === "NONE" ? "Sin tipo" : workerTypeLabel(tipoFilter)}
+                  </span>
+                ) : null}
 
                 <button
                   className="gt-btn ghost"
                   type="button"
                   onClick={() => {
                     setPage(1);
+                    setRoleFilter("ALL");
                     setTipoFilter("ALL");
                   }}
                 >
@@ -465,22 +548,21 @@ export default function Trabajador() {
                 setModalOpen(true);
               }}
             >
-              + Nuevo trabajador
+              + Nuevo usuario
             </button>
           </div>
         </div>
 
-        {/* ✅ FILTROS (UI ARREGLADA) */}
+        {/* ✅ FILTROS */}
         <div
           style={{
             marginBottom: 14,
             display: "grid",
             gap: 12,
             alignItems: "center",
-            gridTemplateColumns: "minmax(260px, 1fr) 160px 220px 220px",
+            gridTemplateColumns: "minmax(260px, 1fr) 160px 220px 200px 220px",
           }}
         >
-          {/* Buscar */}
           <div className="topbar-search" style={{ minWidth: 260 }}>
             <span className="search-ico" aria-hidden="true">
               🔎
@@ -496,7 +578,6 @@ export default function Trabajador() {
             />
           </div>
 
-          {/* Activo */}
           <select
             value={activo}
             onChange={(e) => {
@@ -511,7 +592,6 @@ export default function Trabajador() {
             <option value="">Todos</option>
           </select>
 
-          {/* Empresa */}
           <select
             value={empresaFilter}
             onChange={(e) => {
@@ -528,7 +608,29 @@ export default function Trabajador() {
             <option value="NONE">Sin empresa</option>
           </select>
 
-          {/* Tipo */}
+          {/* ✅ NUEVO: filtro rol */}
+          <select
+            value={roleFilter}
+            onChange={(e) => {
+              setPage(1);
+              setRoleFilter(e.target.value);
+              // si se cambia a rol distinto de trabajador, limpiamos tipo
+              if (e.target.value !== "ALL" && e.target.value !== "TRABAJADOR") {
+                setTipoFilter("ALL");
+              }
+            }}
+            className="gt-select"
+            style={{ width: "100%" }}
+            title="Filtrar por rol"
+          >
+            <option value="ALL">Rol: Todos</option>
+            <option value="TRABAJADOR">TRABAJADOR</option>
+            <option value="CONTROL_FLOTA">CONTROL_FLOTA</option>
+            <option value="ADMINISTRADORA">ADMINISTRADORA</option>
+            <option value="SUPERADMIN">SUPERADMIN</option>
+          </select>
+
+          {/* Tipo solo útil para trabajadores, igual lo dejamos pero deshabilitado si no aplica */}
           <select
             value={tipoFilter}
             onChange={(e) => {
@@ -538,6 +640,7 @@ export default function Trabajador() {
             className="gt-select"
             style={{ width: "100%" }}
             title="Filtrar por tipo"
+            disabled={!includesWorkers}
           >
             <option value="ALL">Tipo: Todos</option>
             <option value="OPERADOR">Operador</option>
@@ -545,7 +648,6 @@ export default function Trabajador() {
             <option value="CONDUCTOR">Conductor</option>
             <option value="MECANICO">Mecánico</option>
 
-            {/* ✅ nuevos */}
             <option value="ADMINISTRACION">Administración</option>
             <option value="ASEO">Aseo</option>
             <option value="AYUDANTE_DE_MECANICO">Ayudante de mecánico</option>
@@ -562,16 +664,15 @@ export default function Trabajador() {
           </select>
         </div>
 
-        {/* ✅ Responsive: si la pantalla es chica, el grid se cae solo (sin romperse) */}
         <style>
           {`
-            @media (max-width: 1100px) {
-              .panel > div[style*="gridTemplateColumns: minmax(260px, 1fr) 160px 220px 220px"] {
+            @media (max-width: 1200px) {
+              .panel > div[style*="gridTemplateColumns: minmax(260px, 1fr) 160px 220px 200px 220px"] {
                 grid-template-columns: 1fr 1fr;
               }
             }
             @media (max-width: 700px) {
-              .panel > div[style*="gridTemplateColumns: minmax(260px, 1fr) 160px 220px 220px"] {
+              .panel > div[style*="gridTemplateColumns: minmax(260px, 1fr) 160px 220px 200px 220px"] {
                 grid-template-columns: 1fr;
               }
             }
@@ -612,6 +713,8 @@ export default function Trabajador() {
                   const cantDelete = isMe || targetRole === "SUPERADMIN";
                   const canDelete = isSuperadmin && !cantDelete;
 
+                  const canReset = isSuperadmin && !isMe;
+
                   return (
                     <tr key={u.id}>
                       <td>
@@ -624,7 +727,7 @@ export default function Trabajador() {
                       <td className="mono">{u.email}</td>
 
                       <td>
-                        <span className="role-pill">{u.role}</span>
+                        <span className="role-pill">{roleLabel(u.role)}</span>
                       </td>
 
                       <td>
@@ -673,27 +776,43 @@ export default function Trabajador() {
                           </button>
 
                           {isSuperadmin ? (
-                            <button
-                              className="gt-btn ghost danger"
-                              type="button"
-                              onClick={() => openDeleteConfirm(u)}
-                              disabled={!canDelete}
-                              style={{
-                                cursor: canDelete ? "pointer" : "not-allowed",
-                                opacity: canDelete ? 1 : 0.45,
-                              }}
-                              title={
-                                !canDelete
-                                  ? isMe
-                                    ? "No puedes eliminar tu propio usuario."
-                                    : targetRole === "SUPERADMIN"
-                                    ? "No se puede eliminar a un SUPERADMIN desde aquí."
-                                    : "No autorizado"
-                                  : "Eliminar usuario"
-                              }
-                            >
-                              Eliminar
-                            </button>
+                            <>
+                              <button
+                                className="gt-btn ghost"
+                                type="button"
+                                onClick={() => openReset(u)}
+                                disabled={!canReset}
+                                style={{
+                                  cursor: canReset ? "pointer" : "not-allowed",
+                                  opacity: canReset ? 1 : 0.45,
+                                }}
+                                title={!canReset ? "No puedes resetear tu propia clave." : "Generar contraseña temporal"}
+                              >
+                                Reset clave
+                              </button>
+
+                              <button
+                                className="gt-btn ghost danger"
+                                type="button"
+                                onClick={() => openDeleteConfirm(u)}
+                                disabled={!canDelete}
+                                style={{
+                                  cursor: canDelete ? "pointer" : "not-allowed",
+                                  opacity: canDelete ? 1 : 0.45,
+                                }}
+                                title={
+                                  !canDelete
+                                    ? isMe
+                                      ? "No puedes eliminar tu propio usuario."
+                                      : targetRole === "SUPERADMIN"
+                                      ? "No se puede eliminar a un SUPERADMIN desde aquí."
+                                      : "No autorizado"
+                                    : "Eliminar usuario"
+                                }
+                              >
+                                Eliminar
+                              </button>
+                            </>
                           ) : null}
                         </div>
                       </td>
@@ -798,9 +917,77 @@ export default function Trabajador() {
         }}
         onConfirm={deleteUserConfirmed}
       />
+
+      {/* Modal RESET CLAVE */}
+      <Modal
+        open={resetOpen}
+        onClose={() => {
+          if (resetLoading) return;
+          setResetOpen(false);
+          setResetUser(null);
+          setResetTempPassword("");
+        }}
+        title="Reset clave (temporal)"
+        subtitle={resetUser ? `${resetUser.nombre} ${resetUser.apellido} — ${resetUser.email}` : ""}
+        width={620}
+        footer={
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <button
+              className="gt-btn ghost"
+              type="button"
+              onClick={() => {
+                if (resetLoading) return;
+                setResetOpen(false);
+                setResetUser(null);
+                setResetTempPassword("");
+              }}
+            >
+              Cerrar
+            </button>
+
+            {!resetTempPassword ? (
+              <button className="gt-btn gt-btn-primary" type="button" onClick={doResetPassword} disabled={resetLoading}>
+                {resetLoading ? "Generando..." : "Generar clave temporal"}
+              </button>
+            ) : (
+              <button className="gt-btn gt-btn-primary" type="button" onClick={copyTempPassword}>
+                Copiar clave
+              </button>
+            )}
+          </div>
+        }
+      >
+        {!resetTempPassword ? (
+          <div className="muted" style={{ lineHeight: 1.5 }}>
+            Esto generará una contraseña temporal. Luego se la entregas al usuario para que pueda ingresar.
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: 10 }}>
+            <div className="muted">Contraseña temporal:</div>
+            <div
+              className="mono"
+              style={{
+                padding: 12,
+                border: "1px dashed rgba(0,0,0,.25)",
+                borderRadius: 12,
+                fontSize: 18,
+                fontWeight: 900,
+                letterSpacing: 1,
+              }}
+            >
+              {resetTempPassword}
+            </div>
+            <div className="muted" style={{ lineHeight: 1.5 }}>
+              Recomiendo pedirle que la cambie inmediatamente usando “Cambiar contraseña”.
+            </div>
+          </div>
+        )}
+      </Modal>
     </>
   );
 }
+
+
 
 
 

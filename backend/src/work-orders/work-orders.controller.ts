@@ -39,7 +39,9 @@ export class WorkOrdersController {
 
   // ✅ helper: roles admin OT
   private isOtAdmin(role?: Role) {
-    return [Role.CONTROL_FLOTA, Role.ADMINISTRADORA, Role.SUPERADMIN].includes(role as any);
+    return [Role.CONTROL_FLOTA, Role.ADMINISTRADORA, Role.SUPERADMIN].includes(
+      role as any
+    );
   }
 
   // ✅ helper: parse boolean query (1/true/yes/on)
@@ -74,19 +76,66 @@ export class WorkOrdersController {
     }
 
     const userId = req.user?.id;
-    if (!userId) throw new BadRequestException("No se detectó el usuario logueado.");
+    if (!userId)
+      throw new BadRequestException("No se detectó el usuario logueado.");
     if (!id) throw new BadRequestException("Falta id");
 
     return this.service.restore(id, userId);
   }
 
+  // =========================================================
+  // ✅ CALENDARIO (ADMIN)
+  // GET /work-orders/calendar?from=2026-02-01&to=2026-02-29
+  // Devuelve OTs con diasProgramados dentro del rango (para pintar calendario)
+  // =========================================================
+  @Get("calendar")
+  async calendar(
+    @Req() req: any,
+    @Query("from") from: string,
+    @Query("to") to: string
+  ) {
+    const role = req.user?.role as Role | undefined;
+    if (!this.isOtAdmin(role)) throw new ForbiddenException("No autorizado.");
+
+    // from/to opcionales (el service puede defaultear)
+    return (this.service as any).listCalendar(req.user, { from, to });
+  }
+
+  // =========================================================
+  // ✅ CALENDARIO: actualizar SOLO diasProgramados (ADMIN)
+  // PATCH /work-orders/:id/schedule
+  // body: { diasProgramados: ["2026-02-19","2026-02-20"] }
+  // =========================================================
+  @Patch(":id/schedule")
+  async updateSchedule(
+    @Param("id") id: string,
+    @Body() body: any,
+    @Req() req: any
+  ) {
+    const role = req.user?.role as Role | undefined;
+    if (!this.isOtAdmin(role)) throw new ForbiddenException("No autorizado.");
+    if (!id) throw new BadRequestException("Falta id");
+
+    const diasProgramados = Array.isArray(body?.diasProgramados)
+      ? body.diasProgramados
+      : [];
+
+    return (this.service as any).updateSchedule(id, diasProgramados, req.user);
+  }
+
+  // =========================================================
+  // ✅ CREAR OT (ADMIN)
+  // dto ya incluye diasProgramados en tu CreateWorkOrderDto,
+  // el service es el que debe guardarlo.
+  // =========================================================
   @Post()
   async create(@Body() dto: CreateWorkOrderDto, @Req() req: any) {
     const role = req.user?.role as Role | undefined;
     if (!this.isOtAdmin(role)) throw new ForbiddenException("No autorizado.");
 
     const userId = req.user?.id;
-    if (!userId) throw new BadRequestException("No se detectó el usuario logueado.");
+    if (!userId)
+      throw new BadRequestException("No se detectó el usuario logueado.");
     return this.service.create(dto, userId);
   }
 
@@ -102,7 +151,10 @@ export class WorkOrdersController {
   // ✅ IMPORTANTE: "worker" debe ir ANTES que ":id"
   // ✅ NUEVO: soporta includeFinalizadas=1 para incluir APROBADA/CERRADA (solo lectura)
   @Get("worker")
-  async listForWorker(@Req() req: any, @Query("includeFinalizadas") includeFinalizadas: string) {
+  async listForWorker(
+    @Req() req: any,
+    @Query("includeFinalizadas") includeFinalizadas: string
+  ) {
     const role = req.user?.role as Role | undefined;
     if (role !== Role.TRABAJADOR) {
       throw new ForbiddenException("Solo TRABAJADOR puede ver esta lista.");
@@ -115,7 +167,9 @@ export class WorkOrdersController {
     //
     // Para no romper tu proyecto si aún no cambiaste el service, dejamos try/catch.
     try {
-      return await (this.service as any).listForWorker(req.user, { includeFinalizadas: include });
+      return await (this.service as any).listForWorker(req.user, {
+        includeFinalizadas: include,
+      });
     } catch {
       return await (this.service as any).listForWorker(req.user, include);
     }
@@ -145,7 +199,11 @@ export class WorkOrdersController {
       limits: { fileSize: 10 * 1024 * 1024 },
       fileFilter: (req, file, cb) => {
         const ok = String(file.mimetype || "").startsWith("image/");
-        if (!ok) return cb(new BadRequestException("Solo se permiten imágenes.") as any, false);
+        if (!ok)
+          return cb(
+            new BadRequestException("Solo se permiten imágenes.") as any,
+            false
+          );
         cb(null, true);
       },
       storage: diskStorage({
@@ -167,7 +225,10 @@ export class WorkOrdersController {
           const safeId = String(id || "workorder");
           const ext = extname(file.originalname || "").toLowerCase() || ".jpg";
 
-          cb(null, `${safeId}-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
+          cb(
+            null,
+            `${safeId}-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`
+          );
         },
       }),
     })
@@ -197,7 +258,14 @@ export class WorkOrdersController {
   ) {
     const role = req.user?.role as Role | undefined;
 
-    if (![Role.TRABAJADOR, Role.CONTROL_FLOTA, Role.ADMINISTRADORA, Role.SUPERADMIN].includes(role as any)) {
+    if (
+      ![
+        Role.TRABAJADOR,
+        Role.CONTROL_FLOTA,
+        Role.ADMINISTRADORA,
+        Role.SUPERADMIN,
+      ].includes(role as any)
+    ) {
       throw new ForbiddenException("No autorizado.");
     }
     if (!id) throw new BadRequestException("Falta id");
@@ -217,14 +285,25 @@ export class WorkOrdersController {
   @Get(":id")
   async get(@Param("id") id: string, @Req() req: any) {
     const role = req.user?.role as Role | undefined;
-    if (![Role.TRABAJADOR, Role.CONTROL_FLOTA, Role.ADMINISTRADORA, Role.SUPERADMIN].includes(role as any)) {
+    if (
+      ![
+        Role.TRABAJADOR,
+        Role.CONTROL_FLOTA,
+        Role.ADMINISTRADORA,
+        Role.SUPERADMIN,
+      ].includes(role as any)
+    ) {
       throw new ForbiddenException("No autorizado.");
     }
     return this.service.getById(id, req.user);
   }
 
   @Patch(":id/complete")
-  async complete(@Param("id") id: string, @Body() dto: CompleteWorkOrderDto, @Req() req: any) {
+  async complete(
+    @Param("id") id: string,
+    @Body() dto: CompleteWorkOrderDto,
+    @Req() req: any
+  ) {
     if (req.user?.role !== Role.TRABAJADOR) {
       throw new ForbiddenException("Solo TRABAJADOR puede completar una OT.");
     }
@@ -232,10 +311,19 @@ export class WorkOrdersController {
   }
 
   @Patch(":id/admin-report")
-  async adminUpdateReport(@Param("id") id: string, @Body() body: any, @Req() req: any) {
+  async adminUpdateReport(
+    @Param("id") id: string,
+    @Body() body: any,
+    @Req() req: any
+  ) {
     const role = req.user?.role as Role | undefined;
     if (!this.isOtAdmin(role)) throw new ForbiddenException("No autorizado.");
-    return this.service.adminUpdateReport(id, body.workerReport, body.comentarioFinal, req.user.id);
+    return this.service.adminUpdateReport(
+      id,
+      body.workerReport,
+      body.comentarioFinal,
+      req.user.id
+    );
   }
 
   @Patch(":id/approve")
@@ -253,7 +341,11 @@ export class WorkOrdersController {
   }
 
   @Put(":id")
-  async update(@Param("id") id: string, @Body() dto: CreateWorkOrderDto, @Req() req: any) {
+  async update(
+    @Param("id") id: string,
+    @Body() dto: CreateWorkOrderDto,
+    @Req() req: any
+  ) {
     const role = req.user?.role as Role | undefined;
     if (!this.isOtAdmin(role)) throw new ForbiddenException("No autorizado.");
     return this.service.update(id, dto, req.user);
@@ -266,12 +358,14 @@ export class WorkOrdersController {
     if (!this.isOtAdmin(role)) throw new ForbiddenException("No autorizado.");
 
     const userId = req.user?.id;
-    if (!userId) throw new BadRequestException("No se detectó el usuario logueado.");
+    if (!userId)
+      throw new BadRequestException("No se detectó el usuario logueado.");
     if (!id) throw new BadRequestException("Falta id");
 
     return this.service.remove(id, userId);
   }
 }
+
 
 
 

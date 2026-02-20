@@ -1,4 +1,16 @@
-import { Body, Controller, Post, Req, UseGuards } from "@nestjs/common";
+// ✅ Archivo: src/auth/auth.controller.ts (COMPLETO)
+// ✅ Login usa RUT + password (dto.rut)
+// ✅ Change password usa req.user.id (porque JwtStrategy retorna el usuario real desde BD)
+// ✅ Forgot/Reset deshabilitados (porque "solo SUPERADMIN resetea")
+
+import {
+  Body,
+  Controller,
+  Post,
+  Req,
+  UseGuards,
+  BadRequestException,
+} from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import type { Request } from "express";
 
@@ -10,11 +22,13 @@ import { ResetPasswordDto } from "./dto/reset-password.dto";
 
 @Controller("auth")
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private readonly authService: AuthService) {}
 
+  // ✅ Login (auditoría se hace en AuthService.login)
+  // ✅ IMPORTANTE: pasar req para guardar ip/userAgent
   @Post("login")
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto.email, dto.password);
+  login(@Req() req: Request, @Body() dto: LoginDto) {
+    return this.authService.login(dto.rut, dto.password, req);
   }
 
   // ✅ Cambiar contraseña (usuario logueado)
@@ -22,22 +36,35 @@ export class AuthController {
   @Post("change-password")
   async changePassword(@Req() req: Request, @Body() dto: ChangePasswordDto) {
     const user: any = (req as any).user;
-    const userId: string = user?.sub ?? user?.id;
+
+    // JwtStrategy.validate retorna { id, email, role, activo, empresa }
+    const userId: string = user?.id;
+
+    if (!userId) throw new BadRequestException("Usuario inválido");
+
     return this.authService.changePassword(userId, dto);
   }
 
-  // ✅ Olvidé mi contraseña (no requiere login)
+  // ❌ Olvidé mi contraseña (DESHABILITADO)
+  // ✅ Política del sistema: "solo SUPERADMIN resetea"
   @Post("forgot-password")
-  forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.authService.forgotPassword(dto.email);
+  forgotPassword(@Body() _dto: ForgotPasswordDto) {
+    throw new BadRequestException(
+      "Recuperación por correo deshabilitada. Solicita al SUPERADMIN un reset de clave."
+    );
   }
 
-  // ✅ Reset contraseña con token
+  // ❌ Reset contraseña con token (DESHABILITADO)
   @Post("reset-password")
-  resetPassword(@Body() dto: ResetPasswordDto) {
-    return this.authService.resetPassword(dto.token, dto.newPassword);
+  resetPassword(@Body() _dto: ResetPasswordDto) {
+    throw new BadRequestException(
+      "Reset por token deshabilitado. Solicita al SUPERADMIN un reset de clave."
+    );
   }
 }
+
+
+
 
 
 

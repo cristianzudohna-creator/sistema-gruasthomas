@@ -8,6 +8,27 @@
 // ✅ FIX PDF: NO mostrar "Km colación" (celda vacía)
 // ✅ CAMBIO: NO autocrear clientes. Solo usar dto.clientId si viene y validar empresa.
 // ✅ CAMBIO NUEVO: Validación del asignado como OPERADOR (workerType)
+// ✅ CAMBIO PDF: quitar teléfono y "Recibí Conforme : NOMBRE" + líneas RUT/Firma centradas
+// ✅ FIX PDF NUEVO: Layout robusto para textos largos (no se montan)
+// ✅ FIX PDF NUEVO 2: Compactar para que TODO quepa en 1 hoja (sin addPage)
+// ✅ AJUSTE EXTRA: “auto spacer” para bajar el bloque final cuando sobra espacio (sin romper 1 hoja)
+// ✅ AJUSTE EXTRA: mejor padding/centrado del texto en “Detalle de Movimientos”
+//
+// ✅ NUEVO (AUDITORÍA):
+// - Audita CREATE OT
+// - Audita UPDATE OT (edición admin)
+// - Audita COMPLETE / EN_PROCESO (trabajador)
+// - Audita adminUpdateReport (corrección)
+// - Audita approve/reject (aprobación y rechazo)
+//
+// ✅ NUEVO (CALENDARIO):
+// - Guarda diasProgramados (array de fechas ISO "YYYY-MM-DD") si viene en DTO
+// - En update: si no viene, no lo toca; si viene [] lo deja vacío.
+// - ✅ AÑADIDO AQUÍ: listCalendar + updateSchedule (para tus rutas del controller)
+//
+// ✅ NUEVO (OBRA):
+// - Al completar OT: validar HH:MM de inicioServicioObra y terminoServicioObra (obligatorios en el frontend)
+// - En PDF: mostrar "Hora Inicio Servicio en Obra" + "Hora Término Servicio en Obra"
 
 import {
   BadRequestException,
@@ -47,6 +68,20 @@ function cleanDiasTrabajo(v: any): string[] {
     .filter(Boolean)
     .filter((x) => DIAS_TRABAJO_VALIDOS.includes(x as any));
   return Array.from(new Set(cleaned));
+}
+
+// ✅ NUEVO: limpiar diasProgramados ["YYYY-MM-DD", ...]
+function cleanDiasProgramados(v: any): string[] {
+  if (!Array.isArray(v)) return [];
+  const out: string[] = [];
+  for (const x of v) {
+    const s = String(x ?? "").trim();
+    if (!s) continue;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) out.push(s);
+  }
+  const uniq = Array.from(new Set(out));
+  uniq.sort((a, b) => a.localeCompare(b));
+  return uniq;
 }
 
 function fmtDateOnly(d: any) {
@@ -106,12 +141,6 @@ function isImageFilename(name: string) {
   );
 }
 
-/**
- * ✅ Normaliza RUT:
- * - quita puntos/espacios
- * - deja DV en mayúscula
- * - asegura guion: 12345678-K
- */
 function normalizeRut(rutRaw: any): string | null {
   const r = cleanStr(rutRaw);
   if (!r) return null;
@@ -124,13 +153,6 @@ function normalizeRut(rutRaw: any): string | null {
   return `${num}-${dv}`;
 }
 
-/**
- * ✅ FIRMA: obtiene Buffer de la firma desde:
- * - workerReport.signature.dataUrl (data:image/...;base64,...)
- * - base64 (data:image/...;base64,... o base64 pelado) guardado en campos comunes
- * - url o ruta /uploads/...
- * - archivo dentro de uploads/work-orders/{id}/ (firma.png, signature.png, etc.)
- */
 function getSignatureBuffer(workOrder: any, id: string): Buffer | null {
   const wr = safeParseWorkerReport(workOrder?.workerReport);
   const dataUrl =
@@ -208,6 +230,13 @@ function getSignatureBuffer(workOrder: any, id: string): Buffer | null {
   return null;
 }
 
+// ✅ NUEVO: validación HH:MM
+function isHHMM(v: any): boolean {
+  const s = String(v ?? "").trim();
+  if (!s) return false;
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
+}
+
 @Injectable()
 export class WorkOrdersService {
   constructor(
@@ -215,9 +244,80 @@ export class WorkOrdersService {
     private readonly audit: AuditService
   ) {}
 
-  // =========================
-  // ✅ SCOPING POR EMPRESA / ROLES
-  // =========================
+  // =========================================================
+  // ✅ AUDIT HELPERS
+  // =========================================================
+
+  private safeActor(actor: any) {
+    return actor?.id && actor?.email ? { id: actor.id, email: actor.email } : null;
+  }
+
+  private woLabel(wo: any, idFallback?: string) {
+    const title = cleanStr(wo?.titulo);
+    const cliente = cleanStr(wo?.cliente);
+    const lugar = cleanStr(wo?.lugar);
+    const id = cleanStr(wo?.id) || cleanStr(idFallback) || "";
+    return title || cliente || lugar || (id ? `OT ${id.slice(0, 8)}` : "OT");
+  }
+
+  private snapshotWorkOrder(wo: any) {
+    if (!wo) return null;
+    return {
+      id: wo.id,
+      empresa: wo.empresa,
+      status: wo.status,
+      activo: wo.activo,
+      deletedAt: wo.deletedAt ?? null,
+
+      titulo: wo.titulo ?? null,
+      cliente: wo.cliente ?? null,
+      lugar: (wo as any).lugar ?? null,
+
+      clientId: (wo as any).clientId ?? null,
+
+      rut: wo.rut ?? null,
+      giro: wo.giro ?? null,
+      solicitadoPor: (wo as any).solicitadoPor ?? null,
+
+      direccion: (wo as any).direccion ?? null,
+      comuna: (wo as any).comuna ?? null,
+      ciudad: (wo as any).ciudad ?? null,
+
+      telefonoCliente: (wo as any).telefonoCliente ?? null,
+
+      direccionFaena: (wo as any).direccionFaena ?? null,
+      horario: (wo as any).horario ?? null,
+      mapsLink: (wo as any).mapsLink ?? null,
+
+      camion: (wo as any).camion ?? null,
+      conductor: (wo as any).conductor ?? null,
+      operador: (wo as any).operador ?? null,
+      rigger: (wo as any).rigger ?? null,
+      sinJib: (wo as any).sinJib ?? null,
+
+      diasTrabajo: (wo as any).diasTrabajo ?? null,
+      diasProgramados: (wo as any).diasProgramados ?? null,
+      nota: (wo as any).nota ?? null,
+
+      workerReport: (wo as any).workerReport ?? null,
+      comentarioFinal: (wo as any).comentarioFinal ?? null,
+      completedAt: (wo as any).completedAt ?? null,
+      finishedAt: (wo as any).finishedAt ?? null,
+      completedById: (wo as any).completedById ?? null,
+
+      approvedAt: (wo as any).approvedAt ?? null,
+      approvedById: (wo as any).approvedById ?? null,
+      approvalComment: (wo as any).approvalComment ?? null,
+      rejectReason: (wo as any).rejectReason ?? null,
+
+      assignedToId: (wo as any).assignedToId ?? null,
+      createdById: (wo as any).createdById ?? null,
+
+      createdAt: (wo as any).createdAt ?? null,
+      updatedAt: (wo as any).updatedAt ?? null,
+    };
+  }
+
   private roleUpper(actor: any) {
     return String(actor?.role || "").toUpperCase();
   }
@@ -322,11 +422,10 @@ export class WorkOrdersService {
     return { items };
   }
 
-  // =========================
-  // ✅ Helpers Cliente (RELACIÓN) - SIN AUTOCREAR
-  // - Solo valida dto.clientId si viene
-  // =========================
-  private async resolveClientIdOrNull(dto: CreateWorkOrderDto, empresa: Empresa): Promise<string | null> {
+  private async resolveClientIdOrNull(
+    dto: CreateWorkOrderDto,
+    empresa: Empresa
+  ): Promise<string | null> {
     const cid = cleanStr((dto as any).clientId);
     if (!cid) return null;
 
@@ -384,8 +483,7 @@ export class WorkOrdersService {
     const cliente = cleanStr((dto as any).cliente);
     const lugar = cleanStr((dto as any).lugar);
 
-    if (!cliente && !lugar)
-      throw new BadRequestException("Completa al menos Cliente o Lugar.");
+    if (!cliente && !lugar) throw new BadRequestException("Completa al menos Cliente o Lugar.");
 
     const createdBy = await this.getActorOrThrowById(createdById);
 
@@ -395,7 +493,6 @@ export class WorkOrdersService {
         ? (dtoEmpresaRaw as Empresa)
         : null;
 
-    // ⚠️ Compat: tu frontend manda conductorId, pero aquí lo tratamos como "operadorId" (asignado)
     const conductorId = cleanStr((dto as any).conductorId);
 
     let conductorUser: any = null;
@@ -413,18 +510,12 @@ export class WorkOrdersService {
         },
       });
 
-      if (!conductorUser) {
-        throw new BadRequestException("Operador seleccionado no existe.");
-      }
-      if (!conductorUser.activo) {
-        throw new BadRequestException("Operador seleccionado está inactivo.");
-      }
+      if (!conductorUser) throw new BadRequestException("Operador seleccionado no existe.");
+      if (!conductorUser.activo) throw new BadRequestException("Operador seleccionado está inactivo.");
       if (String(conductorUser.role || "").toUpperCase() !== "TRABAJADOR") {
         throw new BadRequestException("Operador seleccionado no tiene rol TRABAJADOR.");
       }
 
-      // ✅ CAMBIO CLAVE: validar como OPERADOR
-      // - si workerType viene vacío/null, lo permitimos (no bloqueamos)
       const wt = String((conductorUser as any).workerType || "").toUpperCase();
       if (wt && wt !== "OPERADOR") {
         throw new BadRequestException("El usuario seleccionado no es tipo OPERADOR.");
@@ -465,12 +556,11 @@ export class WorkOrdersService {
     const empresa: Empresa = empresaFinal;
 
     const diasTrabajo = cleanDiasTrabajo((dto as any).diasTrabajo);
+    const diasProgramados = cleanDiasProgramados((dto as any).diasProgramados);
     const rutNorm = normalizeRut((dto as any).rut);
 
-    // ✅ CAMBIO: ya NO se autocrea cliente. Solo se usa dto.clientId si viene y se valida.
     const clientId = await this.resolveClientIdOrNull(dto, empresa);
 
-    // ✅ FIX: si no viene operador, lo derivamos del conductor (compat)
     const conductorNombre = cleanStr((dto as any).conductor) || null;
     const operadorDto = cleanStr((dto as any).operador);
     const operadorAuto =
@@ -483,10 +573,7 @@ export class WorkOrdersService {
     const data: any = {
       empresa,
       createdById: createdBy.id,
-
-      // ✅ asignado = "operador" (pero viene en conductorId por compat)
       assignedToId: conductorId || null,
-
       status: WorkOrderStatus.ABIERTA,
 
       titulo: cliente || lugar || "OT",
@@ -519,13 +606,29 @@ export class WorkOrdersService {
       sinJib: !!(dto as any).sinJib,
 
       diasTrabajo,
+      diasProgramados,
       nota: cleanStr((dto as any).nota),
 
       activo: true,
       deletedAt: null,
     };
 
-    return this.prisma.workOrder.create({ data });
+    const created = await this.prisma.workOrder.create({ data });
+
+    await this.audit.log({
+      entity: AuditEntity.WORK_ORDER,
+      entityId: created.id,
+      action: AuditAction.CREATE,
+      actor: this.safeActor(createdBy),
+      data: {
+        targetLabel: this.woLabel(created),
+        title: created?.titulo || null,
+        before: null,
+        after: this.snapshotWorkOrder(created),
+      },
+    });
+
+    return created;
   }
 
   async list(actor?: any) {
@@ -535,19 +638,11 @@ export class WorkOrdersService {
       where: { ...whereEmpresa, ...this.whereActivosOnly() },
       orderBy: { createdAt: "desc" },
       include: {
-        createdBy: {
-          select: { id: true, email: true, nombre: true, apellido: true },
-        },
-        completedBy: {
-          select: { id: true, email: true, nombre: true, apellido: true },
-        },
-        approvedBy: {
-          select: { id: true, email: true, nombre: true, apellido: true },
-        },
+        createdBy: { select: { id: true, email: true, nombre: true, apellido: true } },
+        completedBy: { select: { id: true, email: true, nombre: true, apellido: true } },
+        approvedBy: { select: { id: true, email: true, nombre: true, apellido: true } },
         client: { select: { id: true, nombre: true, rut: true } },
-        assignedTo: {
-          select: { id: true, email: true, nombre: true, apellido: true },
-        },
+        assignedTo: { select: { id: true, email: true, nombre: true, apellido: true } },
       },
     });
 
@@ -601,23 +696,19 @@ export class WorkOrdersService {
 
     const cliente = cleanStr((dto as any).cliente);
     const lugar = cleanStr((dto as any).lugar);
-    if (!cliente && !lugar)
-      throw new BadRequestException("Completa al menos Cliente o Lugar.");
+    if (!cliente && !lugar) throw new BadRequestException("Completa al menos Cliente o Lugar.");
 
-    if (
-      exists.status === WorkOrderStatus.APROBADA ||
-      exists.status === WorkOrderStatus.CERRADA
-    ) {
+    if (exists.status === WorkOrderStatus.APROBADA || exists.status === WorkOrderStatus.CERRADA) {
       throw new BadRequestException("No se puede editar una OT aprobada/cerrada.");
     }
 
     const rutNorm = normalizeRut((dto as any).rut);
-
-    // ✅ CAMBIO: ya NO se autocrea cliente. Solo se usa dto.clientId si viene y se valida.
     const clientId = await this.resolveClientIdOrNull(dto, exists.empresa as any);
 
     const conductorNombre = cleanStr((dto as any).conductor);
     const operadorDto = cleanStr((dto as any).operador);
+
+    const before = this.snapshotWorkOrder(exists);
 
     const data: any = {
       titulo: cliente || lugar || "OT",
@@ -653,7 +744,27 @@ export class WorkOrdersService {
       nota: cleanStr((dto as any).nota),
     };
 
-    return this.prisma.workOrder.update({ where: { id }, data });
+    // ✅ NUEVO (CALENDARIO): si viene diasProgramados, lo actualizamos. Si no viene, NO lo tocamos.
+    if ("diasProgramados" in (dto as any)) {
+      data.diasProgramados = cleanDiasProgramados((dto as any).diasProgramados);
+    }
+
+    const after = await this.prisma.workOrder.update({ where: { id }, data });
+
+    await this.audit.log({
+      entity: AuditEntity.WORK_ORDER,
+      entityId: id,
+      action: AuditAction.UPDATE,
+      actor: this.safeActor(actor),
+      data: {
+        targetLabel: this.woLabel(after, id),
+        title: after?.titulo || null,
+        before,
+        after: this.snapshotWorkOrder(after),
+      },
+    });
+
+    return after;
   }
 
   async remove(id: string, userId?: string) {
@@ -803,37 +914,29 @@ export class WorkOrdersService {
         createdAt: true,
         status: true,
         empresa: true,
-
         titulo: true,
         cliente: true,
         rut: true,
         giro: true,
-
         solicitadoPor: true,
-
         direccion: true,
         comuna: true,
         ciudad: true,
-
         telefonoCliente: true,
         direccionFaena: true,
-
         lugar: true,
         horario: true,
         mapsLink: true,
-
         diasTrabajo: true,
-
+        diasProgramados: true,
         camion: true,
         conductor: true,
         operador: true,
         rigger: true,
         sinJib: true,
-
         rejectReason: true,
         approvalComment: true,
         approvedAt: true,
-
         createdBy: { select: { id: true, email: true, nombre: true, apellido: true } },
         assignedTo: { select: { id: true, email: true, nombre: true, apellido: true } },
       },
@@ -852,16 +955,31 @@ export class WorkOrdersService {
       throw new ForbiddenException("No tienes asignada esta OT.");
     }
 
-    if (
-      exists.status === WorkOrderStatus.APROBADA ||
-      exists.status === WorkOrderStatus.CERRADA
-    ) {
+    if (exists.status === WorkOrderStatus.APROBADA || exists.status === WorkOrderStatus.CERRADA) {
       throw new BadRequestException("Esta OT ya fue aprobada/cerrada.");
     }
 
     const workerReport = (dto as any)?.workerReport ?? null;
     if (!workerReport || typeof workerReport !== "object") {
       throw new BadRequestException("workerReport es obligatorio.");
+    }
+
+    // ✅ NUEVO (OBRA): validar HH:MM (si vienen; en tu frontend son obligatorios)
+    const dh = (workerReport as any)?.detalleHoras || {};
+    const iniObra = cleanStr((dh as any)?.inicioServicioObra);
+    const finObra = cleanStr((dh as any)?.terminoServicioObra);
+
+    if (!iniObra) {
+      throw new BadRequestException("Falta Hora inicio servicio en obra.");
+    }
+    if (!isHHMM(iniObra)) {
+      throw new BadRequestException("Hora inicio servicio en obra inválida. Formato requerido: HH:MM");
+    }
+    if (!finObra) {
+      throw new BadRequestException("Falta Hora término servicio en obra.");
+    }
+    if (!isHHMM(finObra)) {
+      throw new BadRequestException("Hora término servicio en obra inválida. Formato requerido: HH:MM");
     }
 
     const data: any = {
@@ -885,7 +1003,29 @@ export class WorkOrdersService {
     data.approvedById = null;
     data.approvalComment = null;
 
-    return this.prisma.workOrder.update({ where: { id }, data });
+    const before = this.snapshotWorkOrder(exists);
+    const after = await this.prisma.workOrder.update({ where: { id }, data });
+
+    await this.audit.log({
+      entity: AuditEntity.WORK_ORDER,
+      entityId: id,
+      action: AuditAction.UPDATE,
+      actor: this.safeActor({ id: userId, email: (dto as any)?.email }),
+      data: {
+        targetLabel: this.woLabel(after, id),
+        title: after?.titulo || null,
+        before,
+        after: this.snapshotWorkOrder(after),
+        meta: {
+          title:
+            after.status === WorkOrderStatus.COMPLETADA
+              ? "Trabajador marcó OT como COMPLETADA"
+              : "Trabajador actualizó OT a EN_PROCESO",
+        },
+      },
+    });
+
+    return after;
   }
 
   async adminUpdateReport(id: string, workerReport: any, comentarioFinal?: string, userId?: string) {
@@ -900,10 +1040,7 @@ export class WorkOrdersService {
     if (!exists) throw new NotFoundException("OT no encontrada");
     if (exists.activo === false) throw new NotFoundException("OT no encontrada");
 
-    if (
-      exists.status === WorkOrderStatus.APROBADA ||
-      exists.status === WorkOrderStatus.CERRADA
-    ) {
+    if (exists.status === WorkOrderStatus.APROBADA || exists.status === WorkOrderStatus.CERRADA) {
       throw new BadRequestException("No se puede corregir una OT aprobada/cerrada.");
     }
 
@@ -928,7 +1065,24 @@ export class WorkOrdersService {
       data.finishedAt = new Date();
     }
 
-    return this.prisma.workOrder.update({ where: { id }, data });
+    const before = this.snapshotWorkOrder(exists);
+    const after = await this.prisma.workOrder.update({ where: { id }, data });
+
+    await this.audit.log({
+      entity: AuditEntity.WORK_ORDER,
+      entityId: id,
+      action: AuditAction.UPDATE,
+      actor: this.safeActor({ id: userId, email: "" }),
+      data: {
+        targetLabel: this.woLabel(after, id),
+        title: after?.titulo || null,
+        before,
+        after: this.snapshotWorkOrder(after),
+        meta: { title: "Admin corrigió reporte del trabajador" },
+      },
+    });
+
+    return after;
   }
 
   async approve(id: string, approvedById?: string, comment?: string) {
@@ -946,7 +1100,9 @@ export class WorkOrdersService {
       throw new BadRequestException("No se puede aprobar: falta el reporte del trabajador.");
     }
 
-    return this.prisma.workOrder.update({
+    const before = this.snapshotWorkOrder(exists);
+
+    const after = await this.prisma.workOrder.update({
       where: { id },
       data: {
         status: WorkOrderStatus.APROBADA,
@@ -956,6 +1112,22 @@ export class WorkOrdersService {
         rejectReason: null,
       },
     });
+
+    await this.audit.log({
+      entity: AuditEntity.WORK_ORDER,
+      entityId: id,
+      action: AuditAction.UPDATE,
+      actor: this.safeActor({ id: approvedById, email: "" }),
+      data: {
+        targetLabel: this.woLabel(after, id),
+        title: after?.titulo || null,
+        before,
+        after: this.snapshotWorkOrder(after),
+        meta: { title: "Aprobó OT" },
+      },
+    });
+
+    return after;
   }
 
   async reject(id: string, approvedById?: string, reason?: string) {
@@ -976,7 +1148,9 @@ export class WorkOrdersService {
     const motivo = cleanStr(reason);
     if (!motivo) throw new BadRequestException("Motivo de rechazo es obligatorio.");
 
-    return this.prisma.workOrder.update({
+    const before = this.snapshotWorkOrder(exists);
+
+    const after = await this.prisma.workOrder.update({
       where: { id },
       data: {
         status: WorkOrderStatus.RECHAZADA,
@@ -985,9 +1159,153 @@ export class WorkOrdersService {
         rejectReason: motivo,
       },
     });
+
+    await this.audit.log({
+      entity: AuditEntity.WORK_ORDER,
+      entityId: id,
+      action: AuditAction.UPDATE,
+      actor: this.safeActor({ id: approvedById, email: "" }),
+      data: {
+        targetLabel: this.woLabel(after, id),
+        title: after?.titulo || null,
+        before,
+        after: this.snapshotWorkOrder(after),
+        meta: { title: "Rechazó OT" },
+      },
+    });
+
+    return after;
   }
 
-  // ✅ generatePdf (con fixes operador + kms)
+  // =========================
+  // ✅ CALENDARIO (ADMIN)  ✅✅✅ (ESTO ERA LO QUE FALTABA)
+  // =========================
+
+  private parseISODateOnly(s: any): string | null {
+    const v = cleanStr(s);
+    if (!v) return null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+    return v;
+  }
+
+  private addDaysISO(iso: string, days: number): string {
+    const [y, m, d] = iso.split("-").map((n) => Number(n));
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    dt.setUTCDate(dt.getUTCDate() + days);
+    const yy = dt.getUTCFullYear();
+    const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(dt.getUTCDate()).padStart(2, "0");
+    return `${yy}-${mm}-${dd}`;
+  }
+
+  private listIsoDaysBetween(fromISO: string, toISO: string, maxDays = 370): string[] {
+    const out: string[] = [];
+    let cur = fromISO;
+    for (let i = 0; i < maxDays; i++) {
+      out.push(cur);
+      if (cur === toISO) break;
+      cur = this.addDaysISO(cur, 1);
+    }
+    return out;
+  }
+
+  // GET /work-orders/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD
+  async listCalendar(actor?: any, range?: { from?: string; to?: string }) {
+    if (!this.isOtAdminRole(actor)) throw new ForbiddenException("No autorizado.");
+
+    // default: mes actual (UTC)
+    const now = new Date();
+    const yyyy = now.getUTCFullYear();
+    const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
+
+    const fromDefault = `${yyyy}-${mm}-01`;
+    const end = new Date(Date.UTC(yyyy, now.getUTCMonth() + 1, 0)); // último día del mes
+    const toDefault = `${end.getUTCFullYear()}-${String(end.getUTCMonth() + 1).padStart(2, "0")}-${String(
+      end.getUTCDate()
+    ).padStart(2, "0")}`;
+
+    const from = this.parseISODateOnly(range?.from) || fromDefault;
+    const to = this.parseISODateOnly(range?.to) || toDefault;
+
+    const days = this.listIsoDaysBetween(from, to);
+
+    const whereEmpresa = await this.empresaWhereByActor(actor);
+
+    const items = await this.prisma.workOrder.findMany({
+      where: {
+        ...whereEmpresa,
+        ...this.whereActivosOnly(),
+        diasProgramados: { hasSome: days },
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        empresa: true,
+        status: true,
+        createdAt: true,
+        titulo: true,
+        cliente: true,
+        lugar: true,
+        direccionFaena: true,
+        camion: true,
+        operador: true,
+        conductor: true,
+        rigger: true,
+        diasProgramados: true,
+        assignedTo: { select: { id: true, nombre: true, apellido: true, email: true } },
+      },
+    });
+
+    return { from, to, items };
+  }
+
+  // PATCH /work-orders/:id/schedule  body: { diasProgramados: ["YYYY-MM-DD", ...] }
+  async updateSchedule(id: string, diasProgramadosRaw: any, actor?: any) {
+    if (!id) throw new BadRequestException("Falta id");
+    if (!this.isOtAdminRole(actor)) throw new ForbiddenException("No autorizado.");
+
+    const exists = await this.prisma.workOrder.findUnique({ where: { id } });
+    if (!exists) throw new NotFoundException("OT no encontrada");
+    if (exists.activo === false) throw new NotFoundException("OT no encontrada");
+
+    if (!this.isGlobalRole(actor)) {
+      const emp = await this.getEmpresaForActorOrThrow(actor);
+      if (exists.empresa !== emp) throw new NotFoundException("OT no encontrada");
+    }
+
+    if (exists.status === WorkOrderStatus.CERRADA) {
+      throw new BadRequestException("No se puede reprogramar una OT CERRADA.");
+    }
+
+    const diasProgramados = cleanDiasProgramados(diasProgramadosRaw);
+
+    const before = this.snapshotWorkOrder(exists);
+
+    const after = await this.prisma.workOrder.update({
+      where: { id },
+      data: { diasProgramados },
+    });
+
+    await this.audit.log({
+      entity: AuditEntity.WORK_ORDER,
+      entityId: id,
+      action: AuditAction.UPDATE,
+      actor: this.safeActor(actor),
+      data: {
+        targetLabel: this.woLabel(after, id),
+        title: after?.titulo || null,
+        before,
+        after: this.snapshotWorkOrder(after),
+        meta: { title: "Admin actualizó programación (diasProgramados)" },
+      },
+    });
+
+    return after;
+  }
+
+  // =========================
+  // ✅ PDF
+  // =========================
   async generatePdf(id: string, actor?: any): Promise<{ buffer: Buffer; filename: string }> {
     if (!id) throw new BadRequestException("Falta id");
 
@@ -1009,9 +1327,17 @@ export class WorkOrdersService {
     const dh = (wr as any)?.detalleHoras || {};
     const movimientos = cleanStr((wr as any)?.movimientos);
 
+    const rec =
+      (wr as any)?.recibiConforme ||
+      (wr as any)?.recibeConforme ||
+      (wr as any)?.recibi_conforme ||
+      {};
+
+    const recNombre = cleanStr((rec as any)?.nombre) || "—";
+    const recRut = cleanStr((rec as any)?.rut) || "—";
+
     const kmsObj = (wr as any)?.kilometros || (dh as any)?.kilometros || {};
 
-    // ✅ helper kms robusto
     const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
     const pickKm = (key: string): string | null => {
       const k = String(key || "").trim();
@@ -1043,21 +1369,23 @@ export class WorkOrdersService {
     const direccion = cleanStr((wo as any).direccion) || "—";
     const rut = cleanStr((wo as any).rut) || "—";
     const giro = cleanStr((wo as any).giro) || "—";
-    const telefono = cleanStr((wo as any).telefonoCliente) || "—";
     const comuna = cleanStr((wo as any).comuna) || "—";
     const ciudad = cleanStr((wo as any).ciudad) || "—";
 
     const solicitadoPorManual = cleanStr((wo as any).solicitadoPor);
     const solicitadoPorAuto = cleanStr((wo as any).createdBy?.nombre)
-      ? `${(wo as any).createdBy?.nombre || ""}${(wo as any).createdBy?.apellido ? " " + (wo as any).createdBy?.apellido : ""}`.trim()
+      ? `${(wo as any).createdBy?.nombre || ""}${
+          (wo as any).createdBy?.apellido ? " " + (wo as any).createdBy?.apellido : ""
+        }`.trim()
       : cleanStr((wo as any).createdBy?.email) || null;
     const solicitadoPor = solicitadoPorManual || solicitadoPorAuto || "—";
 
-    // ✅ FIX: operador = operador || conductor
-    const operador = cleanStr((wo as any).operador) || cleanStr((wo as any).conductor) || "—";
+    const operador =
+      cleanStr((wo as any).operador) || cleanStr((wo as any).conductor) || "—";
 
     const equipo = cleanStr((wo as any).camion) || "—";
-    const obraTramo = cleanStr((wo as any).direccionFaena) || cleanStr((wo as any).lugar) || "—";
+    const obraTramo =
+      cleanStr((wo as any).direccionFaena) || cleanStr((wo as any).lugar) || "—";
     const rigger = cleanStr((wo as any).rigger) || "—";
 
     const doc = new (PDFDocument as any)({
@@ -1069,8 +1397,11 @@ export class WorkOrdersService {
     const bufferPromise = pdfBufferFromDoc(doc);
 
     const pageW = doc.page.width;
+    const pageH = doc.page.height;
     const left = doc.page.margins.left;
     const right = pageW - doc.page.margins.right;
+    const top = doc.page.margins.top;
+    const bottom = pageH - doc.page.margins.bottom;
     const w = right - left;
 
     const gap = 18;
@@ -1097,16 +1428,23 @@ export class WorkOrdersService {
       value: string,
       opts?: { valueBold?: boolean }
     ) => {
-      doc.font("Helvetica-Bold").fontSize(9).fillColor("#111");
-      doc.text(label, x, yy, { width: ww });
+      const labelText = String(label || "").trim();
+      const valueText = value && String(value).trim() ? String(value).trim() : "—";
 
+      doc.font("Helvetica-Bold").fontSize(9).fillColor("#111");
+      const labelH = doc.heightOfString(labelText, { width: ww });
+      doc.text(labelText, x, yy, { width: ww });
+
+      const valueY = yy + labelH + 2;
       doc
         .font(opts?.valueBold ? "Helvetica-Bold" : "Helvetica")
         .fontSize(10)
         .fillColor("#111");
-      doc.text(value || "—", x, yy + 12, { width: ww });
+      const valueH = doc.heightOfString(valueText, { width: ww });
+      doc.text(valueText, x, valueY, { width: ww });
 
-      return yy + 28;
+      const nextY = valueY + valueH + 4;
+      return Math.max(nextY, yy + 24);
     };
 
     const twoColRow = (
@@ -1123,9 +1461,8 @@ export class WorkOrdersService {
       return Math.max(y1, y2);
     };
 
-    const oneColFull = (yy: number, label: string, value: string, opts?: { valueBold?: boolean }) => {
-      return kvRow(left, yy, w, label, value, opts);
-    };
+    const oneColFull = (yy: number, label: string, value: string, opts?: { valueBold?: boolean }) =>
+      kvRow(left, yy, w, label, value, opts);
 
     const sectionTitle = (title: string, yy: number) => {
       doc.font("Helvetica-Bold").fontSize(12).fillColor("#111");
@@ -1133,15 +1470,10 @@ export class WorkOrdersService {
     };
 
     const drawHoursTable = (yy: number) => {
-      const headerH = 22;
-      const rowH = 20;
+      const headerH = 20;
+      const rowH = 18;
 
-      const rows: Array<{
-        label: string;
-        hora: string;
-        km?: string | null;
-        showKm?: boolean;
-      }> = [
+      const rows: Array<{ label: string; hora: string; km?: string | null; showKm?: boolean }> = [
         {
           label: "Hora Salida Planta",
           hora: fmtTimeIfHHMM((dh as any)?.salidaPlanta) || "—",
@@ -1154,6 +1486,21 @@ export class WorkOrdersService {
           km: pickKm("llegadaFaena") || "—",
           showKm: true,
         },
+
+        // ✅ NUEVO OBRA (sin KM)
+        {
+          label: "Hora Inicio Servicio en Obra",
+          hora: fmtTimeIfHHMM((dh as any)?.inicioServicioObra) || "—",
+          km: "",
+          showKm: false,
+        },
+        {
+          label: "Hora Término Servicio en Obra",
+          hora: fmtTimeIfHHMM((dh as any)?.terminoServicioObra) || "—",
+          km: "",
+          showKm: false,
+        },
+
         {
           label: "Hora Salida Faena",
           hora: fmtTimeIfHHMM((dh as any)?.salidaFaena) || "—",
@@ -1182,9 +1529,9 @@ export class WorkOrdersService {
       const c3 = w - c1 - c2;
 
       doc.font("Helvetica-Bold").fontSize(9).fillColor("#111");
-      doc.text("DETALLE", left + 8, yy + 6, { width: c1 - 16 });
-      doc.text("HORA", left + c1, yy + 6, { width: c2, align: "center" });
-      doc.text("KILÓMETROS", left + c1 + c2, yy + 6, { width: c3, align: "center" });
+      doc.text("DETALLE", left + 8, yy + 5, { width: c1 - 16 });
+      doc.text("HORA", left + c1, yy + 5, { width: c2, align: "center" });
+      doc.text("KILÓMETROS", left + c1 + c2, yy + 5, { width: c3, align: "center" });
 
       line(left, yy + headerH, right);
 
@@ -1196,13 +1543,13 @@ export class WorkOrdersService {
       let cy = yy + headerH;
       for (const r of rows) {
         doc.font("Helvetica-Bold").fontSize(9).fillColor("#111");
-        doc.text(r.label, left + 8, cy + 6, { width: c1 - 16 });
+        doc.text(r.label, left + 8, cy + 4, { width: c1 - 16 });
 
         doc.font("Helvetica").fontSize(9).fillColor("#111");
-        doc.text(r.hora, left + c1, cy + 6, { width: c2, align: "center" });
+        doc.text(r.hora, left + c1, cy + 4, { width: c2, align: "center" });
 
-        const kmText = r.showKm === false ? "" : (r.km || "—");
-        doc.text(kmText, left + c1 + c2, cy + 6, { width: c3, align: "center" });
+        const kmText = r.showKm === false ? "" : r.km || "—";
+        doc.text(kmText, left + c1 + c2, cy + 4, { width: c3, align: "center" });
 
         cy += rowH;
         if (cy < yy + tableH) line(left, cy, right);
@@ -1211,11 +1558,13 @@ export class WorkOrdersService {
       return yy + tableH;
     };
 
-    let y = doc.page.margins.top;
+    let y = top;
 
     doc.font("Helvetica").fontSize(9).fillColor("#111");
     doc.text("Sociedad de Transportes Thomas Limitada", left, y, { width: w - 160 });
-    doc.text("Arriendo de equipos para transporte de carga y movimientos de izaje", left, y + 12, { width: w - 160 });
+    doc.text("Arriendo de equipos para transporte de carga y movimientos de izaje", left, y + 12, {
+      width: w - 160,
+    });
     doc.text("info@gruasthomas.cl  •  www.gruasthomas.cl", left, y + 24, { width: w - 160 });
 
     const logoPath = getLogoPath();
@@ -1242,72 +1591,99 @@ export class WorkOrdersService {
     fullLine(y);
     y += 12;
 
-    y = twoColRow(y, "Señores", cliente, "Comuna", comuna, { valueBold: true });
-    y = twoColRow(y, "Dirección", direccion, "Fono", telefono);
-    y = twoColRow(y, "R.U.T.", rut, "Ciudad", ciudad);
-    y = oneColFull(y, "Giro", giro);
+    y = twoColRow(y, "Señores", cliente, "Comuna", comuna);
+    y = twoColRow(y, "Dirección", direccion, "Ciudad", ciudad);
+    y = twoColRow(y, "R.U.T.", rut, "Giro", giro);
     y = oneColFull(y, "Solicitado por", solicitadoPor);
-    y += 6;
+    y += 4;
 
     fullLine(y);
-    y += 12;
+    y += 10;
 
     y = twoColRow(y, "Operador", operador, "Equipo", equipo);
     y = twoColRow(y, "Obra / Tramo", obraTramo, "Rigger Thomas", rigger);
-    y += 6;
+    y += 4;
 
     fullLine(y);
-    y += 14;
+    y += 12;
 
     sectionTitle("Detalle de horas", y);
-    y += 16;
-    y = drawHoursTable(y);
     y += 14;
+    y = drawHoursTable(y);
+    y += 10;
 
     doc.font("Helvetica-Bold").fontSize(12).fillColor("#111");
     doc.text("Detalle de Movimientos", left, y);
-    y += 14;
+    y += 12;
 
-    const movH = 85;
+    const movH = 48;
     box(left, y, w, movH);
-    doc.font("Helvetica").fontSize(10).fillColor("#111");
-    doc.text(movimientos || cleanStr((wo as any).nota) || "—", left + 10, y + 10, {
-      width: w - 20,
-      height: movH - 20,
-    });
-    y += movH + 12;
 
+    const movPadX = 10;
+    const movPadTop = 10;
     doc.font("Helvetica").fontSize(9).fillColor("#111");
-    doc.text("Condiciones de Arrendamiento:", left, y);
-    y += 12;
-    doc.text("1.- La presente orden se considerará recibida conforme.", left, y);
-    y += 12;
-    doc.text("2.- Los traslados deben ser con guías de despacho proporcionada por el cliente.", left, y);
-    y += 18;
+    doc.text(movimientos || cleanStr((wo as any).nota) || "—", left + movPadX, y + movPadTop, {
+      width: w - movPadX * 2,
+      height: movH - movPadTop * 2,
+      ellipsis: true,
+    });
 
-    doc.font("Helvetica-Bold").fontSize(10).fillColor("#111");
-    doc.text("Recibí Conforme", left, y);
+    y += movH + 8;
+
+    const neededForFooter = 120;
+    const desiredBottomGap = 18;
+    const remaining = bottom - y;
+    const spacer = Math.max(0, remaining - (neededForFooter + desiredBottomGap));
+    if (spacer > 0) y += spacer;
+
+    doc.font("Helvetica").fontSize(8.7).fillColor("#111");
+
+    const condicionesT = "Condiciones de Arrendamiento:";
+    const c1 = "1.- La presente orden se considerará recibida conforme.";
+    const c2 = "2.- Los traslados deben ser con guías de despacho proporcionada por el cliente.";
+
+    doc.text(condicionesT, left, y);
+    y += 11;
+    doc.text(c1, left, y, { width: w });
+    y += 11;
+    doc.text(c2, left, y, { width: w });
+    y += 12;
+
+    doc.font("Helvetica-Bold").fontSize(9.5).fillColor("#111");
+    doc.text(`Recibí Conforme : ${recNombre || "—"}`, left, y, { width: w });
+
+    y += 22;
 
     const rutX1 = left;
     const rutX2 = left + colW;
     const firmaX1 = left + colW + gap;
     const firmaX2 = right;
 
-    const sigLineY = y + 26;
-    line(rutX1, sigLineY, rutX2);
-    line(firmaX1, sigLineY, firmaX2);
+    const lineY = y + 16;
+    const rutTextY = y;
+    const labelY = lineY + 5;
 
-    doc.font("Helvetica").fontSize(10).fillColor("#111");
-    doc.text(rut || "—", rutX1, sigLineY - 16, { width: rutX2 - rutX1, align: "center" });
+    doc.font("Helvetica").fontSize(9.5).fillColor("#111");
+    doc.text(recRut || "—", rutX1, rutTextY, { width: rutX2 - rutX1, align: "center" });
 
-    doc.font("Helvetica").fontSize(9).fillColor("#111");
-    doc.text("R.U.T.", rutX1, sigLineY + 6, { width: rutX2 - rutX1 });
-    doc.text("Firma", firmaX1, sigLineY + 6, { width: firmaX2 - firmaX1 });
+    line(rutX1, lineY, rutX2);
+    line(firmaX1, lineY, firmaX2);
+
+    doc.font("Helvetica").fontSize(8.7).fillColor("#111");
+    doc.text("R.U.T.", rutX1, labelY, { width: rutX2 - rutX1, align: "center" });
+    doc.text("Firma", firmaX1, labelY, { width: firmaX2 - firmaX1, align: "center" });
 
     const sigBuf = getSignatureBuffer(wo as any, id);
     if (sigBuf) {
       try {
-        doc.image(sigBuf, firmaX1 + 10, sigLineY - 54, { fit: [colW - 20, 70], align: "left", valign: "center" });
+        const sigMaxW = colW - 20;
+        const sigMaxH = 44;
+        const sigY = lineY - sigMaxH - 5;
+        doc.image(sigBuf, firmaX1 + 10, sigY, {
+          fit: [sigMaxW, sigMaxH],
+          align: "left",
+          valign: "center",
+        });
       } catch {}
     }
 
@@ -1318,6 +1694,20 @@ export class WorkOrdersService {
     return { buffer, filename };
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -13,12 +13,12 @@ export default function Auditoria() {
   const [selected, setSelected] = useState(null);
 
   // ✅ filtros "editables" (lo que el usuario escribe)
-  const [fEntity, setFEntity] = useState(""); // "" | "USER" | "VEHICLE" | "WORK_ORDER"
-  const [fAction, setFAction] = useState(""); // "" | "CREATE" | "UPDATE" | ...
+  const [fEntity, setFEntity] = useState(""); // "" | "USER" | ...
+  const [fAction, setFAction] = useState(""); // "" | "CREATE" | ...
   const [fQ, setFQ] = useState(""); // texto
   const [fDate, setFDate] = useState(""); // YYYY-MM-DD
 
-  // ✅ filtros "aplicados" (los que realmente se usan en la llamada)
+  // ✅ filtros "aplicados"
   const [applied, setApplied] = useState({
     entity: "",
     action: "",
@@ -26,7 +26,7 @@ export default function Auditoria() {
     date: "",
   });
 
-  // paginación (dejamos simple: primera página)
+  // paginación simple
   const page = 1;
   const limit = 50;
 
@@ -119,19 +119,28 @@ export default function Auditoria() {
           </div>
 
           <div className="panel-actions">
-            <button className="btn" type="button" onClick={fetchAudit} disabled={loading}>
+            <button
+              className="btn"
+              type="button"
+              onClick={fetchAudit}
+              disabled={loading}
+            >
               {loading ? "Cargando..." : "Refrescar"}
             </button>
           </div>
         </div>
 
-        {/* ✅ Filtros funcionales */}
+        {/* ✅ Filtros */}
         <div className="filters">
           <select value={fEntity} onChange={(e) => setFEntity(e.target.value)}>
             <option value="">Tipo (todos)</option>
             <option value="USER">Usuario</option>
             <option value="VEHICLE">Camión</option>
+            <option value="DOCUMENT">Documento</option>
+            <option value="MAINTENANCE">Mantención</option>
             <option value="WORK_ORDER">Orden de trabajo</option>
+            <option value="HOROMETER">Horómetro</option>
+            <option value="CLIENT">Cliente</option>
           </select>
 
           <select value={fAction} onChange={(e) => setFAction(e.target.value)}>
@@ -147,7 +156,7 @@ export default function Auditoria() {
           <input
             value={fQ}
             onChange={(e) => setFQ(e.target.value)}
-            placeholder="Buscar por nombre/patente/correo/OT..."
+            placeholder="Buscar por patente, correo, cliente, OT..."
           />
 
           <input
@@ -157,11 +166,21 @@ export default function Auditoria() {
             placeholder="Fecha (opcional)"
           />
 
-          <button className="btn primary" type="button" onClick={applyFilters} disabled={loading}>
+          <button
+            className="btn primary"
+            type="button"
+            onClick={applyFilters}
+            disabled={loading}
+          >
             Aplicar filtros
           </button>
 
-          <button className="btn ghost" type="button" onClick={clearFilters} disabled={loading}>
+          <button
+            className="btn ghost"
+            type="button"
+            onClick={clearFilters}
+            disabled={loading}
+          >
             Limpiar
           </button>
         </div>
@@ -181,7 +200,9 @@ export default function Auditoria() {
 
             <tbody>
               {rowsToShow.map((log) => {
-                const fecha = log.createdAt ? new Date(log.createdAt).toLocaleString() : "-";
+                const fecha = log.createdAt
+                  ? new Date(log.createdAt).toLocaleString()
+                  : "-";
 
                 const accionHumana = humanAction(log.action);
                 const queHumano = humanEntity(log.entity);
@@ -189,7 +210,12 @@ export default function Auditoria() {
                 const objetivo = getTargetLabel(log);
                 const quien = log.userEmail || log.userId || "-";
 
-                const frase = buildSentence({ accionHumana, queHumano, objetivo });
+                const frase = buildSentence({
+                  accionHumana,
+                  queHumano,
+                  objetivo,
+                  title: log.title,
+                });
 
                 return (
                   <tr key={log.id || `${log.createdAt}-${log.entityId}`}>
@@ -234,7 +260,11 @@ export default function Auditoria() {
         </div>
       </div>
 
-      <AuditDetailsModal open={openModal} onClose={closeDetails} item={selected} />
+      <AuditDetailsModal
+        open={openModal}
+        onClose={closeDetails}
+        item={selected}
+      />
     </>
   );
 }
@@ -244,10 +274,11 @@ export default function Auditoria() {
    =========================== */
 
 function mapAuditFromBackend(row) {
-  const data = row?.data ?? null;
+  const raw = row?.data ?? null;
+  const data = normalizeObject(raw);
 
   const before = data?.before ?? null;
-  const after = data?.after ?? data ?? null;
+  const after = data?.after ?? (data && Object.keys(data).length ? data : null);
 
   return {
     id: row.id,
@@ -259,7 +290,8 @@ function mapAuditFromBackend(row) {
     userId: row.actorId ?? null,
     userEmail: row.actorEmail ?? null,
 
-    target: data?.targetLabel ?? data?.target ?? null, // ✅ prioridad targetLabel
+    // ✅ prioridad targetLabel / title (tal como guardas en backend)
+    target: data?.targetLabel ?? data?.target ?? null,
     title: data?.title ?? null,
 
     before,
@@ -269,7 +301,7 @@ function mapAuditFromBackend(row) {
 }
 
 /* ===========================
-   Helpers "humanos"
+   Helpers humanos
    =========================== */
 
 function humanAction(action) {
@@ -287,50 +319,74 @@ function humanEntity(entity) {
   const e = (entity || "").toUpperCase();
   if (e === "USER") return "Usuario";
   if (e === "VEHICLE") return "Camión";
+  if (e === "DOCUMENT") return "Documento";
+  if (e === "MAINTENANCE") return "Mantención";
   if (e === "WORK_ORDER") return "Orden de trabajo";
+  if (e === "HOROMETER") return "Horómetro";
+  if (e === "CLIENT") return "Cliente";
   return entity || "-";
 }
 
 function getTargetLabel(log) {
+  // ✅ primero lo que ya viene mapeado
+  if (log?.title) return String(log.title);
   if (log?.target) return String(log.target);
 
-  const candidates = [log?.after, log?.before, log?.detail];
+  const candidates = [log?.detail, log?.after, log?.before];
+
   for (const c of candidates) {
     if (!c) continue;
-    const obj = tryParseJson(c);
+    const obj = normalizeObject(c);
+    if (!obj) continue;
 
-    if (obj?.targetLabel) return obj.targetLabel;
+    if (obj?.title) return String(obj.title);
+    if (obj?.targetLabel) return String(obj.targetLabel);
 
-    // ✅ OT
-    if (obj?.titulo) return obj.titulo;
-    if (obj?.cliente) return obj.cliente;
+    // OT
+    if (obj?.titulo) return String(obj.titulo);
+    if (obj?.cliente) return String(obj.cliente);
 
-    // ✅ Camión / Usuario
-    if (obj?.patente) return obj.patente;
-    if (obj?.email) return obj.email;
+    // Cliente
+    if (obj?.nombre) return String(obj.nombre);
+
+    // Vehículo / Usuario
+    if (obj?.patente) return String(obj.patente);
+    if (obj?.email) return String(obj.email);
     if (obj?.nombre && obj?.apellido) return `${obj.nombre} ${obj.apellido}`;
-    if (obj?.nombre) return obj.nombre;
+
+    // wrappers
+    if (obj?.created?.email) return String(obj.created.email);
+    if (obj?.created?.patente) return String(obj.created.patente);
+    if (obj?.created?.nombre) return String(obj.created.nombre);
   }
+
   return "";
 }
 
-function buildSentence({ accionHumana, queHumano, objetivo }) {
+function buildSentence({ accionHumana, queHumano, objetivo, title }) {
   if (!accionHumana || !queHumano) return "-";
-  if (objetivo) return `${accionHumana} ${queHumano}: ${objetivo}`;
+  const label = title || objetivo;
+  if (label) return `${accionHumana} ${queHumano}: ${label}`;
   return `${accionHumana} ${queHumano}`;
 }
 
-function tryParseJson(value) {
+/* ===========================
+   JSON helpers
+   =========================== */
+
+function normalizeObject(value) {
   if (!value) return null;
   if (typeof value === "object") return value;
-  if (typeof value !== "string") return null;
-
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
   }
+  return null;
 }
+
 
 
 

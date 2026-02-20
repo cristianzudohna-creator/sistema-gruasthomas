@@ -1,5 +1,10 @@
-// ✅ Archivo: src/users/users.service.ts
-// (COMPLETO) - ✅ workerType (tipo de trabajador) + filtros en findAll
+// ✅ Archivo: src/users/users.service.ts (COMPLETO)
+// ✅ Agregado: resetPasswordBySuperadmin()
+// ✅ FIX: al resetear o setear password por admin => mustChangePassword=true + passwordResetAt=now
+// - SOLO SUPERADMIN puede resetear contraseña
+// - Genera contraseña temporal si no viene una
+// - Guarda auditoría (sin password/hash)
+// - Devuelve password temporal (para entregarla al usuario)
 
 import {
   BadRequestException,
@@ -13,7 +18,7 @@ import {
   Empresa,
   AuditAction,
   AuditEntity,
-  WorkerType, // ✅ IMPORTANTE
+  WorkerType,
 } from "@prisma/client";
 import { CreateUserDto } from "../auth/dto/create-user.dto";
 import { UpdateUserDto } from "../auth/dto/update-user.dto";
@@ -42,18 +47,15 @@ export class UsersService {
     return emp as Empresa;
   }
 
-  // ✅ workerType
-  // - undefined = no vino
-  // - null / "" = limpiar
-  // - valida contra ENUM REAL de Prisma (WorkerType)
   private normalizeWorkerType(value: any): WorkerType | null {
     if (value === undefined) return undefined as any;
     if (value === null || value === "") return null;
 
     const wt = String(value).trim().toUpperCase();
 
-    // ✅ Lista permitida desde el enum real (evita hardcode viejo)
-    const allowed = Object.values(WorkerType).map((x) => String(x).toUpperCase());
+    const allowed = Object.values(WorkerType).map((x) =>
+      String(x).toUpperCase()
+    );
 
     if (!allowed.includes(wt)) {
       throw new BadRequestException(
@@ -73,6 +75,45 @@ export class UsersService {
     }
   }
 
+  private snapshotUser(u: any) {
+    if (!u) return null;
+    return {
+      id: u.id,
+      email: u.email,
+      nombre: u.nombre,
+      apellido: u.apellido,
+      rut: u.rut ?? null,
+      role: u.role,
+      activo: u.activo,
+      empresa: (u as any).empresa ?? null,
+      workerType: (u as any).workerType ?? null,
+
+      // ✅ útil para auditoría/diagnóstico (sin password)
+      mustChangePassword: (u as any).mustChangePassword ?? false,
+      passwordResetAt: (u as any).passwordResetAt ?? null,
+    };
+  }
+
+  private normalizeRut(input: any): string {
+    return String(input ?? "")
+      .trim()
+      .toUpperCase()
+      .replace(/\./g, "")
+      .replace(/-/g, "")
+      .replace(/\s+/g, "");
+  }
+
+  // ✅ genera password temporal (fácil de dictar)
+  private generateTempPassword() {
+    // ej: GT-583194
+    const n = Math.floor(100000 + Math.random() * 900000);
+    return `GT-${n}`;
+  }
+
+  // ======================
+  // Finds
+  // ======================
+
   findByEmail(email: string) {
     const clean = email?.trim().toLowerCase();
     return this.prisma.user.findUnique({
@@ -80,9 +121,22 @@ export class UsersService {
     });
   }
 
-  /**
-   * ✅ Admin del sistema (root)
-   */
+  // ✅ Login por RUT
+  // (devuelve el user completo, incluyendo password hash y flags)
+  findByRut(rut: string) {
+    const cleanRut = this.normalizeRut(rut);
+    if (!cleanRut) return null as any;
+
+    return this.prisma.user.findFirst({
+      where: {
+        rut: {
+          equals: cleanRut,
+          mode: "insensitive",
+        },
+      },
+    });
+  }
+
   async ensureAdmin() {
     const email = "admin@empresa.cl";
     const hash = await bcrypt.hash("Admin1234*", 10);
@@ -97,6 +151,10 @@ export class UsersService {
         apellido: "Sistema",
         empresa: null,
         workerType: null as any,
+
+        // ✅ admin no requiere cambiar pass
+        mustChangePassword: false,
+        passwordResetAt: null,
       } as any,
       create: {
         email,
@@ -107,12 +165,15 @@ export class UsersService {
         activo: true,
         empresa: null,
         workerType: null as any,
+
+        mustChangePassword: false,
+        passwordResetAt: null,
       } as any,
     });
   }
 
   // ======================
-  // ✅ SELF (MI CUENTA)
+  // ✅ SELF
   // ======================
 
   async me(actor: any) {
@@ -131,6 +192,8 @@ export class UsersService {
         activo: true,
         empresa: true as any,
         workerType: true as any,
+        mustChangePassword: true as any,
+        passwordResetAt: true as any,
         createdAt: true,
         updatedAt: true,
       },
@@ -140,18 +203,11 @@ export class UsersService {
     return user;
   }
 
-  /**
-   * ✅ Cada usuario puede editar SUS datos (NO empresa, NO rol, NO activo, NO password)
-   * Campos permitidos:
-   * - nombre
-   * - apellido
-   * - rut
-   */
   async updateMe(dto: UpdateUserDto, actor: any = null, meta: any = null) {
     const id = actor?.id;
     if (!id) throw new BadRequestException("Actor inválido.");
 
-    const before = await this.prisma.user.findUnique({
+    const beforeRaw = await this.prisma.user.findUnique({
       where: { id },
       select: {
         id: true,
@@ -163,10 +219,14 @@ export class UsersService {
         activo: true,
         empresa: true as any,
         workerType: true as any,
+        mustChangePassword: true as any,
+        passwordResetAt: true as any,
       },
     });
 
-    if (!before) throw new NotFoundException("Usuario no encontrado.");
+    if (!beforeRaw) throw new NotFoundException("Usuario no encontrado.");
+
+    const before = this.snapshotUser(beforeRaw);
 
     const data: any = {};
 
@@ -183,10 +243,10 @@ export class UsersService {
     }
 
     if (dto.rut !== undefined) {
-      data.rut = (dto as any).rut === null ? null : String(dto.rut).trim();
+      data.rut =
+        (dto as any).rut === null ? null : this.normalizeRut((dto as any).rut);
     }
 
-    // ❌ Bloqueos explícitos
     if ((dto as any).empresa !== undefined)
       throw new BadRequestException("No puedes modificar la empresa.");
     if ((dto as any).role !== undefined)
@@ -200,7 +260,6 @@ export class UsersService {
         "No puedes cambiar la contraseña desde aquí. Usa 'Cambiar contraseña'."
       );
 
-    // ✅ IMPORTANTÍSIMO: el trabajador NO cambia su tipo
     if ((dto as any).workerType !== undefined) {
       throw new BadRequestException("No puedes modificar tu tipo de trabajador.");
     }
@@ -218,13 +277,15 @@ export class UsersService {
           activo: true,
           empresa: true as any,
           workerType: true as any,
+          mustChangePassword: true as any,
+          passwordResetAt: true as any,
           createdAt: true,
           updatedAt: true,
         },
       });
     }
 
-    const after = await this.prisma.user.update({
+    const afterRaw = await this.prisma.user.update({
       where: { id },
       data,
       select: {
@@ -237,10 +298,14 @@ export class UsersService {
         activo: true,
         empresa: true as any,
         workerType: true as any,
+        mustChangePassword: true as any,
+        passwordResetAt: true as any,
         createdAt: true,
         updatedAt: true,
       },
     });
+
+    const after = this.snapshotUser(afterRaw);
 
     await this.auditService.log({
       entity: AuditEntity.USER,
@@ -251,7 +316,7 @@ export class UsersService {
       data: { before, after, selfUpdate: true },
     });
 
-    return after;
+    return afterRaw;
   }
 
   // ======================
@@ -266,7 +331,6 @@ export class UsersService {
     const empresa = this.normalizeEmpresa((dto as any).empresa);
     const workerTypeInput = this.normalizeWorkerType((dto as any).workerType);
 
-    // ✅ reglas por rol (empresa)
     if (role === Role.SUPERADMIN) {
       if (empresa !== undefined && empresa !== null) {
         throw new BadRequestException("SUPERADMIN no debe tener empresa.");
@@ -279,7 +343,6 @@ export class UsersService {
       }
     }
 
-    // ✅ reglas workerType
     let workerTypeFinal: WorkerType | null = null;
 
     if (role === Role.TRABAJADOR) {
@@ -296,13 +359,15 @@ export class UsersService {
           password: passwordHash,
           nombre: dto.nombre.trim(),
           apellido: dto.apellido.trim(),
-          rut: dto.rut ? dto.rut.trim() : null,
+          rut: dto.rut ? this.normalizeRut(dto.rut) : null,
           role,
           activo: dto.activo ?? true,
-
           empresa: role === Role.SUPERADMIN ? null : (empresa ?? null),
-
           workerType: workerTypeFinal,
+
+          // ✅ por defecto NO forzamos cambio (el admin ya setea una definitiva al crear)
+          mustChangePassword: false,
+          passwordResetAt: null,
         } as any,
         select: {
           id: true,
@@ -314,6 +379,8 @@ export class UsersService {
           activo: true,
           empresa: true as any,
           workerType: true as any,
+          mustChangePassword: true as any,
+          passwordResetAt: true as any,
           createdAt: true,
           updatedAt: true,
         },
@@ -325,15 +392,7 @@ export class UsersService {
         action: AuditAction.CREATE,
         actor,
         meta,
-        data: {
-          created: {
-            email: user.email,
-            role: user.role,
-            activo: user.activo,
-            empresa: (user as any).empresa ?? null,
-            workerType: (user as any).workerType ?? null,
-          },
-        },
+        data: { created: this.snapshotUser(user) },
       });
 
       return user;
@@ -357,9 +416,7 @@ export class UsersService {
     activo?: string;
     role?: string;
     empresa?: string;
-
     workerType?: string;
-
     page?: string;
     limit?: string;
   }) {
@@ -386,7 +443,6 @@ export class UsersService {
       }
     }
 
-    // ✅ filtro workerType
     if (params.workerType !== undefined) {
       const wt = this.normalizeWorkerType(params.workerType);
 
@@ -424,6 +480,8 @@ export class UsersService {
           activo: true,
           empresa: true as any,
           workerType: true as any,
+          mustChangePassword: true as any,
+          passwordResetAt: true as any,
           createdAt: true,
           updatedAt: true,
         },
@@ -455,6 +513,8 @@ export class UsersService {
         activo: true,
         empresa: true as any,
         workerType: true as any,
+        mustChangePassword: true as any,
+        passwordResetAt: true as any,
         createdAt: true,
         updatedAt: true,
       },
@@ -474,7 +534,7 @@ export class UsersService {
     actor: any = null,
     meta: any = null
   ) {
-    const before = await this.prisma.user.findUnique({
+    const beforeRaw = await this.prisma.user.findUnique({
       where: { id },
       select: {
         id: true,
@@ -486,12 +546,17 @@ export class UsersService {
         activo: true,
         empresa: true as any,
         workerType: true as any,
+        mustChangePassword: true as any,
+        passwordResetAt: true as any,
       },
     });
 
-    if (!before) throw new NotFoundException("Trabajador no encontrado.");
+    if (!beforeRaw) throw new NotFoundException("Trabajador no encontrado.");
+
+    const before = this.snapshotUser(beforeRaw);
 
     const data: any = {};
+    let passwordChanged = false;
 
     if (dto.email !== undefined) {
       if ((dto as any).email === null)
@@ -524,11 +589,17 @@ export class UsersService {
     }
 
     if (dto.rut !== undefined) {
-      data.rut = (dto as any).rut === null ? null : dto.rut.trim();
+      data.rut =
+        (dto as any).rut === null ? null : this.normalizeRut((dto as any).rut);
     }
 
+    // ✅ si admin cambia password => forzar cambio al próximo login
     if ((dto as any).password) {
       data.password = await bcrypt.hash((dto as any).password, 10);
+      passwordChanged = true;
+
+      data.mustChangePassword = true;
+      data.passwordResetAt = new Date();
     }
 
     if ((dto as any).empresa !== undefined) {
@@ -541,16 +612,19 @@ export class UsersService {
       data.workerType = wt;
     }
 
-    const nextRole: Role = (data.role ?? before.role) as Role;
+    const nextRole: Role = (data.role ?? beforeRaw.role) as Role;
 
     const nextEmpresaFinal =
       data.empresa !== undefined
         ? data.empresa
-        : ((before as any).empresa ?? null);
+        : ((beforeRaw as any).empresa ?? null);
 
     if (nextRole === Role.SUPERADMIN) {
       data.empresa = null;
       data.workerType = null;
+
+      // ✅ superadmin no debería quedar forzado
+      data.mustChangePassword = false;
     } else {
       if (!nextEmpresaFinal) {
         throw new BadRequestException(
@@ -564,7 +638,7 @@ export class UsersService {
     }
 
     try {
-      const after = await this.prisma.user.update({
+      const afterRaw = await this.prisma.user.update({
         where: { id },
         data,
         select: {
@@ -577,10 +651,14 @@ export class UsersService {
           activo: true,
           empresa: true as any,
           workerType: true as any,
+          mustChangePassword: true as any,
+          passwordResetAt: true as any,
           createdAt: true,
           updatedAt: true,
         },
       });
+
+      const after = this.snapshotUser(afterRaw);
 
       await this.auditService.log({
         entity: AuditEntity.USER,
@@ -588,10 +666,10 @@ export class UsersService {
         action: AuditAction.UPDATE,
         actor,
         meta,
-        data: { before, after },
+        data: { before, after, passwordChanged },
       });
 
-      return after;
+      return afterRaw;
     } catch (e: any) {
       if (e?.code === "P2025")
         throw new NotFoundException("Trabajador no encontrado.");
@@ -606,20 +684,19 @@ export class UsersService {
   }
 
   // ======================
-  // TOGGLE
+  // ✅ RESET PASSWORD BY SUPERADMIN
   // ======================
 
-  async toggle(id: string, actor: any = null, meta: any = null) {
-    const user = await this.prisma.user.findUnique({
-      where: { id },
-      select: { id: true, activo: true },
-    });
+  async resetPasswordBySuperadmin(
+    targetUserId: string,
+    newPassword?: string,
+    actor: any = null,
+    meta: any = null
+  ) {
+    this.assertSuperadmin(actor);
 
-    if (!user) throw new NotFoundException("Trabajador no encontrado.");
-
-    const updated = await this.prisma.user.update({
-      where: { id },
-      data: { activo: !user.activo },
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
       select: {
         id: true,
         email: true,
@@ -630,6 +707,122 @@ export class UsersService {
         activo: true,
         empresa: true as any,
         workerType: true as any,
+        mustChangePassword: true as any,
+        passwordResetAt: true as any,
+      },
+    });
+
+    if (!target) throw new NotFoundException("Usuario no encontrado.");
+
+    if (actor?.id && String(actor.id) === String(targetUserId)) {
+      throw new BadRequestException(
+        "No puedes resetear tu propia contraseña desde este endpoint."
+      );
+    }
+
+    const pass =
+      String(newPassword || "").trim() || this.generateTempPassword();
+
+    if (pass.length < 8) {
+      throw new BadRequestException(
+        "La nueva contraseña debe tener al menos 8 caracteres (o deja vacío para generar una temporal)."
+      );
+    }
+
+    const hashed = await bcrypt.hash(pass, 10);
+
+    const updated = await this.prisma.user.update({
+      where: { id: targetUserId },
+      data: {
+        password: hashed,
+
+        // ✅ CLAVE: forzar cambio de contraseña al próximo login
+        mustChangePassword: true,
+        passwordResetAt: new Date(),
+      },
+      select: {
+        id: true,
+        email: true,
+        nombre: true,
+        apellido: true,
+        rut: true,
+        role: true,
+        activo: true,
+        empresa: true as any,
+        workerType: true as any,
+        mustChangePassword: true as any,
+        passwordResetAt: true as any,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    try {
+      await this.auditService.log({
+        entity: AuditEntity.USER,
+        entityId: targetUserId,
+        action: AuditAction.UPDATE,
+        actor,
+        meta,
+        data: {
+          kind: "RESET_PASSWORD_BY_SUPERADMIN",
+          before: this.snapshotUser(target),
+          after: this.snapshotUser(updated),
+          passwordChanged: true,
+        },
+      });
+    } catch {}
+
+    return {
+      ok: true,
+      message: "Contraseña reseteada correctamente.",
+      userId: updated.id,
+      email: updated.email,
+      rut: updated.rut ?? null,
+      tempPassword: pass,
+      mustChangePassword: updated.mustChangePassword ?? true,
+    };
+  }
+
+  // ======================
+  // TOGGLE
+  // ======================
+
+  async toggle(id: string, actor: any = null, meta: any = null) {
+    const beforeRaw = await this.prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        email: true,
+        nombre: true,
+        apellido: true,
+        rut: true,
+        role: true,
+        activo: true,
+        empresa: true as any,
+        workerType: true as any,
+        mustChangePassword: true as any,
+        passwordResetAt: true as any,
+      },
+    });
+
+    if (!beforeRaw) throw new NotFoundException("Trabajador no encontrado.");
+
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: { activo: !beforeRaw.activo },
+      select: {
+        id: true,
+        email: true,
+        nombre: true,
+        apellido: true,
+        rut: true,
+        role: true,
+        activo: true,
+        empresa: true as any,
+        workerType: true as any,
+        mustChangePassword: true as any,
+        passwordResetAt: true as any,
         createdAt: true,
         updatedAt: true,
       },
@@ -642,8 +835,8 @@ export class UsersService {
       actor,
       meta,
       data: {
-        before: { activo: user.activo },
-        after: { activo: updated.activo },
+        before: this.snapshotUser(beforeRaw),
+        after: this.snapshotUser(updated),
       },
     });
 
@@ -677,6 +870,8 @@ export class UsersService {
         activo: true,
         empresa: true as any,
         workerType: true as any,
+        mustChangePassword: true as any,
+        passwordResetAt: true as any,
       },
     });
 
@@ -694,24 +889,16 @@ export class UsersService {
       action: AuditAction.DELETE,
       actor,
       meta,
-      data: {
-        deleted: {
-          id: target.id,
-          email: target.email,
-          nombre: target.nombre,
-          apellido: target.apellido,
-          rut: target.rut,
-          role: target.role,
-          activo: target.activo,
-          empresa: (target as any).empresa ?? null,
-          workerType: (target as any).workerType ?? null,
-        },
-      },
+      data: { deleted: this.snapshotUser(target) },
     });
 
     return { ok: true, message: "Usuario eliminado correctamente." };
   }
 }
+
+
+
+
 
 
 

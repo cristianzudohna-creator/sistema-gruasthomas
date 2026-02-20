@@ -1,4 +1,6 @@
-// ✅ Archivo: src/auth/dto/update-user.dto.ts
+// ✅ Archivo: src/auth/dto/update-user.dto.ts (COMPLETO)
+// ✅ Cambio: rut sigue siendo opcional en update, PERO si viene debe ser string NO vacío
+// ✅ Motivo: evitar que alguien deje rut="" y después no pueda loguear
 
 import {
   IsBoolean,
@@ -7,6 +9,7 @@ import {
   IsOptional,
   IsString,
   MinLength,
+  IsNotEmpty,
 } from "class-validator";
 import { Role, Empresa, WorkerType } from "@prisma/client";
 
@@ -61,10 +64,11 @@ export class UpdateUserDto {
   workerType?: WorkerType;
 
   // =========================
-  // Opcionales
+  // ✅ RUT (si viene, no puede ser vacío)
   // =========================
   @IsOptional()
   @IsString()
+  @IsNotEmpty({ message: "rut no puede ser vacío" })
   rut?: string;
 
   // ⚠️ No existen en Prisma → no se guardan (puedes borrarlos si quieres)
@@ -76,6 +80,7 @@ export class UpdateUserDto {
   @IsString()
   cargo?: string;
 }
+
 
 
 

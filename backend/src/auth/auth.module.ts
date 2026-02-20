@@ -1,32 +1,37 @@
 import { Module } from "@nestjs/common";
-import { PassportModule } from "@nestjs/passport";
 import { JwtModule } from "@nestjs/jwt";
+import { PassportModule } from "@nestjs/passport";
 
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
+import { JwtStrategy } from "./jwt.strategy";
 
 import { UsersModule } from "../users/users.module";
 import { PrismaModule } from "../prisma/prisma.module";
 import { MailModule } from "../mail/mail.module";
 
-import { JwtStrategy } from "./jwt.strategy";
+// ✅ IMPORTANTE: traer AuditModule (exporta AuditService)
+import { AuditModule } from "../audit/audit.module";
 
 @Module({
   imports: [
-    UsersModule,
     PrismaModule,
+    UsersModule,
     MailModule,
+    AuditModule, // ✅ SIN ESTO: no encuentra AuditService
+
     PassportModule,
     JwtModule.register({
-      secret: process.env.JWT_SECRET || "dev_secret",
-      signOptions: { expiresIn: "1d" },
+      secret: process.env.JWT_SECRET || "super-secret",
+      signOptions: { expiresIn: "7d" },
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy], // ✅ IMPORTANTE
-  exports: [JwtModule, PassportModule], // ✅ útil por si otros módulos lo necesitan
+  providers: [AuthService, JwtStrategy],
+  exports: [AuthService],
 })
 export class AuthModule {}
+
 
 
 

@@ -1,4 +1,11 @@
-// ✅ Archivo: src/pages/EditWorkOrderModal.jsx
+// ✅ Archivo: src/pages/EditWorkOrderModal.jsx (COMPLETO)
+// ✅ Cambio: reemplaza "días texto" por calendario multi-select (fechas ISO)
+// ✅ Resumen: muestra "Días programado" con fechas
+// ✅ Payload:
+//    - diasProgramados: ["YYYY-MM-DD", ...] (nuevo)
+//    - diasTrabajo: ["LUN","MAR"...] (compat)
+// ✅ Mantiene teléfono cliente legacy (nota) + campo real telefonoCliente
+
 import { useEffect, useMemo, useState } from "react";
 import Modal from "../components/ui/Modal";
 import ConfirmModal from "../components/ui/ConfirmModal";
@@ -12,117 +19,59 @@ function addIf(obj, key, value) {
   if (v) obj[key] = v;
 }
 
-const ORDER = ["LUN", "MAR", "MIE", "JUE", "VIE", "SAB", "DOM"];
+/* =========================
+   Días programados (fechas)
+========================= */
+const WEEKDAYS_SHORT = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+const DOW_CODE = ["DOM", "LUN", "MAR", "MIE", "JUE", "VIE", "SAB"]; // JS: 0=DOM
 
-const DAY_ALIASES = {
-  lun: "LUN",
-  lunes: "LUN",
-  mar: "MAR",
-  martes: "MAR",
-  mie: "MIE",
-  mié: "MIE",
-  miercoles: "MIE",
-  miércoles: "MIE",
-  jue: "JUE",
-  jueves: "JUE",
-  vie: "VIE",
-  viernes: "VIE",
-  sab: "SAB",
-  sáb: "SAB",
-  sabado: "SAB",
-  sábado: "SAB",
-  dom: "DOM",
-  domingo: "DOM",
-};
-
-function parseDiasTrabajo(input) {
-  const raw = normalizeText(input);
-  if (!raw) return [];
-
-  const norm = raw
-    .toLowerCase()
-    .replaceAll(".", " ")
-    .replaceAll(",", " ")
-    .replaceAll(";", " ")
-    .replaceAll("/", " ")
-    .replaceAll("\\", " ")
-    .replaceAll(" y ", " ")
-    .replaceAll(" e ", " ")
-    .replaceAll(" hasta ", " a ")
-    .replaceAll(" al ", " a ")
-    .replaceAll("–", "-")
-    .replaceAll("—", "-");
-
-  const tokens = norm.split(/\s+/).map((t) => t.trim()).filter(Boolean);
-
-  const toKey = (t) => {
-    const cleaned = t.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    return DAY_ALIASES[cleaned] || null;
-  };
-
-  const out = new Set();
-
-  for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i];
-
-    // "lun-mie"
-    if (t.includes("-")) {
-      const [a, b] = t
-        .split("-")
-        .map((x) => x.trim())
-        .filter(Boolean);
-      const start = toKey(a);
-      const end = toKey(b);
-      if (start && end) {
-        const si = ORDER.indexOf(start);
-        const ei = ORDER.indexOf(end);
-        if (si !== -1 && ei !== -1) {
-          if (si <= ei) {
-            for (let k = si; k <= ei; k++) out.add(ORDER[k]);
-          } else {
-            for (let k = si; k < ORDER.length; k++) out.add(ORDER[k]);
-            for (let k = 0; k <= ei; k++) out.add(ORDER[k]);
-          }
-          continue;
-        }
-      }
-    }
-
-    // "lun a mie"
-    const maybeStart = toKey(t);
-    if (maybeStart && tokens[i + 1] === "a" && tokens[i + 2]) {
-      const maybeEnd = toKey(tokens[i + 2]);
-      if (maybeEnd) {
-        const si = ORDER.indexOf(maybeStart);
-        const ei = ORDER.indexOf(maybeEnd);
-        if (si !== -1 && ei !== -1) {
-          if (si <= ei) {
-            for (let k = si; k <= ei; k++) out.add(ORDER[k]);
-          } else {
-            for (let k = si; k < ORDER.length; k++) out.add(ORDER[k]);
-            for (let k = 0; k <= ei; k++) out.add(ORDER[k]);
-          }
-          i += 2;
-          continue;
-        }
-      }
-    }
-
-    const key = toKey(t);
-    if (key) out.add(key);
-  }
-
-  const arr = Array.from(out);
-  arr.sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
-  return arr;
+function isValidISODate(s) {
+  const v = String(s || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = new Date(v + "T00:00:00");
+  return !Number.isNaN(d.getTime());
 }
 
-function diasToHuman(arr) {
-  if (!Array.isArray(arr) || arr.length === 0) return "—";
-  const map = { LUN: "Lun", MAR: "Mar", MIE: "Mié", JUE: "Jue", VIE: "Vie", SAB: "Sáb", DOM: "Dom" };
-  return arr.map((x) => map[x] || x).join(", ");
+function toISODate(d) {
+  const yy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
 }
 
+function fmtDDMMYYYYFromISO(iso) {
+  if (!isValidISODate(iso)) return iso || "";
+  const [y, m, d] = iso.split("-");
+  return `${d}-${m}-${y}`;
+}
+
+function dowLabelFromISO(iso) {
+  if (!isValidISODate(iso)) return "";
+  const d = new Date(iso + "T00:00:00");
+  const jsDow = d.getDay(); // 0..6
+  const idx = jsDow === 0 ? 6 : jsDow - 1; // lun..dom
+  return WEEKDAYS_SHORT[idx] || "";
+}
+
+function codeFromISO(iso) {
+  if (!isValidISODate(iso)) return null;
+  const d = new Date(iso + "T00:00:00");
+  return DOW_CODE[d.getDay()] || null;
+}
+
+function uniqueSortedISO(arr) {
+  const clean = (Array.isArray(arr) ? arr : [])
+    .map((x) => String(x || "").slice(0, 10))
+    .filter((x) => isValidISODate(x));
+  const set = new Set(clean);
+  const out = Array.from(set);
+  out.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  return out;
+}
+
+/* =========================
+   UI helpers
+========================= */
 function Row({ label, value }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: 10, padding: "6px 0" }}>
@@ -150,8 +99,244 @@ function removeTelefonoLine(nota) {
     .trim();
 }
 
-function Resumen({ f, diasParsed }) {
+/* =========================
+   Mini Calendar (multi-select)
+========================= */
+function monthNameEs(year, month0) {
+  const names = [
+    "Enero",
+    "Febrero",
+    "Marzo",
+    "Abril",
+    "Mayo",
+    "Junio",
+    "Julio",
+    "Agosto",
+    "Septiembre",
+    "Octubre",
+    "Noviembre",
+    "Diciembre",
+  ];
+  return `${names[month0] || "Mes"} ${year}`;
+}
+
+function jsDowToMonIndex(jsDow) {
+  return jsDow === 0 ? 6 : jsDow - 1;
+}
+
+function buildCalendarMatrix(year, month0) {
+  const first = new Date(year, month0, 1);
+  const daysInMonth = new Date(year, month0 + 1, 0).getDate();
+  const leading = jsDowToMonIndex(first.getDay());
+  const cells = [];
+
+  for (let i = 0; i < leading; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month0, d));
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const rows = [];
+  for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
+  return rows;
+}
+
+function MiniCalendarMulti({ label = "Días programado", valueISO, onChangeISO, disabled, error }) {
+  const selected = useMemo(() => new Set(uniqueSortedISO(valueISO)), [valueISO]);
+
+  const initial = useMemo(() => {
+    const arr = uniqueSortedISO(valueISO);
+    if (arr.length) return new Date(arr[0] + "T00:00:00");
+    return new Date();
+  }, [valueISO]);
+
+  const [viewY, setViewY] = useState(initial.getFullYear());
+  const [viewM, setViewM] = useState(initial.getMonth());
+
+  useEffect(() => {
+    const arr = uniqueSortedISO(valueISO);
+    if (!arr.length) return;
+    const d = new Date(arr[0] + "T00:00:00");
+    setViewY(d.getFullYear());
+    setViewM(d.getMonth());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valueISO?.length]);
+
+  const matrix = useMemo(() => buildCalendarMatrix(viewY, viewM), [viewY, viewM]);
+
+  function prevMonth() {
+    const d = new Date(viewY, viewM, 1);
+    d.setMonth(d.getMonth() - 1);
+    setViewY(d.getFullYear());
+    setViewM(d.getMonth());
+  }
+
+  function nextMonth() {
+    const d = new Date(viewY, viewM, 1);
+    d.setMonth(d.getMonth() + 1);
+    setViewY(d.getFullYear());
+    setViewM(d.getMonth());
+  }
+
+  function toggleDate(d) {
+    if (disabled) return;
+    const iso = toISODate(d);
+    const set = new Set(selected);
+    if (set.has(iso)) set.delete(iso);
+    else set.add(iso);
+    const out = Array.from(set);
+    out.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    onChangeISO?.(out);
+  }
+
+  const errStyle = error
+    ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220,38,38,.15)" }
+    : undefined;
+
+  const headerBtnStyle = {
+    height: 34,
+    padding: "0 10px",
+    borderRadius: 12,
+    border: "1px solid rgba(0,0,0,0.10)",
+    background: "#fff",
+    cursor: disabled ? "not-allowed" : "pointer",
+    fontWeight: 900,
+    opacity: disabled ? 0.5 : 1,
+  };
+
+  const dayHeaderStyle = {
+    fontSize: 12,
+    fontWeight: 900,
+    opacity: 0.65,
+    textAlign: "center",
+    padding: "8px 0",
+  };
+
+  return (
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.75, marginBottom: 6 }}>
+        {label}
+        {error ? <span style={{ color: "#dc2626" }}> • {error}</span> : null}
+      </div>
+
+      <div
+        style={{
+          border: "1px solid rgba(0,0,0,0.12)",
+          borderRadius: 14,
+          padding: 12,
+          background: "#fff",
+          ...errStyle,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+          <button type="button" onClick={prevMonth} disabled={disabled} style={headerBtnStyle}>
+            ←
+          </button>
+
+          <div style={{ fontWeight: 900, opacity: 0.85 }}>{monthNameEs(viewY, viewM)}</div>
+
+          <button type="button" onClick={nextMonth} disabled={disabled} style={headerBtnStyle}>
+            →
+          </button>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", marginTop: 10 }}>
+          {WEEKDAYS_SHORT.map((w) => (
+            <div key={w} style={dayHeaderStyle}>
+              {w}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: "grid", gap: 6, marginTop: 6 }}>
+          {matrix.map((row, rIdx) => (
+            <div key={rIdx} style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6 }}>
+              {row.map((d, cIdx) => {
+                if (!d) return <div key={cIdx} style={{ height: 42 }} />;
+
+                const iso = toISODate(d);
+                const isSel = selected.has(iso);
+                const isToday = toISODate(new Date()) === iso;
+
+                return (
+                  <button
+                    key={cIdx}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => toggleDate(d)}
+                    style={{
+                      height: 42,
+                      borderRadius: 12,
+                      border: isSel ? "2px solid rgba(0,0,0,0.70)" : "1px solid rgba(0,0,0,0.12)",
+                      background: isSel ? "rgba(0,0,0,0.06)" : "#fff",
+                      cursor: disabled ? "not-allowed" : "pointer",
+                      fontWeight: 900,
+                      opacity: disabled ? 0.5 : 1,
+                      position: "relative",
+                    }}
+                    title={`${dowLabelFromISO(iso)} ${fmtDDMMYYYYFromISO(iso)}`}
+                  >
+                    {d.getDate()}
+                    {isToday ? (
+                      <span
+                        style={{
+                          position: "absolute",
+                          bottom: 6,
+                          left: "50%",
+                          transform: "translateX(-50%)",
+                          width: 6,
+                          height: 6,
+                          borderRadius: 999,
+                          background: "rgba(0,0,0,0.45)",
+                        }}
+                      />
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
+          Click para marcar / desmarcar. (Puedes seleccionar varios días)
+        </div>
+
+        {uniqueSortedISO(valueISO).length > 0 ? (
+          <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {uniqueSortedISO(valueISO).slice(0, 14).map((iso) => (
+              <span
+                key={iso}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(0,0,0,0.12)",
+                  fontSize: 12,
+                  fontWeight: 900,
+                  opacity: 0.85,
+                  background: "rgba(0,0,0,0.03)",
+                }}
+              >
+                {dowLabelFromISO(iso)} {fmtDDMMYYYYFromISO(iso)}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function Resumen({ f }) {
   const v = (x) => normalizeText(x) || "—";
+
+  const diasProgramados = uniqueSortedISO(f?.diasProgramados || []);
+  const prog =
+    diasProgramados.length > 0
+      ? diasProgramados
+          .slice(0, 12)
+          .map((iso, i) => `Día ${i + 1}: ${dowLabelFromISO(iso)} ${fmtDDMMYYYYFromISO(iso)}`)
+          .join(" | ")
+      : "—";
+
   return (
     <div style={{ paddingTop: 6 }}>
       <div style={{ fontWeight: 900, marginBottom: 8 }}>Resumen</div>
@@ -165,26 +350,18 @@ function Resumen({ f, diasParsed }) {
         <Row label="Ciudad" value={v(f.ciudad)} />
         <Row label="Maps" value={v(f.mapsLink)} />
         <Row label="Horario" value={v(f.horario)} />
-        <Row label="Días" value={diasToHuman(diasParsed)} />
-        <Row label="Camión" value={v(f.camion)} />
-        <Row label="Conductor" value={v(f.conductor)} />
+        <Row label="Días programado" value={prog} />
+        <Row label="Patente" value={v(f.camion)} />
+        <Row label="Operador" value={v(f.conductor)} />
         <Row label="Rigger" value={v(f.rigger)} />
         <Row label="Teléfono" value={v(f.telefonoCliente)} />
-        <Row label="Nota" value={v(f.nota)} />
+        <Row label="Descripción" value={v(f.nota)} />
       </div>
     </div>
   );
 }
 
-export default function EditWorkOrderModal({
-  open,
-  onClose,
-  data,
-  loading,
-  error,
-  apiPut,
-  onSaved,
-}) {
+export default function EditWorkOrderModal({ open, onClose, data, loading, error, apiPut, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [formErr, setFormErr] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -193,13 +370,14 @@ export default function EditWorkOrderModal({
     cliente: "",
     rut: "",
     giro: "",
-    solicitadoPor: "", // ✅ NUEVO
+    solicitadoPor: "",
     direccion: "",
     comuna: "",
     ciudad: "",
     mapsLink: "",
     horario: "",
-    diasTrabajoTexto: "",
+    // ✅ NUEVO: calendario
+    diasProgramados: [],
     camion: "",
     conductor: "",
     rigger: "",
@@ -211,7 +389,6 @@ export default function EditWorkOrderModal({
     if (!open) return;
     if (!data) return;
 
-    // ✅ prioridad: campo real telefonoCliente si existe; si no, intenta extraer de nota vieja
     const rawNota = data.descripcion || data.nota || "";
     const telDb = normalizeText(data.telefonoCliente);
     const telLegacy = extractTelefonoFromNota(rawNota);
@@ -219,17 +396,23 @@ export default function EditWorkOrderModal({
 
     const notaSinTel = removeTelefonoLine(rawNota);
 
+    // ✅ si el backend ya guarda diasProgramados, los usamos; si no, fallback vacío
+    const diasProg =
+      Array.isArray(data.diasProgramados) ? data.diasProgramados :
+      Array.isArray(data.programacion) ? data.programacion :
+      [];
+
     setF({
       cliente: data.cliente || "",
       rut: data.rut || "",
       giro: data.giro || "",
-      solicitadoPor: data.solicitadoPor || "", // ✅ NUEVO
+      solicitadoPor: data.solicitadoPor || "",
       direccion: data.direccion || data.lugar || "",
       comuna: data.comuna || "",
       ciudad: data.ciudad || "",
       mapsLink: data.mapsLink || "",
       horario: data.horario || "",
-      diasTrabajoTexto: Array.isArray(data.diasTrabajo) ? data.diasTrabajo.join(", ") : "",
+      diasProgramados: uniqueSortedISO(diasProg),
       camion: data.camion || "",
       conductor: data.conductor || "",
       rigger: data.rigger || "",
@@ -246,7 +429,19 @@ export default function EditWorkOrderModal({
     setF((p) => ({ ...p, [k]: v }));
   }
 
-  const diasParsed = useMemo(() => parseDiasTrabajo(f.diasTrabajoTexto), [f.diasTrabajoTexto]);
+  const diasProgramadosSorted = useMemo(() => uniqueSortedISO(f.diasProgramados), [f.diasProgramados]);
+
+  const diasTrabajoDerivados = useMemo(() => {
+    const set = new Set();
+    for (const iso of diasProgramadosSorted) {
+      const code = codeFromISO(iso);
+      if (code) set.add(code);
+    }
+    const order = ["LUN", "MAR", "MIE", "JUE", "VIE", "SAB", "DOM"];
+    const arr = Array.from(set);
+    arr.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    return arr;
+  }, [diasProgramadosSorted]);
 
   function handleClose() {
     if (saving) return;
@@ -264,8 +459,8 @@ export default function EditWorkOrderModal({
       return;
     }
 
-    if (normalizeText(f.diasTrabajoTexto) && diasParsed.length === 0) {
-      setFormErr("Días inválidos. Ej: 'Lun a Mié', 'Lun-Mié', 'Lunes Martes', 'Vie-Sáb'.");
+    if (!Array.isArray(diasProgramadosSorted) || diasProgramadosSorted.length === 0) {
+      setFormErr("Selecciona al menos 1 día en el calendario.");
       return;
     }
 
@@ -284,14 +479,13 @@ export default function EditWorkOrderModal({
       addIf(payload, "rut", f.rut);
       addIf(payload, "giro", f.giro);
 
-      // ✅ NUEVO: solicitado por (MANUAL)
       addIf(payload, "solicitadoPor", f.solicitadoPor);
 
       addIf(payload, "direccion", f.direccion);
       addIf(payload, "comuna", f.comuna);
       addIf(payload, "ciudad", f.ciudad);
 
-      addIf(payload, "lugar", f.direccion); // usamos dirección como lugar
+      addIf(payload, "lugar", f.direccion);
       addIf(payload, "horario", f.horario);
       addIf(payload, "mapsLink", f.mapsLink);
 
@@ -299,12 +493,14 @@ export default function EditWorkOrderModal({
       addIf(payload, "conductor", f.conductor);
       addIf(payload, "rigger", f.rigger);
 
-      // ✅ Teléfono en campo real (BD)
       addIf(payload, "telefonoCliente", f.telefonoCliente);
 
-      if (diasParsed.length > 0) payload.diasTrabajo = diasParsed;
+      // ✅ NUEVO
+      payload.diasProgramados = diasProgramadosSorted;
 
-      // ✅ nota SOLO nota (sin teléfono pegado)
+      // ✅ COMPAT
+      if (diasTrabajoDerivados.length > 0) payload.diasTrabajo = diasTrabajoDerivados;
+
       const notaBase = normalizeText(f.nota);
       payload.nota = notaBase || null;
 
@@ -333,12 +529,7 @@ export default function EditWorkOrderModal({
             <button className="gt-btn" onClick={handleClose} disabled={saving}>
               Cancelar
             </button>
-            <button
-              form="ot-edit-form"
-              type="submit"
-              className="gt-btn gt-btn-primary"
-              disabled={saving || loading}
-            >
+            <button form="ot-edit-form" type="submit" className="gt-btn gt-btn-primary" disabled={saving || loading}>
               {saving ? "Guardando..." : "Guardar cambios"}
             </button>
           </>
@@ -347,7 +538,9 @@ export default function EditWorkOrderModal({
         {loading ? (
           <div style={{ padding: 14, fontWeight: 900, opacity: 0.8 }}>Cargando OT...</div>
         ) : error ? (
-          <div style={{ padding: 14, color: "#b00020", fontWeight: 900 }}>{error}</div>
+          <div style={{ padding: 14, color: "#b00020", fontWeight: 900 }}>
+            {error}
+          </div>
         ) : !data ? (
           <div style={{ padding: 14, opacity: 0.75 }}>Sin datos.</div>
         ) : (
@@ -445,14 +638,14 @@ export default function EditWorkOrderModal({
               <div className="ot-grid-2">
                 <input
                   className="gt-input"
-                  placeholder="Camión (número) — ej: 19"
+                  placeholder="Patente — ej: AB1234"
                   value={f.camion}
                   onChange={(e) => setField("camion", e.target.value)}
                   disabled={saving}
                 />
                 <input
                   className="gt-input"
-                  placeholder="Conductor — ej: Juan Pérez"
+                  placeholder="Operador — ej: Juan Pérez"
                   value={f.conductor}
                   onChange={(e) => setField("conductor", e.target.value)}
                   disabled={saving}
@@ -467,28 +660,20 @@ export default function EditWorkOrderModal({
                 />
 
                 <div className="ot-span" style={{ marginTop: 2 }}>
-                  <div style={{ fontWeight: 900, marginBottom: 8 }}>Días que trabajará</div>
-
-                  <input
-                    className="gt-input"
-                    placeholder="Ej: Lun a Mié / Lun-Mié / Lunes Martes / Vie-Sáb"
-                    value={f.diasTrabajoTexto}
-                    onChange={(e) => setField("diasTrabajoTexto", e.target.value)}
+                  <MiniCalendarMulti
+                    valueISO={f.diasProgramados}
+                    onChangeISO={(arr) => setField("diasProgramados", arr)}
                     disabled={saving}
                   />
-
-                  <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75 }}>
-                    Interpretado como: <b>{diasToHuman(diasParsed)}</b>
-                  </div>
                 </div>
               </div>
             </div>
 
             <div className="ot-box">
-              <div className="ot-box-title">Nota</div>
+              <div className="ot-box-title">Descripción</div>
               <textarea
                 className="gt-input ot-textarea"
-                placeholder="Detalles (opcional)"
+                placeholder="Detalle del servicio"
                 value={f.nota}
                 onChange={(e) => setField("nota", e.target.value)}
                 disabled={saving}
@@ -507,10 +692,11 @@ export default function EditWorkOrderModal({
         loading={saving}
         onConfirm={handleConfirm}
         onClose={() => !saving && setConfirmOpen(false)}
-        description={<Resumen f={f} diasParsed={diasParsed} />}
+        description={<Resumen f={f} />}
       />
     </>
   );
 }
+
 
 

@@ -1,3 +1,7 @@
+// ✅ Archivo: backend/src/auth/jwt.strategy.ts (COMPLETO)
+// ✅ Cambio mínimo recomendado: incluir rut en select (útil para auditoría/UI)
+// ✅ No afecta login, solo mejora req.user
+
 import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from "passport-jwt";
@@ -14,7 +18,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
-    // payload viene de AuthService: { sub, role, email }
+    // payload viene de AuthService: { sub, role, email, rut?, empresa? }
     if (!payload?.sub) throw new UnauthorizedException("Token inválido");
 
     // ✅ Traemos el usuario REAL desde BD (incluye empresa)
@@ -23,6 +27,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       select: {
         id: true,
         email: true,
+        rut: true,     // ✅ útil
         role: true,
         activo: true,
         empresa: true, // ✅ CLAVE
@@ -37,4 +42,5 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     return user;
   }
 }
+
 

@@ -12,8 +12,6 @@ export default function VehicleDetailModal({
 }) {
   if (!open || !vehicle) return null;
 
-  const titulo = `${vehicle.patente || "-"} • ${(vehicle.marca || "")} ${(vehicle.modelo || "")}`.trim();
-
   return (
     <div className="vdetail-overlay" onMouseDown={onClose}>
       <div
@@ -25,10 +23,42 @@ export default function VehicleDetailModal({
         <div className="vdetail-head">
           <div>
             <h3>Detalle del vehículo</h3>
-            <p>{titulo}</p>
+
+            {/* ✅ NUEVO: título destacado (patente + marca/modelo) */}
+            <div
+              style={{
+                fontSize: 18,
+                fontWeight: 900,
+                marginTop: 4,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                flexWrap: "wrap",
+                letterSpacing: 0.3,
+              }}
+            >
+              <span
+                style={{
+                  background: "#f5b301",
+                  padding: "4px 10px",
+                  borderRadius: 8,
+                }}
+              >
+                {vehicle.patente || "-"}
+              </span>
+
+              <span style={{ fontWeight: 700 }}>
+                {(vehicle.marca || "")} {(vehicle.modelo || "")}
+              </span>
+            </div>
           </div>
 
-          <button className="vdetail-x" type="button" onClick={onClose} aria-label="Cerrar">
+          <button
+            className="vdetail-x"
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar"
+          >
             ✕
           </button>
         </div>
@@ -43,14 +73,15 @@ export default function VehicleDetailModal({
             <Field label="Tipo" value={vehicle.tipoVehiculo || "-"} />
             <Field
               label="Estado"
-              value={`${estadoLabel(vehicle.estado)}${vehicle.detalle ? ` • ${vehicle.detalle}` : ""}`}
+              value={`${estadoLabel(vehicle.estado)}${
+                vehicle.detalle ? ` • ${vehicle.detalle}` : ""
+              }`}
               wide
             />
           </div>
-
         </div>
 
-        {/* ✅ Footer PRO: 2 columnas + jerarquía */}
+        {/* ✅ Footer PRO */}
         <div className="vdetail-actions">
           {/* Acciones rápidas */}
           <div className="vdetail-actions-row vdetail-actions-top">
@@ -69,12 +100,16 @@ export default function VehicleDetailModal({
               ✏️ Editar
             </button>
 
-            <button className="btn ghost danger" type="button" onClick={onDelete}>
+            <button
+              className="btn ghost danger"
+              type="button"
+              onClick={onDelete}
+            >
               🗑️ Eliminar
             </button>
           </div>
 
-          {/* Cerrar (secundario) */}
+          {/* Cerrar */}
           <div className="vdetail-actions-row vdetail-actions-close">
             <button className="btn ghost" type="button" onClick={onClose}>
               Cerrar
@@ -94,6 +129,7 @@ function Field({ label, value, wide }) {
     </div>
   );
 }
+
 
 
 

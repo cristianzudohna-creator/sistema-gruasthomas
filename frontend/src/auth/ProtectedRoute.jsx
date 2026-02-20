@@ -1,4 +1,6 @@
 // ✅ Archivo: frontend/src/auth/ProtectedRoute.jsx (COMPLETO)
+// ✅ NUEVO: si user.mustChangePassword === true => obliga a /cambiar-contrasena
+
 import { Navigate, useLocation, Link } from "react-router-dom";
 import { getToken, getUser } from "./auth";
 
@@ -141,6 +143,16 @@ export default function ProtectedRoute({ children, role }) {
     return <Navigate to="/" replace state={{ from: location.pathname }} />;
   }
 
+  // ✅ NUEVO: forzar cambio de contraseña
+  // - si el backend marcó mustChangePassword
+  // - NO redirigimos si ya estamos en /cambiar-contrasena (evita loop)
+  const mustChange = !!user?.mustChangePassword;
+  const isChangePasswordRoute = location.pathname.startsWith("/cambiar-contrasena");
+
+  if (mustChange && !isChangePasswordRoute) {
+    return <Navigate to="/cambiar-contrasena" replace state={{ from: location.pathname }} />;
+  }
+
   // ✅ role puede ser:
   // - undefined  -> cualquier usuario logueado
   // - "ADMINISTRADORA" -> un rol
@@ -157,6 +169,8 @@ export default function ProtectedRoute({ children, role }) {
 
   return children;
 }
+
+
 
 
 

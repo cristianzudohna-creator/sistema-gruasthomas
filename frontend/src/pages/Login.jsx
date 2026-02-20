@@ -1,3 +1,7 @@
+// ✅ Archivo: frontend/src/pages/Login.jsx (COMPLETO)
+// ✅ Login por RUT + password
+// ✅ FIX: si backend devuelve mustChangePassword=true => redirige a /cambiar-contrasena (TU RUTA REAL)
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Login.css";
@@ -6,11 +10,21 @@ function norm(role) {
   return String(role || "").trim().toUpperCase();
 }
 
+// ✅ Normaliza RUT en frontend: quita puntos/guion, trim, upper
+function normalizeRut(v) {
+  return String(v || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\./g, "")
+    .replace(/-/g, "")
+    .replace(/\s+/g, "");
+}
+
 export default function Login() {
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState(""); // antes: admin@empresa.cl
-  const [password, setPassword] = useState(""); // antes: Admin1234*
+  const [rut, setRut] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -20,10 +34,12 @@ export default function Login() {
     setLoading(true);
 
     try {
+      const payload = { rut: normalizeRut(rut), password };
+
       const res = await fetch("http://localhost:3000/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -40,7 +56,18 @@ export default function Login() {
 
       // ✅ guardar sesión
       localStorage.setItem("access_token", data.access_token);
+
+      // ✅ guarda user (incluye mustChangePassword)
       if (data.user) localStorage.setItem("user", JSON.stringify(data.user));
+
+      // ✅ CLAVE: si debe cambiar password => manda a /cambiar-contrasena (no /cambiar-clave)
+      const mustChangePassword =
+        !!data?.mustChangePassword || !!data?.user?.mustChangePassword;
+
+      if (mustChangePassword) {
+        navigate("/cambiar-contrasena", { replace: true });
+        return;
+      }
 
       // ✅ redirect correcto por rol
       const role = norm(data?.user?.role);
@@ -73,15 +100,11 @@ export default function Login() {
         <div className="login-card">
           <div className="login-header">
             <div className="login-brand">
-              <img
-                src="/logo-thomas.png"
-                alt="Grúas Thomas"
-                className="login-logo"
-              />
+              <img src="/logo-thomas.png" alt="Grúas Thomas" className="login-logo" />
               <div className="login-text">
                 <h2 className="login-title">Acceso al Sistema</h2>
                 <p className="login-subtitle">
-                  Ingresa con tu correo y contraseña para continuar
+                  Ingresa con tu RUT y contraseña para continuar
                 </p>
               </div>
             </div>
@@ -90,15 +113,16 @@ export default function Login() {
           <div className="login-body">
             <form onSubmit={handleSubmit}>
               <div className="form-group">
-                <label className="label" htmlFor="email">Correo</label>
+                <label className="label" htmlFor="rut">RUT</label>
                 <input
-                  id="email"
+                  id="rut"
                   className="input"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  type="text"
+                  value={rut}
+                  onChange={(e) => setRut(e.target.value)}
                   autoComplete="username"
-                  inputMode="email"
+                  inputMode="text"
+                  placeholder="Ej: 12.345.678-9"
                 />
               </div>
 
@@ -128,14 +152,16 @@ export default function Login() {
             </form>
           </div>
 
-          <div className="login-footer">
-            © {new Date().getFullYear()} Grúas Thomas
-          </div>
+          <div className="login-footer">© {new Date().getFullYear()} Grúas Thomas</div>
         </div>
       </div>
     </div>
   );
 }
+
+
+
+
 
 
 

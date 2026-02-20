@@ -1,3 +1,5 @@
+// ✅ Archivo: prisma/schema.prisma (COMPLETO)
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -20,6 +22,8 @@ enum AuditEntity {
   DOCUMENT
   MAINTENANCE
   WORK_ORDER
+  HOROMETER
+  CLIENT // ✅ NUEVO
 }
 
 enum AuditAction {
@@ -91,7 +95,6 @@ enum WorkerType {
   OTRO
 }
 
-
 model User {
   id       String  @id @default(uuid())
   email    String  @unique
@@ -101,11 +104,14 @@ model User {
   rut      String? @unique
   role     Role    @default(TRABAJADOR)
   activo   Boolean @default(true)
+    mustChangePassword Boolean @default(false)
+  passwordResetAt    DateTime?
+
 
   // ✅ empresa del usuario (para filtrar vehículos al trabajador)
   empresa Empresa?
 
-  // ✅ NUEVO: tipo de trabajador (solo aplica a TRABAJADOR)
+  // ✅ tipo de trabajador (solo aplica a TRABAJADOR)
   workerType WorkerType?
 
   createdAt DateTime @default(now())
@@ -160,7 +166,15 @@ model AuditLog {
 
   @@index([entity, entityId])
   @@index([actorId])
+  @@index([actorEmail])
   @@index([createdAt])
+
+  // ✅ recomendados para filtros + orden por fecha
+  @@index([entity, createdAt])
+  @@index([action, createdAt])
+
+  // ✅ opcional: si filtras mucho por ambos
+  @@index([entity, action, createdAt])
 }
 
 model Vehicle {
@@ -398,6 +412,8 @@ model WorkOrder {
 
   // ✅ Días que va a trabajar (ej: ["LUN","MAR","MIE"])
   diasTrabajo String[] @default([])
+  // ✅ Fechas exactas marcadas en calendario (ej: ["2026-02-19","2026-02-20"])
+diasProgramados String[] @default([])
 
   nota String?
 
@@ -501,6 +517,7 @@ model WorkOrderEvidence {
   @@index([workOrderId])
   @@index([uploadedById])
 }
+
 enum AlertKind {
   DOCUMENT
   MAINTENANCE
@@ -522,4 +539,6 @@ model AlertDispatchLog {
   @@index([createdAt])
   @@index([thresholdDays])
 }
+
+
 

@@ -1,11 +1,8 @@
-// ✅ Archivo: src/users/users.controller.ts
-// ✅ PERFIL PROPIO (ME) + ✅ Administración usuarios
-// - /users/me (GET + PATCH) disponible para cualquier rol logueado
-// - Los endpoints de administración quedan SOLO para ADMINISTRADORA / SUPERADMIN
-//
-// ✅ NUEVO: workerType (tipo de trabajador):
-// - Se usa solo si role === TRABAJADOR
-// - Valores sugeridos (en frontend/back): CONDUCTOR | RIGGER | OPERADOR | MECANICO | OTRO
+// ✅ Archivo: src/users/users.controller.ts (COMPLETO)
+// ✅ Nuevo: endpoint SOLO SUPERADMIN para resetear contraseña de un usuario
+// - PATCH /users/:id/reset-password
+// - Puede: setear una contraseña temporal (si no se manda, el backend la genera)
+// - Devuelve la contraseña temporal (para que el superadmin se la entregue al usuario)
 
 import {
   BadRequestException,
@@ -81,14 +78,13 @@ export class UsersController {
       );
     }
 
-    return this.usersService.update(String(id), safeDto, actor, { self: true });
+    // ✅ CORRECTO: usar updateMe (aplica reglas de self)
+    return this.usersService.updateMe(safeDto, { id: String(id) }, { self: true });
   }
 
   // =========================
   // ✅ ADMINISTRACIÓN USUARIOS
   // =========================
-  // ✅ NOTA: aquí sí se permite workerType (tipo de trabajador),
-  // porque lo define administración.
 
   @Post()
   @Roles("ADMINISTRADORA", "SUPERADMIN")
@@ -104,10 +100,7 @@ export class UsersController {
     @Query("activo") activo?: string,
     @Query("role") role?: string,
     @Query("empresa") empresa?: string,
-
-    // ✅ NUEVO: filtrar por tipo trabajador
     @Query("workerType") workerType?: string,
-
     @Query("page") page?: string,
     @Query("limit") limit?: string
   ) {
@@ -130,7 +123,11 @@ export class UsersController {
 
   @Patch(":id")
   @Roles("ADMINISTRADORA", "SUPERADMIN")
-  update(@Req() req: Request, @Param("id") id: string, @Body() dto: UpdateUserDto) {
+  update(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() dto: UpdateUserDto
+  ) {
     const actor = (req as any).user ?? null;
     return this.usersService.update(id, dto, actor);
   }
@@ -142,6 +139,19 @@ export class UsersController {
     return this.usersService.toggle(id, actor);
   }
 
+  // ✅ NUEVO: RESET PASSWORD (SOLO SUPERADMIN)
+  // Body opcional: { newPassword?: string }
+  @Patch(":id/reset-password")
+  @Roles("SUPERADMIN")
+  resetPassword(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() body: { newPassword?: string }
+  ) {
+    const actor = (req as any).user ?? null;
+    return this.usersService.resetPasswordBySuperadmin(id, body?.newPassword, actor);
+  }
+
   // ✅ ELIMINAR USUARIO (SOLO SUPERADMIN)
   @Delete(":id")
   @Roles("SUPERADMIN")
@@ -150,6 +160,8 @@ export class UsersController {
     return this.usersService.remove(id, actor);
   }
 }
+
+
 
 
 

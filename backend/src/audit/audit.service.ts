@@ -1,3 +1,7 @@
+// ✅ Archivo: src/audit/audit.service.ts (COMPLETO)
+// ✅ FIX TS/Prisma: Json? NO acepta null directo => usar undefined (no enviar) o Prisma.JsonNull/DbNull
+// ✅ Mantiene: filtros por entity/action/date + search en actorEmail/entityId + data.targetLabel/data.title
+
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditAction, AuditEntity, Prisma, User } from "@prisma/client";
@@ -8,8 +12,8 @@ type ListParams = {
 
   entity?: AuditEntity;
   action?: AuditAction;
-  q?: string;     // buscar
-  date?: string;  // YYYY-MM-DD
+  q?: string; // buscar
+  date?: string; // YYYY-MM-DD
 };
 
 type LogParams = {
@@ -35,10 +39,20 @@ export class AuditService {
     const actorId = params.actorId ?? params.actor?.id ?? null;
     const actorEmail = params.actorEmail ?? params.actor?.email ?? null;
 
-    const mergedData =
-      params.data != null || params.meta != null
+    // ✅ Unificamos "data" + "meta" en un solo JSON
+    // Importante: Prisma Json? NO acepta null directo en TS => si no hay nada, usamos undefined.
+    const hasSomething = params.data != null || params.meta != null;
+
+    const merged =
+      hasSomething
         ? { ...(params.data || {}), ...(params.meta || {}) }
-        : null;
+        : undefined;
+
+    // ✅ Si merged existe pero NO es objeto (por error), lo envolvemos igual como JSON válido
+    const safeJson: Prisma.InputJsonValue | undefined =
+      merged === undefined
+        ? undefined
+        : (merged as Prisma.InputJsonValue);
 
     return this.prisma.auditLog.create({
       data: {
@@ -49,13 +63,17 @@ export class AuditService {
         actorEmail,
         ip: params.ip ?? null,
         userAgent: params.userAgent ?? null,
-        data: mergedData,
+
+        // ✅ clave: si no hay datos, NO enviar "data"
+        ...(safeJson === undefined ? {} : { data: safeJson }),
       },
     });
   }
 
   async list({ page, limit, entity, action, q, date }: ListParams) {
-    const skip = (page - 1) * limit;
+    const safePage = Math.max(page || 1, 1);
+    const safeLimit = Math.min(Math.max(limit || 10, 1), 100);
+    const skip = (safePage - 1) * safeLimit;
 
     const where: Prisma.AuditLogWhereInput = {};
 
@@ -72,16 +90,11 @@ export class AuditService {
       const end = new Date(`${date}T23:59:59.999Z`);
 
       // Si tu servidor está en otra zona horaria y se descuadra:
-      // cámbialo a Date(`${date}T00:00:00`) sin Z
+      // usa Date(`${date}T00:00:00`) sin Z
       where.createdAt = { gte: start, lte: end };
     }
 
     // ✅ búsqueda por texto
-    // Buscamos en:
-    // - actorEmail (quién)
-    // - entityId (por si alguien pega un id)
-    // - data.targetLabel (patente / email / nombre corto que guardas en meta)
-    // - data.title (por si quieres)
     const search = (q || "").trim();
     if (search) {
       where.OR = [
@@ -109,24 +122,25 @@ export class AuditService {
     const [items, total] = await Promise.all([
       this.prisma.auditLog.findMany({
         skip,
-        take: limit,
+        take: safeLimit,
         orderBy: { createdAt: "desc" },
         where,
       }),
       this.prisma.auditLog.count({ where }),
     ]);
 
-    const pages = Math.max(1, Math.ceil(total / limit));
+    const pages = Math.max(1, Math.ceil(total / safeLimit));
 
     return {
-      page,
-      limit,
+      page: safePage,
+      limit: safeLimit,
       total,
       pages,
       items,
     };
   }
 }
+
 
 
 
