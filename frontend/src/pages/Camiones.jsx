@@ -1,4 +1,4 @@
-// ✅ Archivo: src/pages/Camiones.jsx (COMPLETO - RESPONSIVE FIX + JSX FIXES)
+// ✅ Archivo: src/pages/Camiones.jsx (COMPLETO - PROD FIX + COOKIES FIX)
 import { useEffect, useMemo, useState } from "react";
 import "./Admin.css";
 
@@ -14,7 +14,10 @@ import ConfirmModal from "../components/ui/ConfirmModal";
 // ✅ Excel export
 import * as XLSX from "xlsx";
 
-const API_URL = "http://localhost:3000";
+// ✅ PROD/LOCAL
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  `${window.location.protocol}//${window.location.hostname}:3000`;
 
 /** ✅ Botón consistente y visible (evita que el CSS lo “aplane” o lo deje invisible) */
 function ActionButton({ variant = "ghost", className = "", style = {}, ...props }) {
@@ -203,7 +206,10 @@ export default function Camiones() {
   async function fetchVehicles() {
     try {
       setLoading(true);
-      const res = await fetch(`${API_URL}/vehicles`, { headers: tokenHeaders() });
+      const res = await fetch(`${API_URL}/vehicles`, {
+        credentials: "include",
+        headers: tokenHeaders(),
+      });
 
       if (!res.ok) {
         const txt = await res.text();
@@ -253,6 +259,7 @@ export default function Camiones() {
   async function createVehicle(payload) {
     const res = await fetch(`${API_URL}/vehicles`, {
       method: "POST",
+      credentials: "include",
       headers: tokenHeadersJson(),
       body: JSON.stringify({
         empresa: payload?.empresa ?? "GRUAS_THOMAS",
@@ -297,6 +304,7 @@ export default function Camiones() {
 
     const res = await fetch(`${API_URL}/vehicles/${id}`, {
       method: "PATCH",
+      credentials: "include",
       headers: tokenHeadersJson(),
       body: JSON.stringify(body),
     });
@@ -320,6 +328,7 @@ export default function Camiones() {
 
     const res = await fetch(`${API_URL}/vehicles/${row.id}`, {
       method: "DELETE",
+      credentials: "include",
       headers: tokenHeaders(),
     });
 
@@ -338,6 +347,7 @@ export default function Camiones() {
   async function setOperationalStatusRequest(vehicleId, status) {
     const res = await fetch(`${API_URL}/vehicles/${vehicleId}/operational-status`, {
       method: "PATCH",
+      credentials: "include",
       headers: tokenHeadersJson(),
       body: JSON.stringify({ status }),
     });
@@ -516,6 +526,7 @@ export default function Camiones() {
 
   async function fetchHorometers(vehicleId) {
     const res = await fetch(`${API_URL}/vehicles/${vehicleId}/horometers`, {
+      credentials: "include",
       headers: tokenHeaders(),
     });
 
@@ -804,7 +815,10 @@ export default function Camiones() {
 
   async function fetchExportFromApi(kind, empresaParam) {
     const url = `${API_URL}/vehicles/exports/${kind}?empresa=${encodeURIComponent(empresaParam)}`;
-    const res = await fetch(url, { headers: tokenHeaders() });
+    const res = await fetch(url, {
+      credentials: "include",
+      headers: tokenHeaders(),
+    });
 
     if (!res.ok) {
       const txt = await res.text();

@@ -21,12 +21,24 @@
 //
 // ✅ FIX NUEVO:
 // - Se muestra "Solicitado por" en Detalle OT (solo lectura)
+//
+// ✅ ESTÁNDAR GLOBAL (este commit):
+// - API_URL dinámico
+// - credentials: "include" en fetch
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
 import ConfirmModal from "../components/ui/ConfirmModal";
 
-const API_URL = "http://localhost:3000";
+function getApiUrl() {
+  // Prioriza env (Vite). Si no existe, usa el host actual.
+  // Esto evita hardcodear localhost en producción.
+  const env = (import.meta && import.meta.env && import.meta.env.VITE_API_URL) || "";
+  if (env && String(env).trim()) return String(env).replace(/\/$/, "");
+  return `${window.location.protocol}//${window.location.host}`;
+}
+
+const API_URL = getApiUrl();
 
 function getToken() {
   return localStorage.getItem("access_token") || "";
@@ -200,7 +212,7 @@ function Row({ label, value }) {
 
 function LabeledInput({ label, placeholder, value, onChange, disabled, error, className = "" }) {
   const errStyle = error
-    ? { borderColor: "#dc2626", boxShadow: "0 0,0 2px rgba(220,38,38,.15)" }
+    ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220,38,38,.15)" } // ✅ FIX coma
     : undefined;
 
   return (
@@ -442,7 +454,9 @@ export default function WorkOrderCompleteModal({
   const [recibi, setRecibi] = useState({ nombre: "", rut: "" });
   function setRecibiField(k, v) {
     setRecibi((p) => ({ ...p, [k]: v }));
-    setErrors((prev) => ({ ...prev, [k]: undefined }));
+    // ✅ FIX: limpia las keys correctas del error
+    if (k === "nombre") setErrors((prev) => ({ ...prev, recibiNombre: undefined }));
+    if (k === "rut") setErrors((prev) => ({ ...prev, recibiRut: undefined }));
   }
 
   // ✅ kms por tramo + ✅ NUEVO OBRA
@@ -662,8 +676,8 @@ export default function WorkOrderCompleteModal({
       rut: pick(d?.rut, d?.clienteRut),
       giro: pick(d?.giro),
 
-      // ✅ FIX: traer "Solicitado por"
-      solicitadoPor: pick(d?.solicitadoPor),
+      // ✅ FIX: traer "Solicitado por" (con fallbacks típicos)
+      solicitadoPor: pick(d?.solicitadoPor, d?.requestedBy, d?.requestedByName, d?.contactoSolicitante, d?.nombreSolicitante),
 
       direccionFaena: pick(d?.direccionFaena, d?.lugar, d?.ubicacion),
       direccionCliente: pick(d?.direccion),
@@ -727,7 +741,6 @@ export default function WorkOrderCompleteModal({
 
                 <FieldRO label="Días de trabajo" value={ro.diasTrabajo} />
                 <FieldRO label="Horario llegada" value={ro.horario} />
-                {/* ✅ QUITADO: Teléfono cliente */}
 
                 <div style={{ gridColumn: "1 / -1" }}>
                   <FieldRO label="Dirección de la faena" value={ro.direccionFaena} />

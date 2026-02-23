@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import "./Auditoria.css";
 import AuditDetailsModal from "./AuditDetailsModal";
 
-const API_URL = "http://localhost:3000";
+// ✅ API dinámico (prod/local)
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  `${window.location.protocol}//${window.location.hostname}:3000`;
 
 export default function Auditoria() {
   const [logs, setLogs] = useState([]);
@@ -49,6 +52,7 @@ export default function Auditoria() {
 
       const token = localStorage.getItem("access_token");
       const res = await fetch(`${API_URL}/audit?${queryString}`, {
+        credentials: "include", // ✅ CLAVE
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -260,11 +264,7 @@ export default function Auditoria() {
         </div>
       </div>
 
-      <AuditDetailsModal
-        open={openModal}
-        onClose={closeDetails}
-        item={selected}
-      />
+      <AuditDetailsModal open={openModal} onClose={closeDetails} item={selected} />
     </>
   );
 }

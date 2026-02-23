@@ -5,6 +5,9 @@
 // ✅ NUEVO:
 // - Filtro por ROL (ALL/TRABAJADOR/CONTROL_FLOTA/ADMINISTRADORA/SUPERADMIN)
 // - Cards por tipo (Operadores/Riggers) cuentan sobre el set global SOLO cuando aplica
+// ✅ ESTÁNDAR:
+// - API_URL dinámico
+// - credentials: "include" en TODOS los fetch
 
 import { useEffect, useMemo, useState } from "react";
 import { getToken, getUser, logout } from "../auth/auth";
@@ -13,12 +16,23 @@ import ConfirmModal from "../components/ui/ConfirmModal";
 import Modal from "../components/ui/Modal";
 import "./Admin.css";
 
-const API_URL = "http://localhost:3000";
+// ✅ API dinámico
+// 1) VITE_API_URL (recomendado)
+// 2) mismo host + /api (si usas reverse proxy)
+// 3) fallback local
+const baseFromEnv = (import.meta?.env?.VITE_API_URL || "").trim();
+const baseFromHost =
+  typeof window !== "undefined"
+    ? `${window.location.protocol}//${window.location.host}/api`
+    : "";
+const API_URL = baseFromEnv || baseFromHost || "http://localhost:3000";
+// ⚠️ Si tu backend NO usa /api en prod, cambia baseFromHost a:
+// const baseFromHost = `${window.location.protocol}//${window.location.host}`;
 
-function authHeaders() {
+function authHeaders(isJson = true) {
   const token = getToken();
   return {
-    "Content-Type": "application/json",
+    ...(isJson ? { "Content-Type": "application/json" } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 }
@@ -102,7 +116,7 @@ export default function Trabajador() {
   // ✅ filtro empresa
   const [empresaFilter, setEmpresaFilter] = useState("ALL"); // ALL | GRUAS_THOMAS | INSPROTEL | NONE
 
-  // ✅ NUEVO: filtro rol
+  // ✅ filtro rol
   const [roleFilter, setRoleFilter] = useState("ALL"); // ALL | TRABAJADOR | CONTROL_FLOTA | ADMINISTRADORA | SUPERADMIN
 
   // ✅ filtro tipo
@@ -191,7 +205,9 @@ export default function Trabajador() {
 
     try {
       const res = await fetch(`${API_URL}/users?${queryString}`, {
-        headers: authHeaders(),
+        method: "GET",
+        headers: authHeaders(true),
+        credentials: "include",
       });
 
       if (res.status === 401) {
@@ -227,10 +243,9 @@ export default function Trabajador() {
 
   // -------------------------
   // Stats cards (count global) para Trabajadores/Operadores/Riggers
-  // - solo calcula cuando incluyeWorkers (ALL o TRABAJADOR)
+  // - solo calcula cuando includesWorkers (ALL o TRABAJADOR)
   // -------------------------
   async function fetchStats() {
-    // si NO estamos viendo trabajadores, dejamos cards en 0
     if (!includesWorkers) {
       setStats({ totalTrab: 0, operadores: 0, riggers: 0 });
       return;
@@ -253,7 +268,9 @@ export default function Trabajador() {
       params.set("limit", "5000");
 
       const res = await fetch(`${API_URL}/users?${params.toString()}`, {
-        headers: authHeaders(),
+        method: "GET",
+        headers: authHeaders(true),
+        credentials: "include",
       });
 
       if (res.status === 401) {
@@ -313,7 +330,8 @@ export default function Trabajador() {
     try {
       const res = await fetch(`${API_URL}/users/${confirmUser.id}/toggle`, {
         method: "PATCH",
-        headers: authHeaders(),
+        headers: authHeaders(true),
+        credentials: "include",
       });
 
       if (res.status === 401) {
@@ -355,7 +373,8 @@ export default function Trabajador() {
     try {
       const res = await fetch(`${API_URL}/users/${deleteUser.id}`, {
         method: "DELETE",
-        headers: authHeaders(),
+        headers: authHeaders(true),
+        credentials: "include",
       });
 
       if (res.status === 401) {
@@ -401,7 +420,8 @@ export default function Trabajador() {
     try {
       const res = await fetch(`${API_URL}/users/${resetUser.id}/reset-password`, {
         method: "PATCH",
-        headers: authHeaders(),
+        headers: authHeaders(true),
+        credentials: "include",
         body: JSON.stringify({}),
       });
 
@@ -487,7 +507,9 @@ export default function Trabajador() {
                 </div>
                 <div className="card-title">{c.label}</div>
               </div>
-              <div className="card-value">{statsLoading ? "…" : c.value === "OPERADOR" ? stats.operadores : stats.riggers}</div>
+              <div className="card-value">
+                {statsLoading ? "…" : c.value === "OPERADOR" ? stats.operadores : stats.riggers}
+              </div>
               <div className="card-sub">Tipo {c.value}</div>
             </div>
           ))}
@@ -502,9 +524,7 @@ export default function Trabajador() {
 
             {tipoFilter !== "ALL" || roleFilter !== "ALL" ? (
               <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                {roleFilter !== "ALL" ? (
-                  <span className="status ok">Rol: {roleLabel(roleFilter)}</span>
-                ) : null}
+                {roleFilter !== "ALL" ? <span className="status ok">Rol: {roleLabel(roleFilter)}</span> : null}
 
                 {tipoFilter !== "ALL" ? (
                   <span className="status ok">
@@ -608,13 +628,12 @@ export default function Trabajador() {
             <option value="NONE">Sin empresa</option>
           </select>
 
-          {/* ✅ NUEVO: filtro rol */}
+          {/* ✅ filtro rol */}
           <select
             value={roleFilter}
             onChange={(e) => {
               setPage(1);
               setRoleFilter(e.target.value);
-              // si se cambia a rol distinto de trabajador, limpiamos tipo
               if (e.target.value !== "ALL" && e.target.value !== "TRABAJADOR") {
                 setTipoFilter("ALL");
               }
@@ -630,7 +649,7 @@ export default function Trabajador() {
             <option value="SUPERADMIN">SUPERADMIN</option>
           </select>
 
-          {/* Tipo solo útil para trabajadores, igual lo dejamos pero deshabilitado si no aplica */}
+          {/* Tipo solo útil para trabajadores */}
           <select
             value={tipoFilter}
             onChange={(e) => {

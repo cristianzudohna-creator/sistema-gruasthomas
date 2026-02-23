@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import "./Admin.css";
 
-const API_URL = "http://localhost:3000";
+// ✅ API dinámico (prod/local)
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  `${window.location.protocol}//${window.location.hostname}:3000`;
 
 function getToken() {
   return localStorage.getItem("access_token") || "";
@@ -82,9 +85,9 @@ export default function Clientes() {
     try {
       setLoading(true);
 
-      // ✅ Importante: no dependemos de ?search= (por si el backend no lo soporta)
       const res = await fetch(`${API_URL}/clients`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
+        credentials: "include", // ✅ CLAVE
+        headers: { Authorization: `Bearer ${getToken()}` }, // puedes dejarlo, no molesta
       });
 
       if (!res.ok) {
@@ -143,7 +146,7 @@ export default function Clientes() {
         ? `${API_URL}/clients/${editingId}`
         : `${API_URL}/clients`;
 
-      // ✅ tu controller usa PATCH para update (antes tenías PUT en el front)
+      // ✅ tu controller usa PATCH para update
       const method = isEditing ? "PATCH" : "POST";
 
       const payload = {
@@ -157,6 +160,7 @@ export default function Clientes() {
 
       const res = await fetch(url, {
         method,
+        credentials: "include", // ✅ CLAVE
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${getToken()}`,
@@ -207,6 +211,7 @@ export default function Clientes() {
     try {
       const res = await fetch(`${API_URL}/clients/${id}`, {
         method: "DELETE",
+        credentials: "include", // ✅ CLAVE
         headers: { Authorization: `Bearer ${getToken()}` },
       });
 

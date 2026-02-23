@@ -1,6 +1,7 @@
 // ✅ Archivo: frontend/src/pages/Login.jsx (COMPLETO)
 // ✅ Login por RUT + password
 // ✅ FIX: si backend devuelve mustChangePassword=true => redirige a /cambiar-contrasena (TU RUTA REAL)
+// ✅ FIX COOKIES: credentials:"include" para que el login guarde cookie de sesión
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -38,6 +39,7 @@ export default function Login() {
 
       const res = await fetch("/api/auth/login", {
         method: "POST",
+        credentials: "include", // ✅ CLAVE: guarda cookie de sesión
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -54,8 +56,8 @@ export default function Login() {
 
       const data = await res.json();
 
-      // ✅ guardar sesión
-      localStorage.setItem("access_token", data.access_token);
+      // ✅ guardar sesión (si sigues usando token para otras cosas, no molesta)
+      if (data?.access_token) localStorage.setItem("access_token", data.access_token);
 
       // ✅ guarda user (incluye mustChangePassword)
       if (data.user) localStorage.setItem("user", JSON.stringify(data.user));

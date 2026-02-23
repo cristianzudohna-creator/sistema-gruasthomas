@@ -9,7 +9,10 @@ import WorkOrderCompleteModal from "./WorkOrderCompleteModal";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import Modal from "../components/ui/Modal";
 
-const API_URL = "http://localhost:3000";
+// ✅ API dinámico (prod/local)
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  `${window.location.protocol}//${window.location.hostname}:3000`;
 
 function getToken() {
   return localStorage.getItem("access_token") || "";
@@ -37,8 +40,8 @@ async function readError(res) {
 
 async function apiGet(path) {
   const res = await fetch(`${API_URL}${path}`, {
-    headers: { Authorization: `Bearer ${getToken()}` },
     credentials: "include",
+    headers: { Authorization: `Bearer ${getToken()}` },
   });
 
   if (!res.ok) {
@@ -53,11 +56,11 @@ async function apiGet(path) {
 async function apiPost(path, body) {
   const res = await fetch(`${API_URL}${path}`, {
     method: "POST",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${getToken()}`,
     },
-    credentials: "include",
     body: JSON.stringify(body),
   });
 
@@ -73,11 +76,11 @@ async function apiPost(path, body) {
 async function apiPut(path, body) {
   const res = await fetch(`${API_URL}${path}`, {
     method: "PUT",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${getToken()}`,
     },
-    credentials: "include",
     body: JSON.stringify(body),
   });
 
@@ -93,11 +96,11 @@ async function apiPut(path, body) {
 async function apiPatch(path, body) {
   const res = await fetch(`${API_URL}${path}`, {
     method: "PATCH",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${getToken()}`,
     },
-    credentials: "include",
     body: JSON.stringify(body || {}),
   });
 
@@ -113,8 +116,8 @@ async function apiPatch(path, body) {
 async function apiDelete(path) {
   const res = await fetch(`${API_URL}${path}`, {
     method: "DELETE",
-    headers: { Authorization: `Bearer ${getToken()}` },
     credentials: "include",
+    headers: { Authorization: `Bearer ${getToken()}` },
   });
 
   if (!res.ok) {
@@ -144,8 +147,8 @@ function getFilenameFromContentDisposition(cd) {
 async function apiDownloadPdf(id) {
   const res = await fetch(`${API_URL}/work-orders/${id}/pdf`, {
     method: "GET",
-    headers: { Authorization: `Bearer ${getToken()}` },
     credentials: "include",
+    headers: { Authorization: `Bearer ${getToken()}` },
   });
 
   if (!res.ok) {

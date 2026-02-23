@@ -1,8 +1,38 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import "./Login.css";
 
+function getApiUrl() {
+  const env = (import.meta && import.meta.env && import.meta.env.VITE_API_URL) || "";
+  if (env && String(env).trim()) return String(env).replace(/\/$/, "");
+  return `${window.location.protocol}//${window.location.host}`;
+}
+
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim());
+}
+
+async function readError(res) {
+  const ct = res.headers.get("content-type") || "";
+  try {
+    if (ct.includes("application/json")) {
+      const data = await res.json();
+      const m = data?.message || data?.error || "";
+      if (Array.isArray(m)) return m.join(", ");
+      if (typeof m === "string" && m.trim()) return m;
+      return JSON.stringify(data);
+    }
+    const t = await res.text();
+    return t || `HTTP ${res.status}`;
+  } catch {
+    return `HTTP ${res.status}`;
+  }
+}
+
 export default function ForgotPassword() {
+  const API_URL = useMemo(() => getApiUrl(), []);
+  const isDev = !!(import.meta && import.meta.env && import.meta.env.DEV);
+
   const [email, setEmail] = useState("");
   const [msg, setMsg] = useState("");
   const [resetUrl, setResetUrl] = useState("");
@@ -14,25 +44,39 @@ export default function ForgotPassword() {
     setError("");
     setMsg("");
     setResetUrl("");
+
+    const emailClean = String(email || "").trim().toLowerCase();
+    if (!emailClean) {
+      setError("Debes ingresar un correo.");
+      return;
+    }
+    if (!isValidEmail(emailClean)) {
+      setError("Correo no válido.");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:3000/auth/forgot-password", {
+      const res = await fetch(`${API_URL}/auth/forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        credentials: "include",
+        body: JSON.stringify({ email: emailClean }),
       });
 
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        const m = data?.message || "No se pudo procesar la solicitud";
-        setError(Array.isArray(m) ? m.join(", ") : m);
+        // si vino json con message, úsalo; si no, lee texto/json genérico
+        const m = data?.message ? (Array.isArray(data.message) ? data.message.join(", ") : data.message) : await readError(res);
+        setError(m || "No se pudo procesar la solicitud");
         return;
       }
 
       setMsg(data?.message || "Revisa tu correo.");
-      if (data?.resetUrl) setResetUrl(data.resetUrl); // DEV
+      // ✅ solo mostrar resetUrl en desarrollo
+      if (isDev && data?.resetUrl) setResetUrl(data.resetUrl);
     } catch {
       setError("Error de conexión con el servidor");
     } finally {
@@ -49,9 +93,7 @@ export default function ForgotPassword() {
               <img src="/logo-thomas.png" alt="Grúas Thomas" className="login-logo" />
               <div className="login-text">
                 <h2 className="login-title">Recuperar contraseña</h2>
-                <p className="login-subtitle">
-                  Ingresa tu correo. Te enviaremos un enlace de recuperación.
-                </p>
+                <p className="login-subtitle">Ingresa tu correo. Te enviaremos un enlace de recuperación.</p>
               </div>
             </div>
           </div>
@@ -59,7 +101,9 @@ export default function ForgotPassword() {
           <div className="login-body">
             <form onSubmit={handleSubmit}>
               <div className="form-group">
-                <label className="label" htmlFor="email">Correo</label>
+                <label className="label" htmlFor="email">
+                  Correo
+                </label>
                 <input
                   id="email"
                   className="input"
@@ -83,11 +127,10 @@ export default function ForgotPassword() {
                   }}
                 >
                   {msg}
-                  {resetUrl && (
+
+                  {isDev && resetUrl && (
                     <div style={{ marginTop: 8 }}>
-                      <div style={{ fontWeight: 800, marginBottom: 4 }}>
-                        (DEV) Link de reset:
-                      </div>
+                      <div style={{ fontWeight: 800, marginBottom: 4 }}>(DEV) Link de reset:</div>
                       <a href={resetUrl} target="_blank" rel="noreferrer">
                         Abrir enlace
                       </a>
@@ -101,7 +144,9 @@ export default function ForgotPassword() {
               </button>
 
               <div className="login-actions" style={{ justifyContent: "flex-start", marginTop: 10 }}>
-                <Link className="login-link" to="/login">Volver al login</Link>
+                <Link className="login-link" to="/login">
+                  Volver al login
+                </Link>
               </div>
             </form>
           </div>

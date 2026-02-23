@@ -1,17 +1,22 @@
 // ✅ Archivo: src/pages/MaintenancesModal.jsx (RESPONSIVE TABLET/CEL)
 // ✅ FIX:
-// - width responsive del modal
-// - tabla responsive (en móvil oculta Obs y la muestra debajo del Tipo)
-// - acciones siempre visibles
-// - botones del form responsive
-// - orden por fechaRealizada desc
+// - API_URL dinámico (VITE_API_URL -> fallback host actual)
+// - fetch con credentials: "include"
+// - 401 => logout + redirect
+// - validación tamaño de archivo (opcional)
+// - orden por fechaRealizada desc (se mantiene)
 
 import { useEffect, useMemo, useState } from "react";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import Modal from "../components/ui/Modal";
-import { getToken } from "../auth/auth";
+import { getToken, logout } from "../auth/auth";
 
-const API_URL = "http://localhost:3000";
+function getApiUrl() {
+  const env = (import.meta && import.meta.env && import.meta.env.VITE_API_URL) || "";
+  if (env && String(env).trim()) return String(env).replace(/\/$/, "");
+  return `${window.location.protocol}//${window.location.host}`;
+}
+const API_URL = getApiUrl();
 
 function getAuthHeaders() {
   const token = getToken();
@@ -30,6 +35,22 @@ function toAbsoluteFileUrl(urlOrPath) {
   const base = String(API_URL).replace(/\/$/, "");
   const path = s.startsWith("/") ? s : `/${s}`;
   return `${base}${path}`;
+}
+
+async function readError(res) {
+  const ct = res.headers.get("content-type") || "";
+  try {
+    if (ct.includes("application/json")) {
+      const data = await res.json();
+      if (Array.isArray(data?.message)) return data.message.join(" | ");
+      if (typeof data?.message === "string") return data.message;
+      return JSON.stringify(data);
+    }
+    const t = await res.text();
+    return t || `HTTP ${res.status}`;
+  } catch {
+    return `HTTP ${res.status}`;
+  }
 }
 
 export default function MaintenancesModal({ open, onClose, vehicle }) {
@@ -90,11 +111,18 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
 
       const res = await fetch(`${API_URL}/vehicles/${vehicle.id}/maintenances`, {
         headers: { ...getAuthHeaders() },
+        credentials: "include",
       });
 
+      if (res.status === 401) {
+        logout();
+        window.location.href = "/login";
+        return;
+      }
+
       if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(txt || "No se pudieron cargar las mantenciones");
+        const msg = await readError(res);
+        throw new Error(msg || "No se pudieron cargar las mantenciones");
       }
 
       const data = await res.json();
@@ -202,12 +230,20 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
 
     if (!form.typeText.trim()) throw new Error("Debes escribir el tipo de mantención.");
     if (!form.fechaRealizada) throw new Error("Debes seleccionar la fecha realizada.");
-    if (!sinProxima && !form.fechaProxima) throw new Error("Debes seleccionar la fecha próxima o marcar “Sin próxima mantención”.");
+    if (!sinProxima && !form.fechaProxima)
+      throw new Error("Debes seleccionar la fecha próxima o marcar “Sin próxima mantención”.");
     if (!file) throw new Error("Debes seleccionar un archivo (PDF/DOC/DOCX).");
 
+    // ✅ validación extensión
     const fileName = file?.name?.toLowerCase?.() || "";
     const okExt = fileName.endsWith(".pdf") || fileName.endsWith(".doc") || fileName.endsWith(".docx");
     if (!okExt) throw new Error("Formato no permitido. Solo PDF, DOC o DOCX.");
+
+    // ✅ validación tamaño (opcional) - 12MB
+    const MAX_MB = 12;
+    if ((file?.size || 0) > MAX_MB * 1024 * 1024) {
+      throw new Error(`Archivo demasiado grande. Máximo ${MAX_MB}MB.`);
+    }
 
     const formData = new FormData();
     formData.append("file", file);
@@ -220,10 +256,17 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
     const res = await fetch(`${API_URL}/vehicles/${vehicle.id}/maintenances/upload`, {
       method: "POST",
       headers: { ...getAuthHeaders() },
+      credentials: "include",
       body: formData,
     });
 
-    if (!res.ok) throw new Error((await res.text()) || "Error al guardar");
+    if (res.status === 401) {
+      logout();
+      window.location.href = "/login";
+      return;
+    }
+
+    if (!res.ok) throw new Error((await readError(res)) || "Error al guardar");
     await res.json().catch(() => null);
   }
 
@@ -232,7 +275,8 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
 
     if (!form.typeText.trim()) throw new Error("Debes escribir el tipo de mantención.");
     if (!form.fechaRealizada) throw new Error("Debes seleccionar la fecha realizada.");
-    if (!sinProxima && !form.fechaProxima) throw new Error("Debes seleccionar la fecha próxima o marcar “Sin próxima mantención”.");
+    if (!sinProxima && !form.fechaProxima)
+      throw new Error("Debes seleccionar la fecha próxima o marcar “Sin próxima mantención”.");
 
     const payload = {
       type: "OTRO",
@@ -245,10 +289,17 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
     const res = await fetch(`${API_URL}/vehicles/maintenances/${editing.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      credentials: "include",
       body: JSON.stringify(payload),
     });
 
-    if (!res.ok) throw new Error((await res.text()) || "Error al guardar");
+    if (res.status === 401) {
+      logout();
+      window.location.href = "/login";
+      return;
+    }
+
+    if (!res.ok) throw new Error((await readError(res)) || "Error al guardar");
     await res.json().catch(() => null);
   }
 
@@ -294,9 +345,16 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
       const res = await fetch(`${API_URL}/vehicles/maintenances/${toDelete.id}`, {
         method: "DELETE",
         headers: { ...getAuthHeaders() },
+        credentials: "include",
       });
 
-      if (!res.ok) throw new Error((await res.text()) || "No se pudo eliminar");
+      if (res.status === 401) {
+        logout();
+        window.location.href = "/login";
+        return;
+      }
+
+      if (!res.ok) throw new Error((await readError(res)) || "No se pudo eliminar");
 
       await fetchMaintenances();
       flashSuccess("✅ Mantención eliminada");
@@ -422,14 +480,24 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
                   />
 
                   <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, fontSize: 13 }}>
-                    <input type="checkbox" checked={sinProxima} onChange={(e) => toggleSinProxima(e.target.checked)} disabled={saving} />
+                    <input
+                      type="checkbox"
+                      checked={sinProxima}
+                      onChange={(e) => toggleSinProxima(e.target.checked)}
+                      disabled={saving}
+                    />
                     Sin próxima mantención (vehículo parado / en pana)
                   </label>
                 </div>
 
                 <div className="gt-field" style={{ gridColumn: "1 / -1" }}>
                   <label>Observación</label>
-                  <input className="gt-input" value={form.observacion} onChange={(e) => setForm({ ...form, observacion: e.target.value })} disabled={saving} />
+                  <input
+                    className="gt-input"
+                    value={form.observacion}
+                    onChange={(e) => setForm({ ...form, observacion: e.target.value })}
+                    disabled={saving}
+                  />
                 </div>
 
                 {mode === "add" ? (
@@ -452,7 +520,9 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
                 ) : (
                   <div className="gt-field" style={{ gridColumn: "1 / -1" }}>
                     <label>Archivo</label>
-                    <div style={{ fontSize: 13, opacity: 0.85, paddingTop: 10 }}>Para cambiar el archivo, elimina esta mantención y crea una nueva.</div>
+                    <div style={{ fontSize: 13, opacity: 0.85, paddingTop: 10 }}>
+                      Para cambiar el archivo, elimina esta mantención y crea una nueva.
+                    </div>
                   </div>
                 )}
 
@@ -504,7 +574,6 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
                       <td className="col-tipo" title={label}>
                         <div className="maint-tipo-main">{label}</div>
 
-                        {/* 👇 en móvil mostramos la observación acá */}
                         <div className="maint-obs-mobile">
                           <div
                             style={{
@@ -518,7 +587,12 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
                           </div>
 
                           {(m.observacion || "").trim() && hasLongObs.get(m.id) && (
-                            <button type="button" className="gt-link" onClick={() => setExpandedId(isExpanded ? null : m.id)} style={{ marginTop: 6 }}>
+                            <button
+                              type="button"
+                              className="gt-link"
+                              onClick={() => setExpandedId(isExpanded ? null : m.id)}
+                              style={{ marginTop: 6 }}
+                            >
                               {isExpanded ? "Ver menos" : "Ver más"}
                             </button>
                           )}
@@ -543,7 +617,12 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
                         </div>
 
                         {(m.observacion || "").trim() && hasLongObs.get(m.id) && (
-                          <button type="button" className="gt-link" onClick={() => setExpandedId(isExpanded ? null : m.id)} style={{ marginTop: 6 }}>
+                          <button
+                            type="button"
+                            className="gt-link"
+                            onClick={() => setExpandedId(isExpanded ? null : m.id)}
+                            style={{ marginTop: 6 }}
+                          >
                             {isExpanded ? "Ver menos" : "Ver más"}
                           </button>
                         )}

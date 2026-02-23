@@ -3,7 +3,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getToken, logout } from "../auth/auth";
 import "./Horometro.css";
 
-const API_URL = "http://localhost:3000";
+// ✅ API dinámico (prod/local)
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  `${window.location.protocol}//${window.location.hostname}:3000`;
 
 function authHeaders(isJson = true) {
   const token = getToken();
@@ -37,6 +40,7 @@ export default function Horometro() {
     setError("");
     try {
       const res = await fetch(`${API_URL}/vehicles`, {
+        credentials: "include", // ✅ CLAVE
         headers: authHeaders(false), // ✅ GET no necesita Content-Type
       });
 
@@ -97,7 +101,8 @@ export default function Horometro() {
     setSuccess("");
 
     if (!vehicleId) return setError("Debes seleccionar un vehículo.");
-    if (!horas || !/^\d+$/.test(String(horas).trim())) return setError("Horas debe ser un número entero.");
+    if (!horas || !/^\d+$/.test(String(horas).trim()))
+      return setError("Horas debe ser un número entero.");
     if (!file) return setError("Debes adjuntar una foto de evidencia.");
 
     setLoading(true);
@@ -112,6 +117,7 @@ export default function Horometro() {
 
       const res = await fetch(`${API_URL}/horometer`, {
         method: "POST",
+        credentials: "include", // ✅ CLAVE
         headers: authHeaders(false), // ✅ NO Content-Type
         body: fd,
       });
@@ -167,7 +173,12 @@ export default function Horometro() {
             {loadingVehicles ? "Cargando..." : "Refrescar"}
           </button>
 
-          <button className="gt-btn ghost" type="button" onClick={clearForm} disabled={loading}>
+          <button
+            className="gt-btn ghost"
+            type="button"
+            onClick={clearForm}
+            disabled={loading}
+          >
             Limpiar
           </button>
         </div>

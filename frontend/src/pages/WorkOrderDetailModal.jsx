@@ -16,7 +16,15 @@
 import { useEffect, useState } from "react";
 import Modal from "../components/ui/Modal";
 
-const API_URL = "http://localhost:3000";
+// ✅ API dinámico (igual al estándar que estamos dejando)
+const baseFromEnv = (import.meta?.env?.VITE_API_URL || "").trim();
+const baseFromHost =
+  typeof window !== "undefined"
+    ? `${window.location.protocol}//${window.location.host}/api`
+    : "";
+const API_URL = baseFromEnv || baseFromHost || "http://localhost:3000";
+// ⚠️ Si tu backend NO usa /api en prod, cambia a:
+// const baseFromHost = `${window.location.protocol}//${window.location.host}`;
 
 function getToken() {
   return localStorage.getItem("access_token") || "";
@@ -49,7 +57,7 @@ async function apiPatch(path, body) {
       "Content-Type": "application/json",
       Authorization: `Bearer ${getToken()}`,
     },
-    credentials: "include",
+    credentials: "include", // ✅ ESTÁNDAR
     body: JSON.stringify(body || {}),
   });
 
@@ -376,14 +384,7 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
 
   const nota = pick(data?.descripcion, data?.nota);
 
-  const modalTitle = `OT • ${pick(
-    cliente,
-    direccionFaena,
-    lugar,
-    direccionCliente,
-    data?.titulo,
-    "Detalle"
-  )}`;
+  const modalTitle = `OT • ${pick(cliente, direccionFaena, lugar, direccionCliente, data?.titulo, "Detalle")}`;
 
   const rejectReason = String(pick(data?.rejectReason) || "").trim();
   const approvalComment = String(pick(data?.approvalComment) || "").trim();
@@ -401,9 +402,7 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
       : "";
 
   // ✅ SUBTITLE sin “Empresa”
-  const subtitle = data
-    ? `Creada: ${fmtDate(data?.createdAt)} • Estado: ${statusLabel(status)}`
-    : "Detalle de orden";
+  const subtitle = data ? `Creada: ${fmtDate(data?.createdAt)} • Estado: ${statusLabel(status)}` : "Detalle de orden";
 
   const workerReport = safeParseWorkerReport(data?.workerReport);
   const detalleHoras = workerReport?.detalleHoras || null;
@@ -566,8 +565,7 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
         // ✅ mantener firma si existía
         signature: workerReport?.signature || undefined,
         // ✅ mantener recibí conforme si existía
-        recibiConforme:
-          workerReport?.recibiConforme || workerReport?.recibeConforme || undefined,
+        recibiConforme: workerReport?.recibiConforme || workerReport?.recibeConforme || undefined,
       };
 
       const updated = await apiPatch(`/work-orders/${data.id}/admin-report`, {
@@ -955,12 +953,7 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
                   />
 
                   <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 12 }}>
-                    <button
-                      className="gt-btn"
-                      type="button"
-                      onClick={() => setAdminEditOpen(false)}
-                      disabled={adminSaving}
-                    >
+                    <button className="gt-btn" type="button" onClick={() => setAdminEditOpen(false)} disabled={adminSaving}>
                       Cancelar
                     </button>
                     <button
@@ -976,11 +969,8 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
                 </div>
               ) : null}
 
-              <div style={{ fontWeight: 900, marginTop: 6, marginBottom: 6, opacity: 0.85 }}>
-                Detalle de horas
-              </div>
+              <div style={{ fontWeight: 900, marginTop: 6, marginBottom: 6, opacity: 0.85 }}>Detalle de horas</div>
 
-              {/* ✅ horas + kms + ✅ NUEVO OBRA */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
                 <Field label="Salida planta" value={pick(detalleHoras?.salidaPlanta)} />
                 <Field label="Llegada faena" value={pick(detalleHoras?.llegadaFaena)} />
@@ -998,9 +988,7 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
                 <Field label="Km llegada planta" value={kmLlegadaPlanta} />
               </div>
 
-              <div style={{ fontWeight: 900, marginTop: 12, marginBottom: 6, opacity: 0.85 }}>
-                Movimientos / ¿Qué se hizo?
-              </div>
+              <div style={{ fontWeight: 900, marginTop: 12, marginBottom: 6, opacity: 0.85 }}>Movimientos / ¿Qué se hizo?</div>
 
               <div
                 style={{
@@ -1015,9 +1003,7 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
                 {String(movimientos || "").trim() ? movimientos : "—"}
               </div>
 
-              <div style={{ fontWeight: 900, marginTop: 14, marginBottom: 8, opacity: 0.9 }}>
-                Firma del cliente
-              </div>
+              <div style={{ fontWeight: 900, marginTop: 14, marginBottom: 8, opacity: 0.9 }}>Firma del cliente</div>
 
               {signatureDataUrl && String(signatureDataUrl).startsWith("data:image/") ? (
                 <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
@@ -1058,9 +1044,7 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
 
               {String(comentarioFinal || "").trim() ? (
                 <>
-                  <div style={{ fontWeight: 900, marginTop: 12, marginBottom: 6, opacity: 0.85 }}>
-                    Comentario final
-                  </div>
+                  <div style={{ fontWeight: 900, marginTop: 12, marginBottom: 6, opacity: 0.85 }}>Comentario final</div>
                   <div
                     style={{
                       whiteSpace: "pre-wrap",
@@ -1078,20 +1062,14 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
 
               {workerReport?.raw ? (
                 <>
-                  <div style={{ fontWeight: 900, marginTop: 12, marginBottom: 6, opacity: 0.85 }}>
-                    Reporte (raw)
-                  </div>
-                  <div style={{ whiteSpace: "pre-wrap", fontFamily: "monospace", fontSize: 12 }}>
-                    {workerReport.raw}
-                  </div>
+                  <div style={{ fontWeight: 900, marginTop: 12, marginBottom: 6, opacity: 0.85 }}>Reporte (raw)</div>
+                  <div style={{ whiteSpace: "pre-wrap", fontFamily: "monospace", fontSize: 12 }}>{workerReport.raw}</div>
                 </>
               ) : null}
             </Section>
           ) : (
             <Section title="Reporte del trabajador">
-              <div style={{ fontWeight: 900, opacity: 0.75 }}>
-                Aún no hay reporte completado por el trabajador.
-              </div>
+              <div style={{ fontWeight: 900, opacity: 0.75 }}>Aún no hay reporte completado por el trabajador.</div>
             </Section>
           )}
 

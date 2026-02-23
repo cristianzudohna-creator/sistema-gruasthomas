@@ -4,7 +4,15 @@ import "./Admin.css";
 import Modal from "../components/ui/Modal";
 import ConfirmModal from "../components/ui/ConfirmModal";
 
-const API_URL = "http://localhost:3000";
+// ✅ API dinámico
+const baseFromEnv = (import.meta?.env?.VITE_API_URL || "").trim();
+const baseFromHost =
+  typeof window !== "undefined"
+    ? `${window.location.protocol}//${window.location.host}/api`
+    : "";
+const API_URL = baseFromEnv || baseFromHost || "http://localhost:3000";
+// ⚠️ Si tu backend NO usa /api en prod, cambia a:
+// const baseFromHost = `${window.location.protocol}//${window.location.host}`;
 
 function getToken() {
   return localStorage.getItem("access_token") || localStorage.getItem("token") || "";
@@ -118,7 +126,7 @@ export default function WorkOrdersTrash() {
   const [restoring, setRestoring] = useState(false);
   const [restoreSuccessOpen, setRestoreSuccessOpen] = useState(false);
 
-  // ✅ Paginación (igual estilo admin)
+  // ✅ Paginación
   const [page, setPage] = useState(1);
   const pageSize = 25;
 
@@ -130,6 +138,8 @@ export default function WorkOrdersTrash() {
       if (!token) throw new Error("No hay token. Vuelve a iniciar sesión.");
 
       const res = await fetch(`${API_URL}/work-orders/deleted`, {
+        method: "GET",
+        credentials: "include", // ✅ ESTÁNDAR
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -188,10 +198,12 @@ export default function WorkOrdersTrash() {
 
       const res = await fetch(`${API_URL}/work-orders/${detailTarget.id}/restore`, {
         method: "PATCH",
+        credentials: "include", // ✅ ESTÁNDAR
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
+        body: JSON.stringify({}),
       });
 
       if (!res.ok) {
@@ -253,18 +265,13 @@ export default function WorkOrdersTrash() {
     return filtered.slice(start, start + pageSize);
   }, [filtered, safePage]);
 
-  // =========================
-  // ✅ Render
-  // =========================
   return (
     <>
-      {/* Título estilo admin */}
       <div className="page-title">
         <h1>Órdenes eliminadas</h1>
         <p>Papelera • Solo SUPERADMIN • Restaurar órdenes</p>
       </div>
 
-      {/* 🔎 buscador */}
       <div className="topbar-search" style={{ marginBottom: 14 }}>
         <span className="search-ico" aria-hidden="true">
           🔎
@@ -320,7 +327,6 @@ export default function WorkOrdersTrash() {
           </div>
         )}
 
-        {/* ✅ TABLA SIMPLE: solo Empresa + Eliminada + Acción */}
         <div className="table-wrap no-inner-scroll">
           <table className="table">
             <thead>
@@ -393,7 +399,6 @@ export default function WorkOrdersTrash() {
           </table>
         </div>
 
-        {/* Paginación */}
         <div className="panel-foot">
           <span className="muted">
             Mostrando {(safePage - 1) * pageSize + (paged.length ? 1 : 0)}–{(safePage - 1) * pageSize + paged.length} de{" "}
@@ -430,9 +435,7 @@ export default function WorkOrdersTrash() {
         </div>
       </div>
 
-      {/* =========================
-          ✅ MODAL DETALLE (como tu 1ª foto)
-         ========================= */}
+      {/* ✅ MODAL DETALLE */}
       <Modal
         open={detailOpen}
         onClose={() => {
@@ -471,7 +474,6 @@ export default function WorkOrdersTrash() {
       >
         {detailTarget ? (
           <div style={{ display: "grid", gap: 14 }}>
-            {/* ✅ Card superior resumen */}
             <div
               style={{
                 border: "1px solid rgba(0,0,0,.10)",
@@ -506,20 +508,16 @@ export default function WorkOrdersTrash() {
               <div style={{ flex: 1, minWidth: 260 }}>
                 <div style={{ fontWeight: 950, fontSize: 18, lineHeight: 1.2 }}>
                   {detailTarget?.titulo || "OT"}{" "}
-                  <span style={{ opacity: 0.6, fontWeight: 900 }}>
-                    • {String(detailTarget?.id || "").slice(0, 8)}
-                  </span>
+                  <span style={{ opacity: 0.6, fontWeight: 900 }}>• {String(detailTarget?.id || "").slice(0, 8)}</span>
                 </div>
 
                 <div style={{ marginTop: 6, color: "rgba(0,0,0,.75)", lineHeight: 1.35 }}>
-                  {empresaLabel(detailTarget?.empresa)} •{" "}
-                  {detailTarget?.cliente || detailTarget?.lugar || "—"} •{" "}
+                  {empresaLabel(detailTarget?.empresa)} • {detailTarget?.cliente || detailTarget?.lugar || "—"} •{" "}
                   <b>RUT:</b> {detailTarget?.rut || "—"}
                 </div>
               </div>
             </div>
 
-            {/* ✅ Grid 2 columnas como la 1ª foto */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
               <CardBox title="Cliente">
                 <FieldRow label="Nombre" value={detailTarget?.cliente || "—"} />
@@ -553,7 +551,6 @@ export default function WorkOrdersTrash() {
         )}
       </Modal>
 
-      {/* ✅ Confirm restaurar */}
       <ConfirmModal
         open={restoreConfirmOpen}
         title="¿Restaurar esta OT?"
@@ -577,7 +574,6 @@ export default function WorkOrdersTrash() {
         loading={restoring}
       />
 
-      {/* ✅ Modal éxito */}
       <Modal
         open={restoreSuccessOpen}
         onClose={() => setRestoreSuccessOpen(false)}

@@ -2,7 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import Modal from "../components/ui/Modal";
 import { getToken, getUser, logout } from "../auth/auth";
 
-const API_URL = "http://localhost:3000";
+function getApiUrl() {
+  const env = (import.meta && import.meta.env && import.meta.env.VITE_API_URL) || "";
+  if (env && String(env).trim()) return String(env).replace(/\/$/, "");
+  return `${window.location.protocol}//${window.location.host}`;
+}
+const API_URL = getApiUrl();
 
 function authHeaders() {
   const token = getToken();
@@ -69,18 +74,14 @@ export default function TrabajadorModal({ open, onClose, onSaved, trabajador }) 
     return base;
   }, [isMeSuperadmin]);
 
-  // ✅ Tipos de trabajador (según tu lista)
   const WORKER_TYPE_OPTIONS = useMemo(
     () => [
       { value: "", label: "Selecciona tipo (opcional)" },
-
-      // existentes
       { value: "CONDUCTOR", label: "Conductor" },
       { value: "OPERADOR", label: "Operador" },
       { value: "RIGGER", label: "Rigger" },
       { value: "MECANICO", label: "Mecánico" },
 
-      // nuevos
       { value: "ADMINISTRACION", label: "Administración" },
       { value: "ASEO", label: "Aseo" },
       { value: "AYUDANTE_DE_MECANICO", label: "Ayudante de mecánico" },
@@ -104,13 +105,8 @@ export default function TrabajadorModal({ open, onClose, onSaved, trabajador }) 
     rut: "",
     role: "TRABAJADOR",
     activo: true,
-
-    // empresa obligatoria para roles distintos de SUPERADMIN
-    empresa: "", // "" => null | "GRUAS_THOMAS" | "INSPROTEL"
-
-    // tipo trabajador (solo aplica a TRABAJADOR)
+    empresa: "",
     workerType: "",
-
     password: "",
   });
 
@@ -196,14 +192,12 @@ export default function TrabajadorModal({ open, onClose, onSaved, trabajador }) 
     const rut = form.rut.trim();
     if (rut && !isValidRutLike(rut)) e.rut = "RUT no tiene un formato válido.";
 
-    // Empresa obligatoria para cualquier rol distinto de SUPERADMIN
     if (requiresEmpresa) {
       if (!form.empresa) e.empresa = "Debes seleccionar una empresa.";
     } else {
       if (form.empresa) e.empresa = "SUPERADMIN no debe tener empresa.";
     }
 
-    // workerType: solo aplica a TRABAJADOR (opcional)
     if (!isTrabajadorRole) {
       if (form.workerType) e.workerType = "Este rol no debe tener tipo de trabajador.";
     }
@@ -252,7 +246,6 @@ export default function TrabajadorModal({ open, onClose, onSaved, trabajador }) 
         activo: form.activo,
 
         empresa: isSuperadmin ? null : form.empresa ? form.empresa : null,
-
         workerType: isTrabajadorRole ? (form.workerType ? form.workerType : null) : null,
 
         ...(form.password ? { password: form.password } : {}),
@@ -264,6 +257,7 @@ export default function TrabajadorModal({ open, onClose, onSaved, trabajador }) 
       const res = await fetch(url, {
         method,
         headers: authHeaders(),
+        credentials: "include",
         body: JSON.stringify(payload),
       });
 
@@ -290,8 +284,16 @@ export default function TrabajadorModal({ open, onClose, onSaved, trabajador }) 
   // =========================
   // ✅ RESET PASSWORD ACTION
   // =========================
+  const manualPwdTrim = manualNewPassword.trim();
+  const manualPwdInvalid = manualPwdTrim.length > 0 && manualPwdTrim.length < 8;
+
   async function doResetPassword() {
     if (!trabajador?.id) return;
+
+    if (manualPwdInvalid) {
+      setResetError("La nueva contraseña debe tener mínimo 8 caracteres (o deja vacío para generar temporal).");
+      return;
+    }
 
     setResetLoading(true);
     setResetError("");
@@ -299,14 +301,12 @@ export default function TrabajadorModal({ open, onClose, onSaved, trabajador }) 
     setCopied(false);
 
     try {
-      const body =
-        manualNewPassword.trim().length > 0
-          ? { newPassword: manualNewPassword.trim() }
-          : {};
+      const body = manualPwdTrim.length > 0 ? { newPassword: manualPwdTrim } : {};
 
       const res = await fetch(`${API_URL}/users/${trabajador.id}/reset-password`, {
         method: "PATCH",
         headers: authHeaders(),
+        credentials: "include",
         body: JSON.stringify(body),
       });
 
@@ -321,7 +321,7 @@ export default function TrabajadorModal({ open, onClose, onSaved, trabajador }) 
         throw new Error(msg || "Error al resetear contraseña");
       }
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       const temp = data?.tempPassword || "";
       setTempPassword(temp);
     } catch (e) {
@@ -338,7 +338,7 @@ export default function TrabajadorModal({ open, onClose, onSaved, trabajador }) 
       setCopied(true);
       setTimeout(() => setCopied(false), 1200);
     } catch {
-      // fallback: nada
+      // noop
     }
   }
 
@@ -347,7 +347,6 @@ export default function TrabajadorModal({ open, onClose, onSaved, trabajador }) 
 
   const footer = (
     <>
-      {/* ✅ Botón reset clave (solo SUPERADMIN + solo edición + no a sí mismo) */}
       {isEdit && isMeSuperadmin ? (
         <button
           className="gt-btn ghost danger"
@@ -481,9 +480,7 @@ export default function TrabajadorModal({ open, onClose, onSaved, trabajador }) 
             </select>
 
             {touched.workerType && errors.workerType ? (
-              <div style={{ color: "#b91c1c", fontSize: 12, fontWeight: 800, marginTop: 4 }}>
-                {errors.workerType}
-              </div>
+              <div style={{ color: "#b91c1c", fontSize: 12, fontWeight: 800, marginTop: 4 }}>{errors.workerType}</div>
             ) : null}
           </div>
 
@@ -503,9 +500,7 @@ export default function TrabajadorModal({ open, onClose, onSaved, trabajador }) 
             </select>
 
             {touched.empresa && errors.empresa ? (
-              <div style={{ color: "#b91c1c", fontSize: 12, fontWeight: 800, marginTop: 4 }}>
-                {errors.empresa}
-              </div>
+              <div style={{ color: "#b91c1c", fontSize: 12, fontWeight: 800, marginTop: 4 }}>{errors.empresa}</div>
             ) : null}
           </div>
 
@@ -534,9 +529,7 @@ export default function TrabajadorModal({ open, onClose, onSaved, trabajador }) 
               onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))}
             />
             {touched.password && errors.password ? (
-              <div style={{ color: "#b91c1c", fontSize: 12, fontWeight: 800, marginTop: 4 }}>
-                {errors.password}
-              </div>
+              <div style={{ color: "#b91c1c", fontSize: 12, fontWeight: 800, marginTop: 4 }}>{errors.password}</div>
             ) : null}
           </div>
         </form>
@@ -559,11 +552,17 @@ export default function TrabajadorModal({ open, onClose, onSaved, trabajador }) 
               className="gt-btn gt-btn-primary"
               type="button"
               onClick={doResetPassword}
-              disabled={resetLoading || isEditingMyself}
-              title={isEditingMyself ? "No permitido resetear tu propia clave." : ""}
+              disabled={resetLoading || isEditingMyself || manualPwdInvalid}
+              title={
+                isEditingMyself
+                  ? "No permitido resetear tu propia clave."
+                  : manualPwdInvalid
+                  ? "La contraseña debe tener mínimo 8 caracteres."
+                  : ""
+              }
               style={{
-                opacity: isEditingMyself ? 0.55 : 1,
-                cursor: isEditingMyself ? "not-allowed" : "pointer",
+                opacity: isEditingMyself || manualPwdInvalid ? 0.55 : 1,
+                cursor: isEditingMyself || manualPwdInvalid ? "not-allowed" : "pointer",
               }}
             >
               {resetLoading ? "Reseteando..." : "Resetear"}
@@ -586,21 +585,26 @@ export default function TrabajadorModal({ open, onClose, onSaved, trabajador }) 
             value={manualNewPassword}
             disabled={resetLoading}
             onChange={(e) => setManualNewPassword(e.target.value)}
+            style={
+              manualPwdInvalid
+                ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220,38,38,.15)" }
+                : undefined
+            }
           />
           <div style={{ fontSize: 12, opacity: 0.75, marginTop: 6 }}>
             Si dejas vacío, el sistema generará una contraseña temporal. Si escribes una, debe tener mínimo 8 caracteres.
           </div>
+          {manualPwdInvalid ? (
+            <div style={{ color: "#b91c1c", fontSize: 12, fontWeight: 800, marginTop: 6 }}>
+              Mínimo 8 caracteres.
+            </div>
+          ) : null}
         </div>
 
         <div className="gt-field">
           <label>Contraseña temporal generada</label>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <input
-              className="gt-input"
-              value={tempPassword || ""}
-              readOnly
-              placeholder="Presiona Resetear para obtenerla"
-            />
+            <input className="gt-input" value={tempPassword || ""} readOnly placeholder="Presiona Resetear para obtenerla" />
             <button
               className="gt-btn ghost"
               type="button"
@@ -635,9 +639,7 @@ function Field({ label, value, onChange, onBlur, placeholder, error, disabled })
         placeholder={placeholder}
         disabled={disabled}
       />
-      {error ? (
-        <div style={{ color: "#b91c1c", fontSize: 12, fontWeight: 800, marginTop: 4 }}>{error}</div>
-      ) : null}
+      {error ? <div style={{ color: "#b91c1c", fontSize: 12, fontWeight: 800, marginTop: 4 }}>{error}</div> : null}
     </div>
   );
 }
