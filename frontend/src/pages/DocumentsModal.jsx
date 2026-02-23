@@ -213,6 +213,20 @@ function menuItemStyle(op) {
 }
 
 /* =========================
+   Labels para tipos (ENUM -> texto bonito)
+   ✅ Esto arregla Revisi�n / circulaci�n / gr�a etc. (en ESTE modal)
+   ========================= */
+const DOCUMENT_TYPE_LABELS = {
+  SOAP: "SOAP",
+  REVISION_TECNICA: "Revisión técnica",
+  PERMISO_CIRCULACION: "Permiso de circulación",
+  SEGURO: "Seguro",
+  PRIMERA_INSCRIPCION: "Primera inscripción",
+  CERTIFICADO_GRUA: "Certificado de grúa",
+  OTRO: "Otro",
+};
+
+/* =========================
    DocumentsModal
    ========================= */
 export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
@@ -295,10 +309,15 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
     return `${base}${path}`;
   }
 
+  // ✅ AQUÍ se arreglan los nombres que se ven en la tabla y modales
   function displayTipo(doc) {
     if (!doc) return "-";
-    if (doc.type === "OTRO") return doc.nombre || "OTRO";
-    return doc.type || "-";
+
+    // OTRO => muestra el nombre escrito por el usuario
+    if (doc.type === "OTRO") return (doc.nombre || "Otro").trim();
+
+    const key = String(doc.type || "").trim();
+    return DOCUMENT_TYPE_LABELS[key] || key || "-";
   }
 
   function displayVence(doc) {

@@ -19,6 +19,45 @@ const API_URL =
   import.meta.env.VITE_API_URL ||
   `${window.location.protocol}//${window.location.hostname}:3000`;
 
+/* =========================
+   ✅ FIX: Tipo de vehículo (texto bonito + arregla caracteres rotos)
+   - Ej: "Cami|n" / "Cami�n" => "Camión"
+   ========================= */
+const VEHICLE_TYPE_LABELS = {
+  CAMION: "Camión",
+  CAMIONETA: "Camioneta",
+  GRUA: "Grúa",
+  GRUA_HORQUILLA: "Grúa horquilla",
+  TRACTO: "Tracto",
+  REMOLQUE: "Remolque",
+  SEMIRREMOLQUE: "Semirremolque",
+  AUTO: "Auto",
+  BUS: "Bus",
+  OTRO: "Otro",
+};
+
+function normalizeVehicleTypeKey(raw) {
+  const s0 = String(raw ?? "").trim();
+  if (!s0) return "";
+
+  // arreglos típicos cuando un encoding se rompe
+  const fixed = s0
+    .replace(/[�|]/g, "o") // "Cami|n" -> "Camion"
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // quita tildes => CAMION
+  const noDiacritics = fixed.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  return noDiacritics.toUpperCase();
+}
+
+function displayTipoVehiculo(value) {
+  const key = normalizeVehicleTypeKey(value);
+  if (!key) return "-";
+  return VEHICLE_TYPE_LABELS[key] || String(value);
+}
+
 /** ✅ Botón consistente y visible (evita que el CSS lo “aplane” o lo deje invisible) */
 function ActionButton({ variant = "ghost", className = "", style = {}, ...props }) {
   const base = {
@@ -768,7 +807,7 @@ export default function Camiones() {
       Patente: v.patente || "",
       Marca: v.marca || "",
       Modelo: v.modelo || "",
-      "Tipo de vehículo": v.tipoVehiculo || "",
+      "Tipo de vehículo": displayTipoVehiculo(v.tipoVehiculo || ""), // ✅ FIX
     }));
   }
 
@@ -1242,7 +1281,11 @@ export default function Camiones() {
                     </td>
 
                     <td title={marcaModelo}>{marcaModelo}</td>
-                    <td>{t.tipoVehiculo || "-"}</td>
+
+                    {/* ✅ FIX AQUÍ */}
+                    <td title={displayTipoVehiculo(t.tipoVehiculo || "")}>
+                      {displayTipoVehiculo(t.tipoVehiculo || "")}
+                    </td>
 
                     <td>
                       <SmallStatusPill estado={docs.estado} label={docs.label} title="Estado de documentos según vencimientos" />
@@ -1790,7 +1833,6 @@ function SmallStatusPill({ estado, label, title }) {
     </span>
   );
 }
-
 
 
 
