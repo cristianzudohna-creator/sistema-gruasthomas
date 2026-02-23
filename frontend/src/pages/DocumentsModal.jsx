@@ -241,6 +241,21 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [toDelete, setToDelete] = useState(null);
 
+  // ✅ RESPONSIVE: ancho modal según viewport (tablet/celular)
+  const [modalWidth, setModalWidth] = useState(980);
+  useEffect(() => {
+    function compute() {
+      const w = window.innerWidth || 1200;
+      // 980 desktop, 900 tablet, 96vw móvil
+      if (w >= 1100) return setModalWidth(980);
+      if (w >= 900) return setModalWidth(900);
+      setModalWidth(Math.max(320, Math.floor(w * 0.96)));
+    }
+    compute();
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+  }, []);
+
   function resetForm() {
     setNombre("");
     setSinVencimiento(false);
@@ -602,16 +617,18 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
 
   const deleteResumen = useMemo(() => {
     const tipo = toDelete ? displayTipo(toDelete) : "-";
-    const vence = toDelete?.fechaVencimiento ? String(toDelete.fechaVencimiento).slice(0, 10) : "Este documento no tiene fecha de vencimiento";
+    const vence = toDelete?.fechaVencimiento
+      ? String(toDelete.fechaVencimiento).slice(0, 10)
+      : "Este documento no tiene fecha de vencimiento";
     const archivo = toDelete?.archivoUrl ? "Con archivo" : "Sin archivo";
     return { tipo, vence, archivo };
   }, [toDelete]);
 
   return (
     <>
-      <Modal open={open} onClose={onClose} title={title} subtitle={subtitle} width={980} footer={footer}>
+      <Modal open={open} onClose={onClose} title={title} subtitle={subtitle} width={modalWidth} footer={footer}>
         {!isFormOpen && (
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
             <button className="gt-btn ghost" type="button" onClick={fetchDocs} disabled={loading || saving}>
               {loading ? "Cargando..." : "Refrescar"}
             </button>
@@ -720,7 +737,8 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
                   />
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                {/* ✅ Botonera responsive: en móvil queda 1 columna */}
+                <div className="docs-form-actions">
                   <button className="gt-btn ghost" type="button" onClick={closeForm} disabled={saving}>
                     Cancelar
                   </button>
@@ -742,14 +760,16 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
               </div>
             )}
 
-            <div className="gt-table-wrap gt-docs-wrap">
-              <table className="gt-table gt-docs-table" style={{ width: "100%", tableLayout: "fixed" }}>
+            <div className="gt-docs-wrap">
+              <table className="gt-docs-table" style={{ width: "100%" }}>
                 <thead>
                   <tr>
-                    <th style={{ textAlign: "left" }}>Tipo</th>
-                    <th style={{ width: 300 }}>Vence</th>
-                    <th style={{ width: 140 }}>Estado</th>
-                    <th style={{ width: 110 }}>Acciones</th>
+                    <th className="col-tipo" style={{ textAlign: "left" }}>
+                      Tipo
+                    </th>
+                    <th className="col-vence">Vence</th>
+                    <th className="col-estado">Estado</th>
+                    <th className="col-actions">Acciones</th>
                   </tr>
                 </thead>
 
@@ -761,29 +781,21 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
 
                       return (
                         <tr key={d.id}>
-                          <td
-                            style={{
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                              maxWidth: 0,
-                            }}
-                            title={displayTipo(d)}
-                          >
+                          <td className="col-tipo" title={displayTipo(d)}>
                             {displayTipo(d)}
                           </td>
 
-                          <td style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={vence}>
+                          <td className="col-vence" title={vence}>
                             {vence}
                           </td>
 
-                          <td style={{ whiteSpace: "nowrap" }}>
+                          <td className="col-estado">
                             <span className={pillClass(d.estado)} title={d.observacion || ""}>
                               {pillLabel(d.estado)}
                             </span>
                           </td>
 
-                          <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                          <td className="col-actions">
                             <ActionsMenu
                               disabled={saving}
                               options={[

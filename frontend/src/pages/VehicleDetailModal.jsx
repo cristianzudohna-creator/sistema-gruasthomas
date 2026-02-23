@@ -1,4 +1,5 @@
-// ✅ Archivo: src/pages/VehicleDetailModal.jsx
+// ✅ Archivo: src/pages/VehicleDetailModal.jsx (COMPLETO - acciones 2 columnas + estado operativo visible)
+
 export default function VehicleDetailModal({
   open,
   vehicle,
@@ -12,53 +13,63 @@ export default function VehicleDetailModal({
 }) {
   if (!open || !vehicle) return null;
 
+  const op = String(vehicle.estadoOperativo || "OPERATIVO").toUpperCase();
+  const opLabel = op === "EN_PANA" ? "En pana" : op === "PARADO" ? "Parado" : "Operativo";
+  const opCls = op === "OPERATIVO" ? "status ok" : op === "EN_PANA" ? "status warn" : "status danger";
+
+  const marcaModelo = `${vehicle.marca || ""} ${vehicle.modelo || ""}`.trim() || "-";
+
   return (
     <div className="vdetail-overlay" onMouseDown={onClose}>
-      <div
-        className="vdetail-modal"
-        role="dialog"
-        aria-modal="true"
-        onMouseDown={(e) => e.stopPropagation()}
-      >
+      <div className="vdetail-modal" role="dialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
         <div className="vdetail-head">
-          <div>
-            <h3>Detalle del vehículo</h3>
+          <div style={{ minWidth: 0 }}>
+            <h3 style={{ marginBottom: 6 }}>Detalle del vehículo</h3>
 
-            {/* ✅ NUEVO: título destacado (patente + marca/modelo) */}
+            {/* ✅ Título destacado + estado operativo */}
             <div
               style={{
-                fontSize: 18,
-                fontWeight: 900,
-                marginTop: 4,
                 display: "flex",
                 alignItems: "center",
-                gap: 8,
+                gap: 10,
                 flexWrap: "wrap",
-                letterSpacing: 0.3,
+                minWidth: 0,
               }}
             >
               <span
                 style={{
                   background: "#f5b301",
                   padding: "4px 10px",
-                  borderRadius: 8,
+                  borderRadius: 10,
+                  fontWeight: 900,
+                  letterSpacing: 0.3,
+                  whiteSpace: "nowrap",
                 }}
               >
                 {vehicle.patente || "-"}
               </span>
 
-              <span style={{ fontWeight: 700 }}>
-                {(vehicle.marca || "")} {(vehicle.modelo || "")}
+              <span
+                style={{
+                  fontWeight: 800,
+                  opacity: 0.9,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  maxWidth: 420,
+                }}
+                title={marcaModelo}
+              >
+                {marcaModelo}
+              </span>
+
+              <span className={opCls} title="Estado operativo del vehículo" style={{ whiteSpace: "nowrap" }}>
+                {opLabel}
               </span>
             </div>
           </div>
 
-          <button
-            className="vdetail-x"
-            type="button"
-            onClick={onClose}
-            aria-label="Cerrar"
-          >
+          <button className="vdetail-x" type="button" onClick={onClose} aria-label="Cerrar">
             ✕
           </button>
         </div>
@@ -71,20 +82,18 @@ export default function VehicleDetailModal({
             <Field label="Modelo" value={vehicle.modelo || "-"} />
             <Field label="Año" value={vehicle.year || "-"} />
             <Field label="Tipo" value={vehicle.tipoVehiculo || "-"} />
+
             <Field
-              label="Estado"
-              value={`${estadoLabel(vehicle.estado)}${
-                vehicle.detalle ? ` • ${vehicle.detalle}` : ""
-              }`}
+              label="Estado (mantención)"
+              value={`${estadoLabel(vehicle.estado)}${vehicle.detalle ? ` • ${vehicle.detalle}` : ""}`}
               wide
             />
           </div>
         </div>
 
-        {/* ✅ Footer PRO */}
+        {/* ✅ Footer PRO: acciones 2 columnas */}
         <div className="vdetail-actions">
-          {/* Acciones rápidas */}
-          <div className="vdetail-actions-row vdetail-actions-top">
+          <div className="vdetail-actions-grid">
             <button className="btn ghost" type="button" onClick={onDocs}>
               📄 Documentos
             </button>
@@ -92,25 +101,17 @@ export default function VehicleDetailModal({
             <button className="btn ghost" type="button" onClick={onMaintenances}>
               🛠️ Mantenciones
             </button>
-          </div>
 
-          {/* Acciones principales */}
-          <div className="vdetail-actions-row vdetail-actions-main">
             <button className="btn" type="button" onClick={onEdit}>
               ✏️ Editar
             </button>
 
-            <button
-              className="btn ghost danger"
-              type="button"
-              onClick={onDelete}
-            >
+            <button className="btn ghost danger" type="button" onClick={onDelete}>
               🗑️ Eliminar
             </button>
           </div>
 
-          {/* Cerrar */}
-          <div className="vdetail-actions-row vdetail-actions-close">
+          <div className="vdetail-actions-close">
             <button className="btn ghost" type="button" onClick={onClose}>
               Cerrar
             </button>

@@ -8,10 +8,27 @@
   --gt-border: rgba(0, 0, 0, 0.08);
   --gt-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
   --radius: 14px;
+
+  /* ✅ nuevos tokens para responsive */
+  --sb-w: 280px;
+  --sb-w-mobile: min(80vw, 320px);
+  --content-pad: 18px;
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* ✅ mejor para mobile */
+html,
+body {
+  height: 100%;
+}
+
+img,
+svg {
+  max-width: 100%;
+  height: auto;
 }
 
 /* =========================
@@ -22,7 +39,7 @@
   min-height: 100vh;
   background: var(--gt-bg);
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: var(--sb-w) 1fr;
 }
 
 /* Sidebar */
@@ -37,6 +54,10 @@
   flex-direction: column;
   padding: 16px;
   overflow: auto; /* ✅ si el menú crece */
+
+  /* ✅ iOS safe area */
+  padding-top: calc(16px + env(safe-area-inset-top));
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
 }
 
 .sb-brand {
@@ -88,6 +109,7 @@
   gap: 10px;
   transition: transform 80ms ease, background 120ms ease, border-color 120ms ease;
 }
+
 .sb-item:hover {
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.14);
@@ -99,6 +121,12 @@
   background: rgba(245, 184, 0, 0.12);
   border-color: rgba(245, 184, 0, 0.35);
 }
+
+.sb-item:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(245, 184, 0, 0.25);
+}
+
 .sb-ico {
   width: 20px;
   text-align: center;
@@ -135,6 +163,11 @@
   background: rgba(255, 255, 255, 0.06);
 }
 
+.sb-logout:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(245, 184, 0, 0.25);
+}
+
 .sb-small {
   font-size: 12px;
   opacity: 0.65;
@@ -155,10 +188,13 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 18px;
+  padding: 0 var(--content-pad);
   position: sticky;
   top: 0;
   z-index: 5;
+
+  /* ✅ iOS safe area */
+  padding-top: env(safe-area-inset-top);
 }
 
 .icon-btn {
@@ -168,6 +204,10 @@
   border-radius: 12px;
   padding: 8px 10px;
   cursor: pointer;
+}
+.icon-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(245, 184, 0, 0.22);
 }
 
 .topbar-search {
@@ -179,12 +219,14 @@
   border-radius: 999px;
   padding: 10px 14px;
   background: #fff;
+  min-width: 0; /* ✅ permite shrink */
 }
 
 .search-input {
   border: none;
   outline: none;
   width: 100%;
+  min-width: 0;
   font-size: 14px;
   color: #111;
   background: transparent;
@@ -197,6 +239,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 .user-avatar {
   width: 36px;
@@ -221,7 +264,7 @@
 
 /* Content */
 .content {
-  padding: 18px;
+  padding: var(--content-pad);
   display: grid;
   gap: 16px;
 }
@@ -310,6 +353,7 @@
   border: 1px solid var(--gt-border);
   border-radius: var(--radius);
   box-shadow: var(--gt-shadow);
+  min-width: 0;
 }
 
 .panel-head {
@@ -319,6 +363,7 @@
   align-items: center;
   padding: 14px 14px;
   border-bottom: 1px solid var(--gt-border);
+  flex-wrap: wrap; /* ✅ no rompe en mobile */
 }
 
 .panel-head h2 {
@@ -348,6 +393,10 @@
 }
 .btn:active {
   transform: translateY(1px);
+}
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(245, 184, 0, 0.25);
 }
 
 .btn.ghost {
@@ -385,6 +434,7 @@
 .table-wrap {
   overflow-x: auto; /* ✅ si es muy ancha */
   overflow-y: visible; /* ✅ sin scroll vertical interno */
+  -webkit-overflow-scrolling: touch;
 }
 
 .table {
@@ -468,6 +518,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .muted {
@@ -602,6 +654,10 @@
   cursor: pointer;
   font-weight: 900;
 }
+.gt-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(245, 184, 0, 0.22);
+}
 
 .gt-btn-primary {
   border: none;
@@ -655,6 +711,9 @@
   border: 1px solid rgba(0, 0, 0, 0.1);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
   overflow: hidden;
+  max-height: calc(100dvh - 36px);
+  display: flex;
+  flex-direction: column;
 }
 
 .vdetail-head {
@@ -686,9 +745,15 @@
   height: 38px;
   cursor: pointer;
 }
+.vdetail-x:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(245, 184, 0, 0.22);
+}
 
 .vdetail-body {
   padding: 16px 18px 8px;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .vdetail-grid {
@@ -779,6 +844,13 @@
   display: none;
 }
 
+@media (max-width: 1100px) {
+  /* ✅ tablet: cards 2 columnas */
+  .cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 960px) {
   .admin-layout {
     grid-template-columns: 1fr;
@@ -791,7 +863,7 @@
     transform: translateX(-105%);
     transition: transform 180ms ease;
     z-index: 50;
-    width: 280px;
+    width: var(--sb-w-mobile);
   }
 
   .admin-sidebar.open {
@@ -827,11 +899,24 @@
   .table {
     min-width: 680px;
   }
+
+  /* ✅ topbar en mobile: evita que el user “explote” */
+  .user-name {
+    display: none;
+  }
 }
 
 @media (max-width: 560px) {
+  :root {
+    --content-pad: 14px;
+  }
+
   .gt-btn {
     padding: 10px 10px;
+  }
+
+  .table {
+    min-width: 620px;
   }
 }
 
@@ -1179,6 +1264,7 @@ details.gt-actions summary::-webkit-details-marker {
 
 .gt-docs-wrap {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .gt-docs-table {
@@ -1189,7 +1275,7 @@ details.gt-actions summary::-webkit-details-marker {
 /* Reset controlado solo para esta tabla */
 .gt-docs-table th,
 .gt-docs-table td {
-  white-space: nowrap; /* mantenemos ordenado */
+  white-space: nowrap;
   vertical-align: middle;
 }
 
@@ -1197,11 +1283,9 @@ details.gt-actions summary::-webkit-details-marker {
 .gt-docs-table .col-vence {
   width: 130px;
 }
-
 .gt-docs-table .col-estado {
   width: 140px;
 }
-
 .gt-docs-table .col-actions {
   width: 110px;
   text-align: right;
@@ -1214,33 +1298,26 @@ details.gt-actions summary::-webkit-details-marker {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 0; /* ✅ necesario con table-layout: fixed */
+  max-width: 0;
 }
 
 /* Asegura que el menú ⋮ quede por encima del modal */
 .gt-docs-table .gt-actions {
   position: relative;
 }
-
 .gt-docs-table .gt-actions-menu {
   z-index: 9999999;
 }
-
-/* ================================
-   AJUSTE FINO – DocumentosModal
-   ================================ */
 
 /* Centrar columnas chicas */
 .gt-docs-table th.col-vence,
 .gt-docs-table td:nth-child(2) {
   text-align: center;
 }
-
 .gt-docs-table th.col-estado,
 .gt-docs-table td:nth-child(3) {
   text-align: center;
 }
-
 .gt-docs-table th.col-actions,
 .gt-docs-table td:nth-child(4) {
   text-align: center;
@@ -1305,7 +1382,7 @@ details.gt-actions summary::-webkit-details-marker {
 
 .wo-new {
   height: 40px;
-  width: auto !important; /* ✅ evita que se estire */
+  width: auto !important;
   min-width: 160px;
   white-space: nowrap;
   display: inline-flex;
@@ -1315,7 +1392,6 @@ details.gt-actions summary::-webkit-details-marker {
 
 /* =========================
    CreateWorkOrderModal (OT)
-   SIN duplicados
    ========================= */
 
 .ot-box {
@@ -1356,6 +1432,7 @@ details.gt-actions summary::-webkit-details-marker {
     grid-template-columns: 1fr;
   }
 }
+
 .gt-input-error {
   border-color: #ef4444 !important;
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18) !important;
@@ -1369,7 +1446,6 @@ details.gt-actions summary::-webkit-details-marker {
 
 /* ==================================================
    ✅ NUEVO: Vista Trabajador - Órdenes (tw-*)
-   NO rompe Admin, NO rompe Portal
    ================================================== */
 
 .tw-page {
@@ -1414,7 +1490,7 @@ details.gt-actions summary::-webkit-details-marker {
   justify-content: flex-end;
 }
 
-/* 🔥 clave: en la vista trabajador NO queremos botones gigantes */
+/* clave: en la vista trabajador NO queremos botones gigantes */
 .tw-actions .btn,
 .tw-actions .gt-btn {
   min-width: 0 !important;
@@ -1508,11 +1584,10 @@ details.gt-actions summary::-webkit-details-marker {
 }
 
 /* ============================= */
-/* FORM INPUT STYLE GLOBAL FIX  */
-/* ✅ ARREGLADO: no pisar buscador topbar-search ni componentes específicos */
+/* FORM INPUT STYLE GLOBAL FIX   */
+/* ✅ más seguro: solo dentro de panel */
 /* ============================= */
 
-/* Solo inputs “de formulario” dentro de panel, NO la barra de búsqueda */
 .panel input:not(.search-input):not([type="checkbox"]):not([type="radio"]),
 .panel select,
 .panel textarea {
@@ -1529,7 +1604,12 @@ details.gt-actions summary::-webkit-details-marker {
   box-sizing: border-box;
 }
 
-/* Focus bonito como Camiones */
+.panel textarea {
+  height: auto;
+  min-height: 92px;
+  padding: 12px 14px;
+}
+
 .panel input:not(.search-input):not([type="checkbox"]):focus,
 .panel select:focus,
 .panel textarea:focus {
@@ -1537,7 +1617,6 @@ details.gt-actions summary::-webkit-details-marker {
   box-shadow: 0 0 0 3px rgba(245, 179, 1, 0.18);
 }
 
-/* Placeholder más suave */
 .panel input::placeholder,
 .panel textarea::placeholder {
   color: rgba(0, 0, 0, 0.45);
@@ -1545,7 +1624,7 @@ details.gt-actions summary::-webkit-details-marker {
 }
 
 /* =========================
-   Trabajadores - Filtros (grid pro)
+   Trabajadores - Filtros
    ========================= */
 
 .workers-filters {
@@ -1556,14 +1635,12 @@ details.gt-actions summary::-webkit-details-marker {
   grid-template-columns: minmax(260px, 1fr) 160px 220px 220px;
 }
 
-/* Que el buscador se vea igual de “caja” que los selects */
 .workers-filters .topbar-search {
   height: 46px;
   padding: 0 14px;
   border-radius: 14px;
 }
 
-/* Ajuste interno del input para que no se descuadre */
 .workers-filters .search-input {
   height: 44px;
 }
@@ -1580,23 +1657,23 @@ details.gt-actions summary::-webkit-details-marker {
     grid-template-columns: 1fr;
   }
 }
+
 /* =========================
    ✅ OVERRIDES DEFINITIVOS: Trabajadores filtros
-   (pegar al FINAL del Admin.css)
    ========================= */
 
-.workers-filters .topbar-search{
+.workers-filters .topbar-search {
   border-radius: 14px !important;
   height: 46px !important;
   padding: 0 14px !important;
 }
 
-.workers-filters .search-ico{
+.workers-filters .search-ico {
   display: inline-flex !important;
   align-items: center !important;
 }
 
-.workers-filters .search-input{
+.workers-filters .search-input {
   height: 46px !important;
   line-height: 46px !important;
   padding: 0 !important;
@@ -1604,10 +1681,91 @@ details.gt-actions summary::-webkit-details-marker {
 
 /* Asegura que los selects queden idénticos */
 .workers-filters select.gt-select,
-.workers-filters .gt-select{
+.workers-filters .gt-select {
   height: 46px !important;
   border-radius: 14px !important;
   padding: 0 14px !important;
+}
+/* =========================
+   Camiones: Cards 5 columnas (RESPONSIVE)
+   ========================= */
+.cards.cards-5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+/* en pantallas medianas: 2 columnas */
+@media (max-width: 1200px) {
+  .cards.cards-5 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* en móvil: 1 columna (y no lo pisa inline style) */
+@media (max-width: 960px) {
+  .cards.cards-5 {
+    grid-template-columns: 1fr;
+  }
+}
+/* ✅ DocumentsModal: acciones responsive */
+.docs-form-actions{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+@media (max-width: 640px){
+  .docs-form-actions{
+    grid-template-columns: 1fr;
+  }
+  .docs-form-actions .gt-btn{
+    width: 100%;
+  }
+}
+/* ✅ MaintenancesModal responsive */
+.maint-form-actions{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.gt-maint-wrap{
+  width: 100%;
+  overflow: hidden;
+}
+
+.gt-maint-table{
+  width: 100%;
+  table-layout: fixed;
+}
+
+.gt-maint-table .col-tipo{ width: 260px; }
+.gt-maint-table .col-realizada{ width: 150px; }
+.gt-maint-table .col-actions{ width: 120px; text-align: right; }
+.gt-maint-table .col-obs{ width: auto; }
+
+.maint-obs-mobile{
+  display: none;
+  margin-top: 8px;
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+@media (max-width: 640px){
+  .maint-form-actions{ grid-template-columns: 1fr; }
+  .maint-form-actions .gt-btn{ width: 100%; }
+
+  /* tabla -> vista “compacta” */
+  .gt-maint-table .col-obs{ display: none; }
+  .gt-maint-table .col-tipo{ width: auto; }
+  .gt-maint-table .col-realizada{ width: 120px; }
+  .gt-maint-table .col-actions{ width: 86px; }
+
+  .maint-obs-mobile{ display: block; }
+}
+@media (max-width: 640px){
+  .gt-btn{ height: 44px; }
 }
 
 

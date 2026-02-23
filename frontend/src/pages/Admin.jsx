@@ -1,7 +1,8 @@
-// ✅ Archivo: src/pages/Admin.jsx (COMPLETO - TOPBAR ARREGLADO - SIN DOCUMENTOS/ALERTAS)
-// ✅ NUEVO: Menú "Clientes" SOLO SUPERADMIN
+// ✅ Archivo: src/pages/Admin.jsx (COMPLETO - RESPONSIVE PRO)
+// ✅ Menú "Clientes" SOLO SUPERADMIN
+// ✅ Sidebar responsive (toggle, ESC, lock scroll, close on route change)
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useNavigate, useLocation, Link } from "react-router-dom";
 import "./Admin.css";
 
@@ -37,6 +38,7 @@ export default function Admin() {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const sidebarRef = useRef(null);
 
   // ✅ Logo desde /public
   const LOGO_SRC = "/logo-thomas.png";
@@ -91,7 +93,7 @@ export default function Admin() {
   // ✅ Papelera OT (solo SUPERADMIN)
   const canSeePapeleraOt = isSuperadmin;
 
-  // ✅ NUEVO: Clientes (solo SUPERADMIN)
+  // ✅ Clientes (solo SUPERADMIN)
   const canSeeClientes = isSuperadmin;
 
   // ✅ Detecta secciones (para active + breadcrumb)
@@ -101,13 +103,14 @@ export default function Admin() {
   const isCamionesEliminados = path.startsWith("/admin/camiones-eliminados");
 
   const isWorkOrders = path.startsWith("/admin/ordenes-trabajo");
-  const isWorkOrdersEliminados = path.startsWith("/admin/ordenes-trabajo-eliminadas");
+  const isWorkOrdersEliminados = path.startsWith(
+    "/admin/ordenes-trabajo-eliminadas"
+  );
 
   const isTrabajadores = path.startsWith("/admin/trabajadores");
   const isAuditoria = path.startsWith("/admin/auditoria");
   const isConfiguracion = path.startsWith("/admin/configuracion");
 
-  // ✅ NUEVO
   const isClientes = path.startsWith("/admin/clientes");
 
   // ✅ Etiqueta del rol para UI (bonita)
@@ -137,6 +140,40 @@ export default function Admin() {
     navigate("/admin/camiones", { replace: true });
   }, [path, isControlFlota, isAdministradora, navigate]);
 
+  // ✅ UX: cerrar sidebar cuando cambia la ruta
+  useEffect(() => {
+    setSidebarOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
+  // ✅ UX: si el sidebar está abierto, bloqueamos scroll (móvil)
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [sidebarOpen]);
+
+  // ✅ UX: cerrar con ESC
+  useEffect(() => {
+    function onKeyDown(e) {
+      if (e.key === "Escape") setSidebarOpen(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // ✅ UX: cuando abre sidebar, intenta enfocar el primer botón
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const el = sidebarRef.current;
+    if (!el) return;
+    const first = el.querySelector("button, a, [tabindex]:not([tabindex='-1'])");
+    if (first && typeof first.focus === "function") first.focus();
+  }, [sidebarOpen]);
+
   // ✅ Breadcrumb simple (Panel > Sección)
   function getSectionLabel() {
     if (isCamionesEliminados) return "Camiones eliminados";
@@ -145,7 +182,7 @@ export default function Admin() {
     if (isWorkOrdersEliminados) return "Órdenes eliminadas";
     if (isWorkOrders) return "Órdenes de trabajo";
 
-    if (isClientes) return "Clientes"; // ✅ NUEVO
+    if (isClientes) return "Clientes";
 
     if (isTrabajadores) return "Trabajadores";
     if (isAuditoria) return "Auditoría";
@@ -162,12 +199,18 @@ export default function Admin() {
       <div
         className={`admin-overlay ${sidebarOpen ? "show" : ""}`}
         onClick={() => setSidebarOpen(false)}
+        aria-hidden={!sidebarOpen}
       />
 
       {/* Sidebar */}
-      <aside className={`admin-sidebar ${sidebarOpen ? "open" : ""}`}>
+      <aside
+        ref={sidebarRef}
+        className={`admin-sidebar ${sidebarOpen ? "open" : ""}`}
+        aria-label="Menú de administración"
+        aria-hidden={!sidebarOpen ? undefined : undefined}
+        role={sidebarOpen ? "dialog" : undefined}
+      >
         <div className="sb-brand">
-          {/* ✅ Logo (bien escalado) */}
           <div
             className="sb-logo"
             aria-hidden="true"
@@ -197,15 +240,13 @@ export default function Admin() {
             />
           </div>
 
-          {/* ✅ Texto */}
           <div className="sb-brand-text">
             <div className="sb-title">Panel de Control</div>
             <div className="sb-subtitle">Grúas Thomas</div>
           </div>
         </div>
 
-        <nav className="sb-nav">
-          {/* Dashboard */}
+        <nav className="sb-nav" aria-label="Secciones">
           {canSeeDashboard ? (
             <button
               className={`sb-item ${isDashboard ? "active" : ""}`}
@@ -215,27 +256,31 @@ export default function Admin() {
                 navigate("/admin");
               }}
             >
-              <span className="sb-ico" aria-hidden="true">🏠</span>
+              <span className="sb-ico" aria-hidden="true">
+                🏠
+              </span>
               <span>Dashboard</span>
             </button>
           ) : null}
 
-          {/* Camiones */}
           {canSeeCamiones ? (
             <button
-              className={`sb-item ${isCamiones && !isCamionesEliminados ? "active" : ""}`}
+              className={`sb-item ${
+                isCamiones && !isCamionesEliminados ? "active" : ""
+              }`}
               type="button"
               onClick={() => {
                 setSidebarOpen(false);
                 navigate("/admin/camiones");
               }}
             >
-              <span className="sb-ico" aria-hidden="true">🚛</span>
+              <span className="sb-ico" aria-hidden="true">
+                🚛
+              </span>
               <span>Camiones</span>
             </button>
           ) : null}
 
-          {/* Papelera camiones */}
           {canSeePapelera ? (
             <button
               className={`sb-item ${isCamionesEliminados ? "active" : ""}`}
@@ -246,27 +291,31 @@ export default function Admin() {
               }}
               title="Papelera de camiones eliminados"
             >
-              <span className="sb-ico" aria-hidden="true">🗑️</span>
+              <span className="sb-ico" aria-hidden="true">
+                🗑️
+              </span>
               <span>Camiones eliminados</span>
             </button>
           ) : null}
 
-          {/* Órdenes de trabajo */}
           {canSeeWorkOrders ? (
             <button
-              className={`sb-item ${isWorkOrders && !isWorkOrdersEliminados ? "active" : ""}`}
+              className={`sb-item ${
+                isWorkOrders && !isWorkOrdersEliminados ? "active" : ""
+              }`}
               type="button"
               onClick={() => {
                 setSidebarOpen(false);
                 navigate("/admin/ordenes-trabajo");
               }}
             >
-              <span className="sb-ico" aria-hidden="true">🧾</span>
+              <span className="sb-ico" aria-hidden="true">
+                🧾
+              </span>
               <span>Órdenes de trabajo</span>
             </button>
           ) : null}
 
-          {/* Papelera OT */}
           {canSeePapeleraOt ? (
             <button
               className={`sb-item ${isWorkOrdersEliminados ? "active" : ""}`}
@@ -277,12 +326,13 @@ export default function Admin() {
               }}
               title="Papelera de órdenes de trabajo"
             >
-              <span className="sb-ico" aria-hidden="true">🗑️</span>
+              <span className="sb-ico" aria-hidden="true">
+                🗑️
+              </span>
               <span>Órdenes eliminadas</span>
             </button>
           ) : null}
 
-          {/* ✅ NUEVO: Clientes (SOLO SUPERADMIN) */}
           {canSeeClientes ? (
             <button
               className={`sb-item ${isClientes ? "active" : ""}`}
@@ -293,12 +343,13 @@ export default function Admin() {
               }}
               title="Administración de clientes (solo SUPERADMIN)"
             >
-              <span className="sb-ico" aria-hidden="true">🏢</span>
+              <span className="sb-ico" aria-hidden="true">
+                🏢
+              </span>
               <span>Clientes</span>
             </button>
           ) : null}
 
-          {/* Trabajadores */}
           {canSeeTrabajadores ? (
             <button
               className={`sb-item ${isTrabajadores ? "active" : ""}`}
@@ -308,12 +359,13 @@ export default function Admin() {
                 navigate("/admin/trabajadores");
               }}
             >
-              <span className="sb-ico" aria-hidden="true">🧑‍🔧</span>
+              <span className="sb-ico" aria-hidden="true">
+                🧑‍🔧
+              </span>
               <span>Trabajadores</span>
             </button>
           ) : null}
 
-          {/* Auditoría */}
           {canSeeAuditoria ? (
             <button
               className={`sb-item ${isAuditoria ? "active" : ""}`}
@@ -323,12 +375,13 @@ export default function Admin() {
                 navigate("/admin/auditoria");
               }}
             >
-              <span className="sb-ico" aria-hidden="true">🕵️</span>
+              <span className="sb-ico" aria-hidden="true">
+                🕵️
+              </span>
               <span>Auditoría</span>
             </button>
           ) : null}
 
-          {/* Configuración */}
           {canSeeConfiguracion ? (
             <button
               className={`sb-item ${isConfiguracion ? "active" : ""}`}
@@ -338,7 +391,9 @@ export default function Admin() {
                 navigate("/admin/configuracion");
               }}
             >
-              <span className="sb-ico" aria-hidden="true">⚙️</span>
+              <span className="sb-ico" aria-hidden="true">
+                ⚙️
+              </span>
               <span>Configuración</span>
             </button>
           ) : null}
@@ -348,7 +403,9 @@ export default function Admin() {
           <button className="sb-logout" type="button" onClick={logout}>
             Cerrar sesión
           </button>
-          <div className="sb-small">© {new Date().getFullYear()} Grúas Thomas</div>
+          <div className="sb-small">
+            © {new Date().getFullYear()} Grúas Thomas
+          </div>
         </div>
       </aside>
 
@@ -359,13 +416,13 @@ export default function Admin() {
           <button
             className="icon-btn"
             type="button"
-            onClick={() => setSidebarOpen(true)}
-            aria-label="Abrir menú"
+            onClick={() => setSidebarOpen((v) => !v)}
+            aria-label={sidebarOpen ? "Cerrar menú" : "Abrir menú"}
+            aria-expanded={sidebarOpen}
           >
             ☰
           </button>
 
-          {/* ✅ Breadcrumb */}
           <div
             className="topbar-breadcrumb"
             style={{

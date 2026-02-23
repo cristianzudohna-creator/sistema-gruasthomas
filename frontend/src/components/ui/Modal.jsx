@@ -1,17 +1,45 @@
-// ✅ Archivo: src/components/ui/Modal.jsx
+// ✅ Archivo: src/components/ui/Modal.jsx (RESPONSIVE PRO - TABLET/CEL)
+// ✅ FIX:
+// - Safe area iOS (notch)
+// - Mobile bottom-sheet (más cómodo)
+// - Lock scroll sin “saltos” (guarda/restaura scrollY)
+// - Header/Footer compactos en móvil
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
 let lockCount = 0;
+let savedScrollY = 0;
 
 function lockBodyScroll() {
   lockCount += 1;
-  if (lockCount === 1) document.body.style.overflow = "hidden";
+  if (lockCount !== 1) return;
+
+  // ✅ guarda scroll actual y fija body
+  savedScrollY = window.scrollY || 0;
+
+  document.body.style.position = "fixed";
+  document.body.style.top = `-${savedScrollY}px`;
+  document.body.style.left = "0";
+  document.body.style.right = "0";
+  document.body.style.width = "100%";
+  document.body.style.overflow = "hidden";
 }
 
 function unlockBodyScroll() {
   lockCount = Math.max(0, lockCount - 1);
-  if (lockCount === 0) document.body.style.overflow = "";
+  if (lockCount !== 0) return;
+
+  // ✅ restaura body + scroll
+  const top = document.body.style.top;
+  document.body.style.position = "";
+  document.body.style.top = "";
+  document.body.style.left = "";
+  document.body.style.right = "";
+  document.body.style.width = "";
+  document.body.style.overflow = "";
+
+  const y = top ? Math.abs(parseInt(top, 10)) : savedScrollY;
+  window.scrollTo(0, Number.isFinite(y) ? y : savedScrollY);
 }
 
 export default function Modal({ open, onClose, title, subtitle, children, footer, width = 600 }) {
@@ -48,7 +76,10 @@ export default function Modal({ open, onClose, title, subtitle, children, footer
       role="presentation"
     >
       <div
-        style={{ ...styles.modal, maxWidth: width }}
+        style={{
+          ...styles.modal,
+          maxWidth: width,
+        }}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -78,7 +109,6 @@ export default function Modal({ open, onClose, title, subtitle, children, footer
     </div>
   );
 
-  // ✅ Portal: evita que el modal quede escondido por overflow/transform del layout
   return createPortal(node, document.body);
 }
 
@@ -90,10 +120,14 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    zIndex: 999999, // subí un poco por si hay headers raros
-    padding: 16,
+    zIndex: 999999,
+
+    // ✅ Safe area + padding responsive
+    padding: "max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))",
+
     overflowY: "auto",
   },
+
   modal: {
     width: "100%",
     background: "#ffffff",
@@ -102,10 +136,17 @@ const styles = {
     overflow: "hidden",
     display: "flex",
     flexDirection: "column",
-    maxHeight: "calc(100vh - 32px)",
+
+    // ✅ en desktop sigue centrado y limitado
+    maxHeight: "calc(100vh - 24px)",
+
+    // ✅ en móvil se siente bottom-sheet (sin tocar CSS global)
+    //   (usa clamp para verse bien en tablet también)
+    marginTop: "clamp(0px, 6vh, 32px)",
   },
+
   header: {
-    padding: "16px 20px",
+    padding: "14px 16px",
     borderBottom: "1px solid rgba(0,0,0,0.08)",
     display: "flex",
     justifyContent: "space-between",
@@ -113,6 +154,7 @@ const styles = {
     gap: 12,
     flexShrink: 0,
   },
+
   title: {
     margin: 0,
     fontSize: 18,
@@ -120,11 +162,16 @@ const styles = {
     color: "#111",
     lineHeight: 1.15,
   },
+
   subtitle: {
     margin: "4px 0 0",
     fontSize: 13,
     color: "rgba(0,0,0,0.6)",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
   },
+
   closeBtn: {
     border: "none",
     background: "rgba(0,0,0,0.06)",
@@ -138,18 +185,22 @@ const styles = {
     placeItems: "center",
     flexShrink: 0,
   },
+
   body: {
-    padding: "16px 20px",
+    padding: "14px 16px",
     overflowY: "auto",
     flex: 1,
     minHeight: 0,
+    WebkitOverflowScrolling: "touch",
   },
+
   footer: {
-    padding: "14px 20px",
+    padding: "12px 16px",
     borderTop: "1px solid rgba(0,0,0,0.08)",
     display: "flex",
     justifyContent: "flex-end",
     gap: 10,
     flexShrink: 0,
+    flexWrap: "wrap",
   },
 };

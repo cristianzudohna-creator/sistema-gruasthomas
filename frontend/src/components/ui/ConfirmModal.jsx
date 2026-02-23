@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+// ✅ Archivo: src/components/ui/ConfirmModal.jsx (RESPONSIVE PRO)
 import Modal from "./Modal";
 
 /**
@@ -10,7 +10,7 @@ import Modal from "./Modal";
  * - description?: string | JSX
  * - confirmText?: string
  * - cancelText?: string
- * - danger?: boolean (estilo rojo si quieres)
+ * - danger?: boolean
  * - onConfirm: () => void | Promise<void>
  * - onClose: () => void
  * - loading?: boolean
@@ -26,26 +26,38 @@ export default function ConfirmModal({
   onClose,
   loading = false,
 }) {
-  // cerrar con ESC
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e) {
-      if (e.key === "Escape") onClose?.();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const subtitle = typeof description === "string" ? description : undefined;
+  const body = typeof description !== "string" ? description : null;
 
   return (
     <Modal
       open={open}
       onClose={() => !loading && onClose?.()}
       title={title}
-      subtitle={typeof description === "string" ? description : undefined}
+      subtitle={subtitle}
       width={560}
       footer={
-        <>
-          <button className="gt-btn" type="button" onClick={onClose} disabled={loading}>
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            justifyContent: "flex-end",
+            flexWrap: "wrap",
+            width: "100%",
+          }}
+        >
+          <button
+            className="gt-btn"
+            type="button"
+            onClick={() => !loading && onClose?.()}
+            disabled={loading}
+            style={{
+              // ✅ móvil: botón full
+              width: "min(100%, 220px)",
+              flex: "1 1 180px",
+              height: 44,
+            }}
+          >
             {cancelText}
           </button>
 
@@ -54,20 +66,21 @@ export default function ConfirmModal({
             type="button"
             onClick={onConfirm}
             disabled={loading}
-            style={
-              danger
-                ? { background: "#dc2626", borderColor: "#dc2626" }
-                : undefined
-            }
+            style={{
+              width: "min(100%, 260px)",
+              flex: "1 1 220px",
+              height: 44,
+              ...(danger ? { background: "#dc2626", borderColor: "#dc2626" } : null),
+            }}
           >
             {loading ? "Procesando..." : confirmText}
           </button>
-        </>
+        </div>
       }
     >
-      {typeof description !== "string" ? (
-        <div style={{ fontSize: 14, color: "rgba(0,0,0,.75)", lineHeight: 1.4 }}>
-          {description}
+      {body ? (
+        <div style={{ fontSize: 14, color: "rgba(0,0,0,.75)", lineHeight: 1.45 }}>
+          {body}
         </div>
       ) : null}
     </Modal>

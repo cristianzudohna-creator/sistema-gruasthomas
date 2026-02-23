@@ -1,3 +1,11 @@
+// ✅ Archivo: src/pages/MaintenancesModal.jsx (RESPONSIVE TABLET/CEL)
+// ✅ FIX:
+// - width responsive del modal
+// - tabla responsive (en móvil oculta Obs y la muestra debajo del Tipo)
+// - acciones siempre visibles
+// - botones del form responsive
+// - orden por fechaRealizada desc
+
 import { useEffect, useMemo, useState } from "react";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import Modal from "../components/ui/Modal";
@@ -30,6 +38,20 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  // ✅ responsive modal width
+  const [modalWidth, setModalWidth] = useState(1000);
+  useEffect(() => {
+    function compute() {
+      const w = window.innerWidth || 1200;
+      if (w >= 1100) return setModalWidth(1000);
+      if (w >= 900) return setModalWidth(920);
+      setModalWidth(Math.max(320, Math.floor(w * 0.96)));
+    }
+    compute();
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+  }, []);
 
   // modos: list / add / edit
   const [mode, setMode] = useState("list"); // "list" | "add" | "edit"
@@ -76,7 +98,16 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
       }
 
       const data = await res.json();
-      setItems(Array.isArray(data) ? data : []);
+      const arr = Array.isArray(data) ? data : [];
+
+      // ✅ orden por fecha realizada desc
+      arr.sort((a, b) => {
+        const da = new Date(a?.fechaRealizada || 0).getTime();
+        const db = new Date(b?.fechaRealizada || 0).getTime();
+        return db - da;
+      });
+
+      setItems(arr);
     } catch (e) {
       setError(e?.message || "Error al cargar mantenciones");
       setItems([]);
@@ -308,9 +339,9 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
 
   return (
     <>
-      <Modal open={open} onClose={onClose} title={title} subtitle={subtitle} width={1000} footer={footer}>
+      <Modal open={open} onClose={onClose} title={title} subtitle={subtitle} width={modalWidth} footer={footer}>
         {!isFormOpen && (
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
             <button className="gt-btn ghost" type="button" onClick={fetchMaintenances} disabled={loading || saving}>
               {loading ? "Cargando..." : "Refrescar"}
             </button>
@@ -391,24 +422,14 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
                   />
 
                   <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, fontSize: 13 }}>
-                    <input
-                      type="checkbox"
-                      checked={sinProxima}
-                      onChange={(e) => toggleSinProxima(e.target.checked)}
-                      disabled={saving}
-                    />
+                    <input type="checkbox" checked={sinProxima} onChange={(e) => toggleSinProxima(e.target.checked)} disabled={saving} />
                     Sin próxima mantención (vehículo parado / en pana)
                   </label>
                 </div>
 
                 <div className="gt-field" style={{ gridColumn: "1 / -1" }}>
                   <label>Observación</label>
-                  <input
-                    className="gt-input"
-                    value={form.observacion}
-                    onChange={(e) => setForm({ ...form, observacion: e.target.value })}
-                    disabled={saving}
-                  />
+                  <input className="gt-input" value={form.observacion} onChange={(e) => setForm({ ...form, observacion: e.target.value })} disabled={saving} />
                 </div>
 
                 {mode === "add" ? (
@@ -431,13 +452,12 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
                 ) : (
                   <div className="gt-field" style={{ gridColumn: "1 / -1" }}>
                     <label>Archivo</label>
-                    <div style={{ fontSize: 13, opacity: 0.85, paddingTop: 10 }}>
-                      Para cambiar el archivo, elimina esta mantención y crea una nueva.
-                    </div>
+                    <div style={{ fontSize: 13, opacity: 0.85, paddingTop: 10 }}>Para cambiar el archivo, elimina esta mantención y crea una nueva.</div>
                   </div>
                 )}
 
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                {/* ✅ Botonera responsive */}
+                <div className="maint-form-actions">
                   <button className="gt-btn ghost" type="button" onClick={cancelForm} disabled={saving}>
                     Cancelar
                   </button>
@@ -451,22 +471,24 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
           </div>
         )}
 
-        {/* ✅ LISTA (ORDENADA + SIN PROXIMA + CON ACCIONES VISIBLE) */}
+        {/* ✅ LISTA responsive */}
         {!isFormOpen && (
-          <div className="gt-table-wrap" style={{ overflowX: "hidden" }}>
-            <table
-              className="gt-table gt-maint-table"
-              style={{
-                width: "100%",
-                tableLayout: "fixed",
-              }}
-            >
+          <div className="gt-maint-wrap">
+            <table className="gt-maint-table" style={{ width: "100%" }}>
               <thead>
                 <tr>
-                  <th style={{ width: 240, textAlign: "left" }}>Tipo</th>
-                  <th style={{ width: 150, textAlign: "left" }}>Realizada</th>
-                  <th style={{ textAlign: "left" }}>Obs.</th>
-                  <th style={{ width: 120, textAlign: "right" }}>Acciones</th>
+                  <th className="col-tipo" style={{ textAlign: "left" }}>
+                    Tipo
+                  </th>
+                  <th className="col-realizada" style={{ textAlign: "left" }}>
+                    Realizada
+                  </th>
+                  <th className="col-obs" style={{ textAlign: "left" }}>
+                    Obs.
+                  </th>
+                  <th className="col-actions" style={{ textAlign: "right" }}>
+                    Acciones
+                  </th>
                 </tr>
               </thead>
 
@@ -478,22 +500,37 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
 
                   return (
                     <tr key={m.id}>
-                      <td
-                        className="mono"
-                        style={{
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                          maxWidth: 0,
-                        }}
-                        title={label}
-                      >
-                        {label}
+                      {/* ✅ Tipo + Obs (móvil) */}
+                      <td className="col-tipo" title={label}>
+                        <div className="maint-tipo-main">{label}</div>
+
+                        {/* 👇 en móvil mostramos la observación acá */}
+                        <div className="maint-obs-mobile">
+                          <div
+                            style={{
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: isExpanded ? "normal" : "nowrap",
+                              lineHeight: 1.35,
+                            }}
+                          >
+                            {(m.observacion || "").trim() ? m.observacion : "—"}
+                          </div>
+
+                          {(m.observacion || "").trim() && hasLongObs.get(m.id) && (
+                            <button type="button" className="gt-link" onClick={() => setExpandedId(isExpanded ? null : m.id)} style={{ marginTop: 6 }}>
+                              {isExpanded ? "Ver menos" : "Ver más"}
+                            </button>
+                          )}
+                        </div>
                       </td>
 
-                      <td style={{ whiteSpace: "nowrap" }}>{toDateInput(m.fechaRealizada) || "-"}</td>
+                      <td className="col-realizada" style={{ whiteSpace: "nowrap" }}>
+                        {toDateInput(m.fechaRealizada) || "-"}
+                      </td>
 
-                      <td style={{ overflow: "hidden" }}>
+                      {/* ✅ Obs desktop/tablet */}
+                      <td className="col-obs">
                         <div
                           style={{
                             overflow: "hidden",
@@ -502,23 +539,18 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
                             lineHeight: 1.35,
                           }}
                         >
-                          {m.observacion || "—"}
+                          {(m.observacion || "").trim() ? m.observacion : "—"}
                         </div>
 
-                        {m.observacion && hasLongObs.get(m.id) && (
-                          <button
-                            type="button"
-                            className="gt-link"
-                            onClick={() => setExpandedId(isExpanded ? null : m.id)}
-                            style={{ marginTop: 6 }}
-                          >
+                        {(m.observacion || "").trim() && hasLongObs.get(m.id) && (
+                          <button type="button" className="gt-link" onClick={() => setExpandedId(isExpanded ? null : m.id)} style={{ marginTop: 6 }}>
                             {isExpanded ? "Ver menos" : "Ver más"}
                           </button>
                         )}
                       </td>
 
-                      {/* ✅ ACCIONES (SIEMPRE A LA VISTA) */}
-                      <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      {/* ✅ Acciones */}
+                      <td className="col-actions" style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                         <div className="gt-actions-wrap" style={{ display: "inline-flex", justifyContent: "flex-end" }}>
                           <details className="gt-actions">
                             <summary className="gt-actions-btn" aria-label="Acciones" title="Acciones">
@@ -538,12 +570,7 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
                                 Editar
                               </button>
 
-                              <button
-                                className="gt-actions-item danger"
-                                type="button"
-                                onClick={() => askDelete(m)}
-                                disabled={saving}
-                              >
+                              <button className="gt-actions-item danger" type="button" onClick={() => askDelete(m)} disabled={saving}>
                                 Eliminar
                               </button>
                             </div>

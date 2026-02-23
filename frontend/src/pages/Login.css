@@ -5,8 +5,9 @@
 }
 
 .login-page {
-  position: fixed;
-  inset: 0;
+  /* ✅ Evita bugs de iOS/Safari con fixed + barra */
+  min-height: 100vh;
+  min-height: 100dvh;
   background:
     radial-gradient(1200px 400px at 20% -10%, rgba(245,184,0,.25), transparent 60%),
     radial-gradient(900px 350px at 90% 0%, rgba(0,0,0,.1), transparent 55%),
@@ -14,6 +15,7 @@
 }
 
 .login-shell {
+  min-height: 100vh;
   min-height: 100dvh;
   display: grid;
   place-items: center;
@@ -58,7 +60,7 @@
   max-width: 180px;
   object-fit: contain;
   display: block;
-  margin-left: 4px; /* ✅ para que no quede pegado */
+  margin-left: 4px;
 }
 
 .login-text {
@@ -113,6 +115,7 @@
   box-shadow: 0 0 0 3px rgba(245,184,0,.35);
 }
 
+/* ✅ Autofill (Chrome/Safari) */
 .login-card .input:-webkit-autofill {
   -webkit-text-fill-color: #0b0b0b !important;
   transition: background-color 9999s ease-in-out 0s;
@@ -122,6 +125,16 @@
   background: rgba(220,20,60,.08);
   border: 1px solid rgba(220,20,60,.25);
   color: #b00020;
+  padding: 10px 12px;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.success {
+  background: rgba(46, 125, 50, 0.10);
+  border: 1px solid rgba(46, 125, 50, 0.25);
+  color: #1b5e20;
   padding: 10px 12px;
   border-radius: 10px;
   margin-bottom: 12px;
@@ -147,6 +160,13 @@
   background: #e0aa00;
 }
 
+/* ✅ Focus accesible */
+.btn:focus-visible,
+.login-link:focus-visible {
+  outline: 3px solid rgba(245,184,0,.55);
+  outline-offset: 2px;
+}
+
 .login-footer {
   padding: 14px 22px 18px;
   border-top: 1px solid rgba(0,0,0,.06);
@@ -154,7 +174,24 @@
   color: rgba(0,0,0,.55);
 }
 
-/* ✅ Móvil: logo arriba y texto centrado (se ve muy bien en teléfono) */
+/* ✅ Tu JSX usa .login-actions */
+.login-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin: 8px 0 12px;
+}
+
+.login-link {
+  font-weight: 700;
+  text-decoration: none;
+  color: #2b6cff;
+}
+
+.login-link:hover {
+  text-decoration: underline;
+}
+
+/* ✅ Móvil */
 @media (max-width: 480px) {
   .login-shell {
     place-items: end center;
@@ -177,31 +214,20 @@
   .login-title {
     font-size: 20px;
   }
-}
-.login-links {
-  display: flex;
-  justify-content: flex-start;
-  margin: 8px 0 12px;
+
+  /* ✅ Evita zoom iOS */
+  .login-card .input {
+    font-size: 16px;
+  }
 }
 
-.login-link {
-  font-weight: 700;
-  text-decoration: none;
-  color: #2b6cff;
-}
-
-.login-link:hover {
-  text-decoration: underline;
-}
-
-.success {
-  background: rgba(46, 125, 50, 0.10);
-  border: 1px solid rgba(46, 125, 50, 0.25);
-  color: #1b5e20;
-  padding: 10px 12px;
-  border-radius: 10px;
-  margin-bottom: 12px;
-  font-size: 13px;
+/* ✅ Respeta usuarios que prefieren menos animación */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+    transition: none !important;
+    animation: none !important;
+  }
 }
 
 
