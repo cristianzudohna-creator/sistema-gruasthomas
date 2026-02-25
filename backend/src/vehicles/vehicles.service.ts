@@ -138,8 +138,10 @@ export class VehiclesService {
   // 🔒 SCOPING POR EMPRESA
   // ✅ MÓDULO CAMIONES: SOLO SUPERADMIN + CONTROL_FLOTA (FULL)
   // ======================
+
+  // ✅ FIX CLAVE: trim() + uppercase real
   private roleUpper(actor?: ActorLike) {
-    return String(actor?.role || "").toUpperCase();
+    return String(actor?.role || "").trim().toUpperCase();
   }
 
   // ✅ roles con FULL access al módulo camiones
@@ -156,8 +158,15 @@ export class VehiclesService {
   }
 
   // ✅ ahora: SOLO SUPERADMIN / CONTROL_FLOTA
-  private assertEmpresaAccess(_actor: ActorLike | undefined, _empresa: Empresa) {
-    const role = this.roleUpper(_actor ?? null);
+  private assertEmpresaAccess(actor: ActorLike | undefined, _empresa: Empresa) {
+    const role = this.roleUpper(actor ?? null);
+
+    // ✅ DEBUG: confirma qué llega realmente al backend
+    // (Cuando ya funcione, borra estos logs)
+    // eslint-disable-next-line no-console
+    console.log("[FLEET] actor:", actor);
+    // eslint-disable-next-line no-console
+    console.log("[FLEET] roleUpper:", role);
 
     if (role === "SUPERADMIN" || role === "CONTROL_FLOTA") return;
 
@@ -271,7 +280,6 @@ export class VehiclesService {
   // ✅ SOLO SUPERADMIN / CONTROL_FLOTA
   // ==========================================================
   async list(actor: ActorLike = null) {
-    const role = this.roleUpper(actor);
     if (!this.isGlobalFleetRole(actor)) throw new ForbiddenException("No tienes permisos.");
     return this.listInternalAll();
   }
@@ -279,27 +287,6 @@ export class VehiclesService {
   private async listInternalAll() {
     const vehicles = await this.prisma.vehicle.findMany({
       where: { ...this.whereActivosOnly() } as any,
-      orderBy: { createdAt: "desc" },
-      include: {
-        maintenances: {
-          where: { fechaProxima: { not: null } },
-          orderBy: { fechaProxima: "asc" },
-          select: { id: true, fechaProxima: true },
-        },
-        documents: {
-          orderBy: { fechaVencimiento: "asc" },
-          select: { id: true, fechaVencimiento: true },
-        },
-      },
-    });
-
-    return this.mapVehiclesWithEstados(vehicles);
-  }
-
-  // (se mantiene por si lo llamas en otro lado, pero ya no se usa en list)
-  private async listInternalByEmpresa(empresa: Empresa) {
-    const vehicles = await this.prisma.vehicle.findMany({
-      where: { empresa: empresa as any, ...this.whereActivosOnly() } as any,
       orderBy: { createdAt: "desc" },
       include: {
         maintenances: {
@@ -868,7 +855,8 @@ export class VehiclesService {
 
     const nextYear = dto.year === undefined ? (current as any).year : dto.year;
 
-    let nextEmpresa: Empresa = (current as any).empresa === "INSPROTEL" ? "INSPROTEL" : "GRUAS_THOMAS";
+    let nextEmpresa: Empresa =
+      (current as any).empresa === "INSPROTEL" ? "INSPROTEL" : "GRUAS_THOMAS";
     if (dto.empresa !== undefined) {
       nextEmpresa = dto.empresa === "INSPROTEL" ? "INSPROTEL" : "GRUAS_THOMAS";
     }
