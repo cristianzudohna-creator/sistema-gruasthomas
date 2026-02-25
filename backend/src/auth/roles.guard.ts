@@ -7,41 +7,52 @@ import {
 import { Reflector } from "@nestjs/core";
 import { ROLES_KEY } from "./roles.decorator";
 
-/**
- * Normaliza roles para que calcen siempre con @Roles(...)
- * - "control de flota" -> "CONTROL_FLOTA"
- * - "CONTROL-FLOTA" -> "CONTROL_FLOTA"
- * - múltiples espacios -> "_"
- */
-function norm(role: any) {
-  const r = String(role || "").trim().toUpperCase();
+// Normaliza fuerte: mayúsculas, sin tildes, espacios/guiones -> _
+function normalizeRole(value: any) {
+  let s = String(value || "").trim();
 
-  const base = r
-    .replace(/[\s-]+/g, "_") // espacios/guiones => _
-    .replace(/_+/g, "_")     // colapsa ____
-    .replace(/^_+|_+$/g, ""); // quita _ al inicio/fin
+  // quita acentos/diacríticos
+  s = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-  const ALIAS: Record<string, string> = {
-    CONTROL_DE_FLOTA: "CONTROL_FLOTA",
-    CONTROL_FLOTA: "CONTROL_FLOTA",
+  // mayúsculas
+  s = s.toUpperCase();
 
-    SUPER_ADMIN: "SUPERADMIN",
-    SUPERADMIN: "SUPERADMIN",
+  // convierte separadores a underscore
+  s = s.replace(/[\s\-]+/g, "_");
 
-    ADMINISTRADORA: "ADMINISTRADORA",
-    TRABAJADOR: "TRABAJADOR",
-  };
+  // colapsa underscores múltiples
+  s = s.replace(/_+/g, "_");
 
-  return ALIAS[base] || base;
+  return s;
 }
 
-// ✅ Jerarquía de roles (si un endpoint pide TRABAJADOR,
-// también pasa ADMINISTRADORA/CONTROL_FLOTA/SUPERADMIN)
+// Aliases por si en token/BD viene distinto
+function roleAliases(roleNorm: string): string[] {
+  const r = roleNorm;
+
+  // ejemplo: CONTROL DE FLOTA / CONTROL-FLOTA / CONTROLFLOTA => CONTROL_FLOTA
+  if (r === "CONTROL_DE_FLOTA" || r === "CONTROL_FLOTA" || r === "CONTROLFLOTA") {
+    return ["CONTROL_FLOTA", "CONTROL_DE_FLOTA", "CONTROLFLOTA"];
+  }
+
+  if (r === "ADMINISTRADORA" || r === "ADMINISTRACION") {
+    return ["ADMINISTRADORA", "ADMINISTRACION"];
+  }
+
+  if (r === "SUPERADMIN" || r === "SUPER_ADMIN") {
+    return ["SUPERADMIN", "SUPER_ADMIN"];
+  }
+
+  return [r];
+}
+
+// Jerarquía REAL (si quieres):
+// SUPERADMIN > CONTROL_FLOTA > ADMINISTRADORA > TRABAJADOR
 const ROLE_LEVEL: Record<string, number> = {
   TRABAJADOR: 1,
   ADMINISTRADORA: 2,
-  CONTROL_FLOTA: 2,
-  SUPERADMIN: 3,
+  CONTROL_FLOTA: 3,
+  SUPERADMIN: 4,
 };
 
 @Injectable()
@@ -54,29 +65,34 @@ export class RolesGuard implements CanActivate {
       [context.getHandler(), context.getClass()]
     );
 
-    // Si no hay roles requeridos, pasa
     if (!requiredRoles || requiredRoles.length === 0) return true;
 
     const req = context.switchToHttp().getRequest();
     const user = req.user;
 
-    const userRole = norm(user?.role);
-    if (!userRole) throw new ForbiddenException("No tienes permisos.");
+    const userRoleNorm = normalizeRole(user?.role);
+    if (!userRoleNorm) throw new ForbiddenException("No tienes permisos.");
 
-    const required = requiredRoles.map(norm);
+    const userRoleSet = new Set(roleAliases(userRoleNorm));
 
-    // ✅ Match directo
-    if (required.includes(userRole)) return true;
+    // normaliza roles requeridos + expande aliases
+    const requiredNorm = requiredRoles.map(normalizeRole);
+    const requiredExpanded = requiredNorm.flatMap((r) => roleAliases(r));
+
+    // ✅ Match directo (con aliases)
+    for (const r of requiredExpanded) {
+      if (userRoleSet.has(r)) return true;
+    }
 
     // ✅ Match por jerarquía
-    const userLevel = ROLE_LEVEL[userRole] || 0;
+    const userLevel =
+      Math.max(...Array.from(userRoleSet).map((r) => ROLE_LEVEL[r] || 0)) || 0;
 
-    for (const r of required) {
-      const requiredLevel = ROLE_LEVEL[r] || 0;
+    for (const reqRole of requiredExpanded) {
+      const requiredLevel = ROLE_LEVEL[reqRole] || 0;
       if (requiredLevel > 0 && userLevel >= requiredLevel) return true;
     }
 
     throw new ForbiddenException("No tienes permisos.");
   }
 }
-
