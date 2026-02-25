@@ -4,6 +4,10 @@
 // - Se guarda snapshot completo en AuditLog (data.before)
 // - Si el archivo era físico, se MUEVE a /uploads/archive/vehicle-docs/ (no se borra)
 // - Luego se elimina el registro en BD (delete)
+//
+// ✅ PERMISOS (SOLO CAMIONES):
+// - Roles permitidos: SUPERADMIN, CONTROL_FLOTA (FULL)
+// - Cualquier otro rol: 403
 
 import {
   BadRequestException,
@@ -75,32 +79,21 @@ export class VehicleDocumentsService {
     return String(actor?.role || "").toUpperCase();
   }
 
+  private isGlobalRole(actor?: ActorLike) {
+    const r = this.roleUpper(actor ?? null);
+    return r === "SUPERADMIN" || r === "CONTROL_FLOTA";
+  }
+
   private empresaFromActorOrThrow(actor: ActorLike): Empresa {
     const emp = actor?.empresa as Empresa | undefined | null;
     if (!emp)
-      throw new ForbiddenException(
-        "No se pudo determinar la empresa del usuario."
-      );
+      throw new ForbiddenException("No se pudo determinar la empresa del usuario.");
     return emp;
   }
 
-  private assertEmpresaAccessOrThrow(actor: ActorLike, resourceEmpresa: Empresa) {
-    const role = this.roleUpper(actor);
-
-    // SUPERADMIN ve todo
-    if (role === "SUPERADMIN") return;
-
-    // ADMIN/TRABAJADOR: solo su empresa
-    if (role === "ADMIN" || role === "TRABAJADOR") {
-      const myEmp = this.empresaFromActorOrThrow(actor);
-      if (String(myEmp) !== String(resourceEmpresa)) {
-        throw new ForbiddenException(
-          "No tienes permisos para acceder a otra empresa."
-        );
-      }
-      return;
-    }
-
+  // ✅ AHORA: SOLO SUPERADMIN / CONTROL_FLOTA
+  private assertEmpresaAccessOrThrow(actor: ActorLike, _resourceEmpresa: Empresa) {
+    if (this.isGlobalRole(actor)) return;
     throw new ForbiddenException("No tienes permisos.");
   }
 
@@ -188,9 +181,10 @@ export class VehicleDocumentsService {
   async listByVehicle(vehicleId: string, actor?: ActorLike) {
     const vehicle = await this.prisma.vehicle.findUnique({
       where: { id: vehicleId },
-      select: { id: true, patente: true, empresa: true as any },
+      select: { id: true, patente: true, empresa: true as any, activo: true as any },
     });
     if (!vehicle) throw new NotFoundException("Vehículo no existe");
+    if ((vehicle as any).activo === false) throw new NotFoundException("Vehículo no existe");
 
     if (actor) {
       const vEmp = this.normalizeEmpresaFromVehicleRow((vehicle as any).empresa);
@@ -221,9 +215,10 @@ export class VehicleDocumentsService {
 
     const vehicle = await this.prisma.vehicle.findUnique({
       where: { id: vehicleId },
-      select: { id: true, patente: true, empresa: true as any },
+      select: { id: true, patente: true, empresa: true as any, activo: true as any },
     });
     if (!vehicle) throw new NotFoundException("Vehículo no existe");
+    if ((vehicle as any).activo === false) throw new NotFoundException("Vehículo no existe");
 
     if (actor) {
       const vEmp = this.normalizeEmpresaFromVehicleRow((vehicle as any).empresa);
@@ -242,12 +237,10 @@ export class VehicleDocumentsService {
       const updated = await this.prisma.vehicleDocument.update({
         where: { id: existing.id },
         data: {
-          // type se mantiene (mismo type)
           nombre: dto.nombre?.trim() || null,
           fechaVencimiento: fecha,
           observacion: dto.observacion?.trim() || null,
           archivoUrl: meta.archivoUrl,
-          // si viene meta de archivo, también la actualizamos (aunque sea "manual-url")
           filePath: meta.filePath,
           originalName: meta.originalName,
           mimeType: meta.mimeType,
@@ -299,7 +292,6 @@ export class VehicleDocumentsService {
   async upsertFileByVehicleType(vehicleId: string, dto: ReplaceFileDto, actor?: ActorLike) {
     // OTRO acumula
     if (!this.isSinglePerType(dto.type as any)) {
-      // acá dto trae archivo sí o sí
       return this.create(
         vehicleId,
         {
@@ -319,16 +311,16 @@ export class VehicleDocumentsService {
 
     const vehicle = await this.prisma.vehicle.findUnique({
       where: { id: vehicleId },
-      select: { id: true, patente: true, empresa: true as any },
+      select: { id: true, patente: true, empresa: true as any, activo: true as any },
     });
     if (!vehicle) throw new NotFoundException("Vehículo no existe");
+    if ((vehicle as any).activo === false) throw new NotFoundException("Vehículo no existe");
 
     if (actor) {
       const vEmp = this.normalizeEmpresaFromVehicleRow((vehicle as any).empresa);
       this.assertEmpresaAccessOrThrow(actor, vEmp);
     }
 
-    // valida nombre si es OTRO (pero aquí no debería llegar)
     this.validateTipoNombre(dto.type as any, dto.nombre);
 
     const existing = await this.prisma.vehicleDocument.findFirst({
@@ -358,15 +350,14 @@ export class VehicleDocumentsService {
 
   // =========================
   // ✅ Crear documento
-  // - Nota: acá mantengo tu lógica de "reemplaza si existe",
-  //   pero con el cambio clave: OTRO NO reemplaza, OTRO siempre crea.
   // =========================
   async create(vehicleId: string, dto: CreateDocDto, actor?: ActorLike) {
     const vehicle = await this.prisma.vehicle.findUnique({
       where: { id: vehicleId },
-      select: { id: true, patente: true, empresa: true as any },
+      select: { id: true, patente: true, empresa: true as any, activo: true as any },
     });
     if (!vehicle) throw new NotFoundException("Vehículo no existe");
+    if ((vehicle as any).activo === false) throw new NotFoundException("Vehículo no existe");
 
     if (actor) {
       const vEmp = this.normalizeEmpresaFromVehicleRow((vehicle as any).empresa);
@@ -374,7 +365,6 @@ export class VehicleDocumentsService {
     }
 
     const fecha = dto.fechaVencimiento ? this.parseFechaOrThrow(dto.fechaVencimiento) : null;
-
     this.validateTipoNombre(dto.type, dto.nombre);
 
     const meta = this.normalizeFileMeta(dto);
@@ -419,10 +409,7 @@ export class VehicleDocumentsService {
 
     // ✅ 1) Buscar si ya existe doc para este vehículo + type
     const existing = await this.prisma.vehicleDocument.findFirst({
-      where: {
-        vehicleId,
-        type: dto.type,
-      },
+      where: { vehicleId, type: dto.type },
     });
 
     // ✅ 2) Si existe => UPDATE (reemplazo)
@@ -448,8 +435,7 @@ export class VehicleDocumentsService {
       // ✅ borrar archivo anterior si era físico y cambió
       try {
         const newFilePath = (updated as any).filePath || updated.archivoUrl || null;
-        const changed =
-          oldFilePath && newFilePath && String(oldFilePath) !== String(newFilePath);
+        const changed = oldFilePath && newFilePath && String(oldFilePath) !== String(newFilePath);
 
         if (changed && this.shouldDeletePhysicalFile(oldFilePath)) {
           await unlink(this.toDiskPath(oldFilePath));
@@ -492,10 +478,7 @@ export class VehicleDocumentsService {
         },
       });
 
-      return {
-        ...updated,
-        estado: this.calcEstado(updated.fechaVencimiento ?? null),
-      };
+      return { ...updated, estado: this.calcEstado(updated.fechaVencimiento ?? null) };
     }
 
     // ✅ 3) Si NO existe => CREATE normal
@@ -534,10 +517,7 @@ export class VehicleDocumentsService {
       },
     });
 
-    return {
-      ...created,
-      estado: this.calcEstado(created.fechaVencimiento ?? null),
-    };
+    return { ...created, estado: this.calcEstado(created.fechaVencimiento ?? null) };
   }
 
   // =========================
@@ -549,6 +529,7 @@ export class VehicleDocumentsService {
       include: { vehicle: true },
     });
     if (!existing) throw new NotFoundException("Documento no existe");
+    if ((existing.vehicle as any)?.activo === false) throw new NotFoundException("Documento no existe");
 
     if (actor) {
       const vEmp = this.normalizeEmpresaFromVehicleRow((existing.vehicle as any)?.empresa);
@@ -606,10 +587,7 @@ export class VehicleDocumentsService {
       },
     });
 
-    return {
-      ...updated,
-      estado: this.calcEstado(updated.fechaVencimiento ?? null),
-    };
+    return { ...updated, estado: this.calcEstado(updated.fechaVencimiento ?? null) };
   }
 
   // =========================
@@ -621,6 +599,7 @@ export class VehicleDocumentsService {
       include: { vehicle: true },
     });
     if (!existing) throw new NotFoundException("Documento no existe");
+    if ((existing.vehicle as any)?.activo === false) throw new NotFoundException("Documento no existe");
 
     if (actor) {
       const vEmp = this.normalizeEmpresaFromVehicleRow((existing.vehicle as any)?.empresa);
@@ -698,15 +677,12 @@ export class VehicleDocumentsService {
       },
     });
 
-    return {
-      ...updated,
-      estado: this.calcEstado(updated.fechaVencimiento ?? null),
-    };
+    return { ...updated, estado: this.calcEstado(updated.fechaVencimiento ?? null) };
   }
 
   // =========================
   // Eliminar documento
-  // ✅ CAMBIO: respaldo + archivo a carpeta archive
+  // ✅ respaldo + archivo a carpeta archive
   // =========================
   async remove(docId: string, actor?: ActorLike) {
     const existing = await this.prisma.vehicleDocument.findUnique({
@@ -714,6 +690,7 @@ export class VehicleDocumentsService {
       include: { vehicle: true },
     });
     if (!existing) throw new NotFoundException("Documento no existe");
+    if ((existing.vehicle as any)?.activo === false) throw new NotFoundException("Documento no existe");
 
     if (actor) {
       const vEmp = this.normalizeEmpresaFromVehicleRow((existing.vehicle as any)?.empresa);
@@ -737,7 +714,6 @@ export class VehicleDocumentsService {
         archivedUrl = destUrl;
       }
     } catch (e) {
-      // si falla el move, NO reventamos. Solo no habrá archivo archivado.
       archivedUrl = null;
     }
 
