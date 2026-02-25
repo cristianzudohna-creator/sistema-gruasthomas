@@ -22,6 +22,9 @@ import { AuditAction, AuditEntity, DocumentType } from "@prisma/client";
 import { unlink, rename, mkdir } from "fs/promises";
 import { join, extname } from "path";
 
+// ✅ NUEVO: normalización de roles (mismo criterio que el RolesGuard)
+import { normRole } from "../common/utils/norm-role";
+
 type Empresa = "GRUAS_THOMAS" | "INSPROTEL";
 
 type ActorLike =
@@ -76,8 +79,9 @@ export class VehicleDocumentsService {
   // Helpers
   // =========================
 
+  // ✅ CAMBIO: ahora normaliza roles (CONTROL DE FLOTA / control-flota / etc -> CONTROL_FLOTA)
   private roleUpper(actor: ActorLike) {
-    return String(actor?.role || "").toUpperCase();
+    return normRole(actor?.role);
   }
 
   // ✅ SOLO roles permitidos en camiones
@@ -723,7 +727,6 @@ export class VehicleDocumentsService {
     return { ok: true, deletedId: docId, archivedUrl };
   }
 }
-
 
 
 

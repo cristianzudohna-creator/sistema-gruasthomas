@@ -13,6 +13,9 @@ import {
   VehicleOperationalStatus,
 } from "@prisma/client";
 
+// ✅ NUEVO: normalización de roles (mismo criterio que el RolesGuard)
+import { normRole } from "../common/utils/norm-role";
+
 type Empresa = "GRUAS_THOMAS" | "INSPROTEL";
 type EmpresaFilter = "ALL" | Empresa;
 
@@ -139,9 +142,9 @@ export class VehiclesService {
   // ✅ MÓDULO CAMIONES: SOLO SUPERADMIN + CONTROL_FLOTA (FULL)
   // ======================
 
-  // ✅ FIX CLAVE: trim() + uppercase real
+  // ✅ FIX: ahora normaliza (CONTROL DE FLOTA / control-flota / etc -> CONTROL_FLOTA)
   private roleUpper(actor?: ActorLike) {
-    return String(actor?.role || "").trim().toUpperCase();
+    return normRole(actor?.role);
   }
 
   // ✅ roles con FULL access al módulo camiones
