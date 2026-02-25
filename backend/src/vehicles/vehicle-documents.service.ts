@@ -98,7 +98,7 @@ export class VehicleDocumentsService {
   // 🚀 TEMP FIX (PRODUCCIÓN): permitir acceso si hay usuario autenticado
 if (actor && actor.id) return;
 
-throw new ForbiddenException("No tienes permisos.");
+throw new ForbiddenException("No tienes permisos. [DOCS_SERVICE]");
 }
 
   private calcEstado(fechaVencimiento: Date | null) {
