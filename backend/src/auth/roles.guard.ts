@@ -9,7 +9,16 @@ import { Reflector } from "@nestjs/core";
 const ROLES_KEY = "roles";
 
 function normRole(v: any) {
-  return String(v ?? "").trim().toUpperCase();
+  const r = String(v ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_")
+    .replace(/__+/g, "_");
+
+  // ✅ alias fuerte: CONTROL DE FLOTA => CONTROL_FLOTA
+  if (r === "CONTROL_DE_FLOTA") return "CONTROL_FLOTA";
+
+  return r;
 }
 
 @Injectable()
@@ -23,7 +32,6 @@ export class RolesGuard implements CanActivate {
         context.getClass(),
       ]) || [];
 
-    // Si no hay roles requeridos, dejamos pasar
     if (!requiredRoles.length) return true;
 
     const req = context.switchToHttp().getRequest();
@@ -32,19 +40,13 @@ export class RolesGuard implements CanActivate {
     const userRole = normRole(user?.role);
     const required = requiredRoles.map(normRole);
 
-    // ✅ DEBUG (temporal): para ver por qué se cae
-    // OJO: esto SÍ se ejecuta aunque el service no se ejecute
     // eslint-disable-next-line no-console
     console.log("[RolesGuard] required:", required, "| userRole:", userRole, "| rawUser:", user);
 
-    if (!userRole) {
-      throw new ForbiddenException("No tienes permisos.");
-    }
+    if (!userRole) throw new ForbiddenException("No tienes permisos.");
 
     const ok = required.includes(userRole);
-    if (!ok) {
-      throw new ForbiddenException("No tienes permisos.");
-    }
+    if (!ok) throw new ForbiddenException("No tienes permisos.");
 
     return true;
   }
