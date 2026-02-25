@@ -29,14 +29,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
 import ConfirmModal from "../components/ui/ConfirmModal";
-
-function getApiUrl() {
-  // Prioriza env (Vite). Si no existe, usa el host actual.
-  // Esto evita hardcodear localhost en producción.
-  const env = (import.meta && import.meta.env && import.meta.env.VITE_API_URL) || "";
-  if (env && String(env).trim()) return String(env).replace(/\/$/, "");
-  return `${window.location.protocol}//${window.location.host}`;
-}
+import { getApiUrl } from "../api/apiUrl";
 
 const API_URL = getApiUrl();
 

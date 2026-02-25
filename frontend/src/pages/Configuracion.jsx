@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getToken, logout } from "../auth/auth";
 import "./Admin.css";
 
-const API_URL = "http://localhost:3000";
+const API_URL = "/api";
 
 function authHeaders(isJson = true) {
   const token = getToken();

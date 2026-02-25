@@ -3,10 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getToken, logout } from "../auth/auth";
 import "./Horometro.css";
 
-// ✅ API dinámico (prod/local)
-const API_URL =
-  import.meta.env.VITE_API_URL ||
-  `${window.location.protocol}//${window.location.hostname}:3000`;
+const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
 
 function authHeaders(isJson = true) {
   const token = getToken();

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import "./Admin.css";
+import { fixText } from "../utils/fixText";
 
-const API_URL = "http://localhost:3000";
+const API_URL = "/api";
 
 function authHeaders() {
   const token = localStorage.getItem("access_token");

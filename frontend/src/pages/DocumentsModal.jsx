@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
 import ConfirmModal from "../components/ui/ConfirmModal";
+import { fixText } from "../utils/fixText";
 
 /* =========================
    Menú Acciones (NO se corta)
@@ -230,7 +231,7 @@ const DOCUMENT_TYPE_LABELS = {
    DocumentsModal
    ========================= */
 export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
-  const API_URL = apiUrl || "http://localhost:3000";
+  const API_URL = (apiUrl || "/api").replace(/\/+$/, "");
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);

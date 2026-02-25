@@ -14,7 +14,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
 import ConfirmModal from "../components/ui/ConfirmModal";
 
-const API_URL = "http://localhost:3000";
+const API_URL = "/api";
 
 function getToken() {
   return localStorage.getItem("access_token") || "";

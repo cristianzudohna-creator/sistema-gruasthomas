@@ -4,10 +4,7 @@ import "./Admin.css";
 import WorkOrderDetailModal from "./WorkOrderDetailModal";
 import WorkOrderCompleteModal from "./WorkOrderCompleteModal";
 
-// ✅ API dinámico (prod/local)
-const API_URL =
-  import.meta.env.VITE_API_URL ||
-  `${window.location.protocol}//${window.location.hostname}:3000`;
+const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
 
 function getToken() {
   return localStorage.getItem("access_token") || "";

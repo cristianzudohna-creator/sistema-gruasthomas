@@ -1,13 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Modal from "../components/ui/Modal";
 import { getToken, getUser, logout } from "../auth/auth";
+import { getApiUrl } from "../api/apiUrl";
 
-function getApiUrl() {
-  const env = (import.meta && import.meta.env && import.meta.env.VITE_API_URL) || "";
-  if (env && String(env).trim()) return String(env).replace(/\/$/, "");
-  return `${window.location.protocol}//${window.location.host}`;
-}
 const API_URL = getApiUrl();
+const url = `${API_URL}/users`;
 
 function authHeaders() {
   const token = getToken();

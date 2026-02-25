@@ -6,6 +6,7 @@ import Modal from "../components/ui/Modal";
 import ConfirmModal from "../components/ui/ConfirmModal";
 
 import { getDeletedVehicles, restoreVehicle } from "../api/vehicles";
+import { fixText } from "../utils/fixText";
 
 /** ✅ Botón consistente (igual que Camiones.jsx) */
 function ActionButton({ variant = "ghost", className = "", style = {}, ...props }) {

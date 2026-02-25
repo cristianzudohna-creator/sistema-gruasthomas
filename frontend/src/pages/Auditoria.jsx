@@ -3,9 +3,9 @@ import "./Auditoria.css";
 import AuditDetailsModal from "./AuditDetailsModal";
 
 // ✅ API dinámico (prod/local)
-const API_URL =
-  import.meta.env.VITE_API_URL ||
-  `${window.location.protocol}//${window.location.hostname}:3000`;
+// - Producción: NGINX proxy -> /api (NO usar :3000)
+// - Local (opcional): VITE_API_URL="http://localhost:3000"
+const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
 
 export default function Auditoria() {
   const [logs, setLogs] = useState([]);

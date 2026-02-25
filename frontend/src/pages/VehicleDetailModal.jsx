@@ -1,4 +1,5 @@
 // ✅ Archivo: src/pages/VehicleDetailModal.jsx (COMPLETO - acciones 2 columnas + estado operativo visible)
+import { fixText } from "../utils/fixText";
 
 export default function VehicleDetailModal({
   open,

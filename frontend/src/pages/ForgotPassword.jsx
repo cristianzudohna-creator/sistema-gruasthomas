@@ -1,12 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import "./Login.css";
-
-function getApiUrl() {
-  const env = (import.meta && import.meta.env && import.meta.env.VITE_API_URL) || "";
-  if (env && String(env).trim()) return String(env).replace(/\/$/, "");
-  return `${window.location.protocol}//${window.location.host}`;
-}
+import { getApiUrl } from "../api/apiUrl";
 
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim());

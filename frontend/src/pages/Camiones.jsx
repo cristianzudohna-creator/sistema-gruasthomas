@@ -13,11 +13,13 @@ import ConfirmModal from "../components/ui/ConfirmModal";
 
 // ✅ Excel export
 import * as XLSX from "xlsx";
+import { fixText } from "../utils/fixText";
 
 // ✅ PROD/LOCAL
-const API_URL =
-  import.meta.env.VITE_API_URL ||
-  `${window.location.protocol}//${window.location.hostname}:3000`;
+// ✅ PROD/LOCAL
+// - Producción: NGINX proxy -> /api  (NO usar :3000)
+// - Local (opcional): VITE_API_URL="http://localhost:3000" o "/api"
+const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
 
 /* =========================
    ✅ FIX: Tipo de vehículo (texto bonito + arregla caracteres rotos)
@@ -42,7 +44,6 @@ function normalizeVehicleTypeKey(raw) {
 
   // arreglos típicos cuando un encoding se rompe
   const fixed = s0
-    .replace(/[�|]/g, "o") // "Cami|n" -> "Camion"
     .replace(/\s+/g, " ")
     .trim();
 

@@ -25,7 +25,7 @@ const baseFromHost =
   typeof window !== "undefined"
     ? `${window.location.protocol}//${window.location.host}/api`
     : "";
-const API_URL = baseFromEnv || baseFromHost || "http://localhost:3000";
+const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
 // ⚠️ Si tu backend NO usa /api en prod, cambia baseFromHost a:
 // const baseFromHost = `${window.location.protocol}//${window.location.host}`;
 
