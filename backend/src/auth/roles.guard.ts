@@ -32,8 +32,8 @@ export class RolesGuard implements CanActivate {
     // eslint-disable-next-line no-console
     console.log("[RolesGuard] required:", required, "| userRole:", userRole, "| rawUser:", user);
 
-    if (!userRole) throw new ForbiddenException("No tienes permisos.");
-    if (!required.includes(userRole)) throw new ForbiddenException("No tienes permisos.");
+    if (!userRole) throw new ForbiddenException(`No tienes permisos. [ROLES_GUARD role=${userRole} req=${required.join(",")}]`);
+    if (!required.includes(userRole)) throw new ForbiddenException(`No tienes permisos. [ROLES_GUARD role=${userRole} req=${required.join(",")}]`);
 
     return true;
   }
