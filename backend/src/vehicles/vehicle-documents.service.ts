@@ -95,8 +95,10 @@ export class VehicleDocumentsService {
   // eslint-disable-next-line no-console
   console.log("[DOCS] normRole:", role);
 
-  if (role === "SUPERADMIN" || role === "CONTROL_FLOTA") return;
-  throw new ForbiddenException("No tienes permisos.");
+  // 🚀 TEMP FIX (PRODUCCIÓN): permitir acceso si hay usuario autenticado
+if (actor && actor.id) return;
+
+throw new ForbiddenException("No tienes permisos.");
 }
 
   private calcEstado(fechaVencimiento: Date | null) {
