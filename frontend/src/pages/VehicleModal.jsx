@@ -1,20 +1,23 @@
-// ✅ Archivo: src/pages/VehicleModal.jsx
+// ✅ Archivo: src/pages/VehicleModal.jsx (COMPLETO - TEXT FIX)
 import { useEffect, useMemo, useState } from "react";
 import Modal from "../components/ui/Modal";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import "./Admin.css";
 
+// ✅ Fix encoding / mojibake
+import { fixText } from "../utils/fixText";
+
 const EMPRESAS = [
-  { value: "GRUAS_THOMAS", label: "Grúas Thomas" },
-  { value: "INSPROTEL", label: "Insprotel" },
+  { value: "GRUAS_THOMAS", label: fixText("Grúas Thomas") },
+  { value: "INSPROTEL", label: fixText("Insprotel") },
 ];
 
 function normalizePatente(v) {
-  return String(v || "").toUpperCase().trim();
+  return fixText(String(v || "")).toUpperCase().trim();
 }
 
 function safeString(v) {
-  return String(v ?? "").trim();
+  return fixText(String(v ?? "")).trim();
 }
 
 export default function VehicleModal({
@@ -46,12 +49,13 @@ export default function VehicleModal({
     setTouched({});
 
     const iv = initialValues || {};
-    setEmpresa(iv.empresa || "GRUAS_THOMAS");
-    setPatente(iv.patente || "");
+
+    setEmpresa(fixText(iv.empresa || "GRUAS_THOMAS"));
+    setPatente(fixText(iv.patente || ""));
     setYear(iv.year ?? "");
-    setMarca(iv.marca || "");
-    setModelo(iv.modelo || "");
-    setTipoVehiculo(iv.tipoVehiculo || iv.type || "");
+    setMarca(fixText(iv.marca || ""));
+    setModelo(fixText(iv.modelo || ""));
+    setTipoVehiculo(fixText(iv.tipoVehiculo || iv.type || ""));
   }, [open, initialValues]);
 
   const errors = useMemo(() => {
@@ -79,8 +83,7 @@ export default function VehicleModal({
     const m1 = safeString(marca);
     const m2 = safeString(modelo);
     if ((m1 && !m2) || (!m1 && m2)) {
-      e.marcaModelo =
-        "Si completas Marca, completa Modelo (y viceversa).";
+      e.marcaModelo = "Si completas Marca, completa Modelo (y viceversa).";
     }
 
     return e;
@@ -102,7 +105,7 @@ export default function VehicleModal({
 
     return {
       id: initialValues?.id,
-      empresa,
+      empresa: fixText(empresa || "GRUAS_THOMAS"),
       patente: p,
       year: String(year || "").trim()
         ? Number(String(year).trim())
@@ -195,7 +198,7 @@ export default function VehicleModal({
           className="gt-form-grid"
         >
           {formError ? (
-            <div className="gt-error">{formError}</div>
+            <div className="gt-error">{fixText(formError)}</div>
           ) : null}
 
           {/* Empresa */}
@@ -203,13 +206,13 @@ export default function VehicleModal({
             <label>Empresa</label>
             <select
               className="gt-select"
-              value={empresa}
-              onChange={(e) => setEmpresa(e.target.value)}
+              value={fixText(empresa)}
+              onChange={(e) => setEmpresa(fixText(e.target.value))}
               disabled={saving}
             >
               {EMPRESAS.map((x) => (
                 <option key={x.value} value={x.value}>
-                  {x.label}
+                  {fixText(x.label)}
                 </option>
               ))}
             </select>
@@ -220,15 +223,13 @@ export default function VehicleModal({
             <label>Patente *</label>
             <input
               className="gt-input"
-              value={patente}
+              value={fixText(patente)}
               onChange={(e) => setPatente(e.target.value)}
               onBlur={() => markTouched("patente")}
               disabled={saving}
             />
             {touched.patente && errors.patente ? (
-              <div className="gt-field-error">
-                {errors.patente}
-              </div>
+              <div className="gt-field-error">{fixText(errors.patente)}</div>
             ) : null}
           </div>
 
@@ -240,18 +241,14 @@ export default function VehicleModal({
               value={year}
               onChange={(e) =>
                 setYear(
-                  e.target.value
-                    .replace(/[^\d]/g, "")
-                    .slice(0, 4)
+                  e.target.value.replace(/[^\d]/g, "").slice(0, 4)
                 )
               }
               onBlur={() => markTouched("year")}
               disabled={saving}
             />
             {touched.year && errors.year ? (
-              <div className="gt-field-error">
-                {errors.year}
-              </div>
+              <div className="gt-field-error">{fixText(errors.year)}</div>
             ) : null}
           </div>
 
@@ -260,7 +257,7 @@ export default function VehicleModal({
             <label>Marca</label>
             <input
               className="gt-input"
-              value={marca}
+              value={fixText(marca)}
               onChange={(e) => setMarca(e.target.value)}
               disabled={saving}
             />
@@ -271,7 +268,7 @@ export default function VehicleModal({
             <label>Modelo</label>
             <input
               className="gt-input"
-              value={modelo}
+              value={fixText(modelo)}
               onChange={(e) => setModelo(e.target.value)}
               disabled={saving}
             />
@@ -282,15 +279,13 @@ export default function VehicleModal({
             <label>Tipo de vehículo *</label>
             <input
               className="gt-input"
-              value={tipoVehiculo}
+              value={fixText(tipoVehiculo)}
               onChange={(e) => setTipoVehiculo(e.target.value)}
               onBlur={() => markTouched("tipoVehiculo")}
               disabled={saving}
             />
             {touched.tipoVehiculo && errors.tipoVehiculo ? (
-              <div className="gt-field-error">
-                {errors.tipoVehiculo}
-              </div>
+              <div className="gt-field-error">{fixText(errors.tipoVehiculo)}</div>
             ) : null}
           </div>
         </form>

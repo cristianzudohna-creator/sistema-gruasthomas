@@ -1,4 +1,4 @@
-// ✅ Archivo: src/pages/WorkOrderCompleteModal.jsx (COMPLETO)
+// ✅ Archivo: src/pages/WorkOrderCompleteModal.jsx (COMPLETO + TEXT FIX GLOBAL)
 // ✅ Incluye:
 // 1) Detalle OT (solo lectura, visible para el trabajador)
 // 2) Firma cliente (canvas) -> workerReport.signature.dataUrl (solo en modo trabajador)
@@ -25,11 +25,15 @@
 // ✅ ESTÁNDAR GLOBAL (este commit):
 // - API_URL dinámico
 // - credentials: "include" en fetch
+//
+// ✅ TEXT FIX GLOBAL:
+// - fixText() en strings que vienen del backend para evitar mojibake
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import { getApiUrl } from "../api/apiUrl";
+import { fixText } from "../utils/fixText";
 
 const API_URL = getApiUrl();
 
@@ -44,15 +48,15 @@ async function readError(res) {
   if (contentType.includes("application/json")) {
     try {
       const data = await res.json();
-      if (Array.isArray(data?.message)) return data.message.join(" | ");
-      if (typeof data?.message === "string") return data.message;
-      return JSON.stringify(data);
+      if (Array.isArray(data?.message)) return fixText(data.message.join(" | "));
+      if (typeof data?.message === "string") return fixText(data.message);
+      return fixText(JSON.stringify(data));
     } catch {}
   }
 
   try {
     const t = await res.text();
-    return t || `HTTP ${res.status}`;
+    return fixText(t || `HTTP ${res.status}`);
   } catch {
     return `HTTP ${res.status}`;
   }
@@ -82,7 +86,7 @@ async function apiPatch(path, body) {
    Utils
 ========================= */
 function normalizeText(s) {
-  return String(s || "").trim();
+  return fixText(String(s || "")).trim();
 }
 
 function isValidHora(h) {
@@ -121,10 +125,13 @@ function pick(...vals) {
    UI helpers
 ========================= */
 function FieldRO({ label, value }) {
+  const cleanLabel = fixText(String(label ?? ""));
+  const cleanValue = typeof value === "string" ? fixText(value) : value;
+
   const isEmpty =
-    value === null ||
-    value === undefined ||
-    (typeof value === "string" && !String(value || "").trim());
+    cleanValue === null ||
+    cleanValue === undefined ||
+    (typeof cleanValue === "string" && !String(cleanValue || "").trim());
 
   return (
     <div
@@ -135,9 +142,9 @@ function FieldRO({ label, value }) {
         background: "#fff",
       }}
     >
-      <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 900 }}>{label}</div>
+      <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 900 }}>{cleanLabel}</div>
       <div style={{ marginTop: 6, fontWeight: 900, wordBreak: "break-word" }}>
-        {isEmpty ? "—" : value}
+        {isEmpty ? "—" : cleanValue}
       </div>
     </div>
   );
@@ -146,7 +153,7 @@ function FieldRO({ label, value }) {
 function Box({ title, children }) {
   return (
     <div className="ot-box">
-      <div className="ot-box-title">{title}</div>
+      <div className="ot-box-title">{fixText(String(title ?? ""))}</div>
       {children}
     </div>
   );
@@ -197,22 +204,24 @@ function Resumen({ f, firmaOk, mode, recibi }) {
 function Row({ label, value }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 10, padding: "6px 0" }}>
-      <div style={{ fontWeight: 900, opacity: 0.7 }}>{label}</div>
-      <div style={{ fontWeight: 900, wordBreak: "break-word" }}>{value || "—"}</div>
+      <div style={{ fontWeight: 900, opacity: 0.7 }}>{fixText(String(label ?? ""))}</div>
+      <div style={{ fontWeight: 900, wordBreak: "break-word" }}>
+        {typeof value === "string" ? fixText(value) : value || "—"}
+      </div>
     </div>
   );
 }
 
 function LabeledInput({ label, placeholder, value, onChange, disabled, error, className = "" }) {
   const errStyle = error
-    ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220,38,38,.15)" } // ✅ FIX coma
+    ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220,38,38,.15)" }
     : undefined;
 
   return (
     <div className={className}>
       <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.75, marginBottom: 6 }}>
-        {label}
-        {error ? <span style={{ color: "#dc2626" }}> • {error}</span> : null}
+        {fixText(String(label ?? ""))}
+        {error ? <span style={{ color: "#dc2626" }}> • {fixText(String(error))}</span> : null}
       </div>
       <input
         className="gt-input"
@@ -234,8 +243,8 @@ function LabeledTextarea({ label, placeholder, value, onChange, disabled, error,
   return (
     <div className={className}>
       <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.75, marginBottom: 6 }}>
-        {label}
-        {error ? <span style={{ color: "#dc2626" }}> • {error}</span> : null}
+        {fixText(String(label ?? ""))}
+        {error ? <span style={{ color: "#dc2626" }}> • {fixText(String(error))}</span> : null}
       </div>
       <textarea
         className="gt-input ot-textarea"
@@ -456,20 +465,16 @@ export default function WorkOrderCompleteModal({
   const [f, setF] = useState({
     salidaPlanta: "",
     llegadaFaena: "",
-
     // ✅ NUEVO OBRA
     inicioServicioObra: "",
     terminoServicioObra: "",
-
     salidaFaena: "",
     llegadaPlanta: "",
     colacion: "",
-
     kmSalidaPlanta: "",
     kmLlegadaFaena: "",
     kmSalidaFaena: "",
     kmLlegadaPlanta: "",
-
     movimientos: "",
   });
 
@@ -496,11 +501,9 @@ export default function WorkOrderCompleteModal({
     setF({
       salidaPlanta: normalizeText(dh?.salidaPlanta),
       llegadaFaena: normalizeText(dh?.llegadaFaena),
-
       // ✅ NUEVO OBRA
       inicioServicioObra: normalizeText(dh?.inicioServicioObra),
       terminoServicioObra: normalizeText(dh?.terminoServicioObra),
-
       salidaFaena: normalizeText(dh?.salidaFaena),
       llegadaPlanta: normalizeText(dh?.llegadaPlanta),
       colacion: normalizeText(dh?.colacion),
@@ -642,7 +645,7 @@ export default function WorkOrderCompleteModal({
       setConfirmOpen(false);
       await Promise.resolve(onSaved?.());
     } catch (e) {
-      setFormErr(e.message || (isAdmin ? "Error guardando corrección" : "Error enviando reporte"));
+      setFormErr(fixText(e?.message || (isAdmin ? "Error guardando corrección" : "Error enviando reporte")));
       setConfirmOpen(false);
     } finally {
       setSaving(false);
@@ -652,10 +655,16 @@ export default function WorkOrderCompleteModal({
   const title = useMemo(() => {
     const cliente = normalizeText(workOrder?.cliente);
     const lugar = normalizeText(workOrder?.direccionFaena || workOrder?.lugar || workOrder?.direccion);
+
     if (isAdmin) {
-      return cliente ? `Corregir reporte • ${cliente}` : lugar ? `Corregir reporte • ${lugar}` : "Corregir reporte";
+      return fixText(
+        cliente ? `Corregir reporte • ${cliente}` : lugar ? `Corregir reporte • ${lugar}` : "Corregir reporte"
+      );
     }
-    return cliente ? `Completar OT • ${cliente}` : lugar ? `Completar OT • ${lugar}` : "Completar OT";
+
+    return fixText(
+      cliente ? `Completar OT • ${cliente}` : lugar ? `Completar OT • ${lugar}` : "Completar OT"
+    );
   }, [workOrder, isAdmin]);
 
   const subtitle = isAdmin
@@ -665,22 +674,24 @@ export default function WorkOrderCompleteModal({
   const ro = useMemo(() => {
     const d = workOrder || {};
     return {
-      cliente: pick(d?.cliente, d?.clienteNombre, d?.razonSocial),
-      rut: pick(d?.rut, d?.clienteRut),
-      giro: pick(d?.giro),
+      cliente: normalizeText(pick(d?.cliente, d?.clienteNombre, d?.razonSocial)),
+      rut: normalizeText(pick(d?.rut, d?.clienteRut)),
+      giro: normalizeText(pick(d?.giro)),
 
       // ✅ FIX: traer "Solicitado por" (con fallbacks típicos)
-      solicitadoPor: pick(d?.solicitadoPor, d?.requestedBy, d?.requestedByName, d?.contactoSolicitante, d?.nombreSolicitante),
+      solicitadoPor: normalizeText(
+        pick(d?.solicitadoPor, d?.requestedBy, d?.requestedByName, d?.contactoSolicitante, d?.nombreSolicitante)
+      ),
 
-      direccionFaena: pick(d?.direccionFaena, d?.lugar, d?.ubicacion),
-      direccionCliente: pick(d?.direccion),
-      comuna: pick(d?.comuna),
-      ciudad: pick(d?.ciudad),
-      horario: pick(d?.horario, d?.horarioLlegada),
+      direccionFaena: normalizeText(pick(d?.direccionFaena, d?.lugar, d?.ubicacion)),
+      direccionCliente: normalizeText(pick(d?.direccion)),
+      comuna: normalizeText(pick(d?.comuna)),
+      ciudad: normalizeText(pick(d?.ciudad)),
+      horario: normalizeText(pick(d?.horario, d?.horarioLlegada)),
       diasTrabajo: Array.isArray(d?.diasTrabajo) ? d.diasTrabajo.join(", ") : "",
-      camion: pick(d?.camion, d?.camionNumero),
-      conductor: pick(d?.conductor),
-      rigger: pick(d?.rigger),
+      camion: normalizeText(pick(d?.camion, d?.camionNumero)),
+      conductor: normalizeText(pick(d?.conductor)),
+      rigger: normalizeText(pick(d?.rigger)),
       mapsLink: normalizeText(pick(d?.mapsLink, d?.maps, d?.googleMapsLink)),
     };
   }, [workOrder]);
@@ -710,12 +721,12 @@ export default function WorkOrderCompleteModal({
         {loading ? (
           <div style={{ padding: 14, fontWeight: 900, opacity: 0.8 }}>Cargando OT...</div>
         ) : error ? (
-          <div style={{ padding: 14, color: "#b00020", fontWeight: 900 }}>{error}</div>
+          <div style={{ padding: 14, color: "#b00020", fontWeight: 900 }}>{fixText(String(error))}</div>
         ) : !workOrder ? (
           <div style={{ padding: 14, opacity: 0.75 }}>Sin datos.</div>
         ) : (
           <form id="ot-complete-form" onSubmit={handleSubmit} className="gt-form-grid">
-            {formErr ? <div className="gt-error">{formErr}</div> : null}
+            {formErr ? <div className="gt-error">{fixText(formErr)}</div> : null}
 
             <Box title="Detalle OT (solo lectura)">
               <div

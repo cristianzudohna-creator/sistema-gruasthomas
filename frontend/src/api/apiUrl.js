@@ -1,10 +1,10 @@
-// src/api/apiUrl.js
+// ✅ Archivo: src/api/apiUrl.js
 export function getApiUrl() {
   const raw = import.meta.env.VITE_API_URL;
 
-  // Si no hay env en producción, SIEMPRE /api
-  const base = raw && String(raw).trim().length ? raw : "/api";
+  // ✅ Producción: si no hay env => /api (NGINX)
+  const base = raw && String(raw).trim().length ? String(raw).trim() : "/api";
 
-  // Quita trailing slashes
-  return String(base).replace(/\/+$/, "");
+  // ✅ Quita trailing slashes
+  return base.replace(/\/+$/, "");
 }

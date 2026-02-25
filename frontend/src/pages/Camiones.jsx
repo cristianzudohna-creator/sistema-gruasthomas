@@ -169,11 +169,13 @@ export default function Camiones() {
   }
 
   function empresaLabel(code) {
-    return code === "INSPROTEL" ? "INSPROTEL" : "GRÚAS THOMAS";
+    const clean = fixText(code || "");
+    return clean === "INSPROTEL" ? "INSPROTEL" : "GRÚAS THOMAS";
   }
 
   function empresaLogo(code) {
-    return code === "INSPROTEL" ? "/insprotel.png" : "/logo-thomas.png";
+    const clean = fixText(code || "");
+    return clean === "INSPROTEL" ? "/insprotel.png" : "/logo-thomas.png";
   }
 
   function estadoLabel(estado) {
@@ -257,10 +259,13 @@ export default function Camiones() {
       const data = await res.json();
 
       const mapped = (Array.isArray(data) ? data : []).map((v) => {
-        const mm = splitMarcaModelo(v.marcaModelo);
+        // ✅ FIX: arreglar mojibake ANTES de splitMarcaModelo
+        const mmRaw = v.marcaModelo || v.marca_modelo || "";
+        const mm = splitMarcaModelo(fixText(mmRaw));
+
         return {
           id: v.id,
-          empresa: v.empresa || "GRUAS_THOMAS",
+          empresa: fixText(v.empresa || "GRUAS_THOMAS"),
           patente: fixText(v.patente),
 
           marca: fixText(v.marca || mm.marca),
@@ -716,7 +721,9 @@ export default function Camiones() {
   }
 
   function alertsSubtitle() {
-    return `${empresaFilter === "ALL" ? "Todas las empresas" : empresaLabel(empresaFilter)} • ${alertVehicles.length} vehículo(s)`;
+    return `${empresaFilter === "ALL" ? "Todas las empresas" : empresaLabel(empresaFilter)} • ${
+      alertVehicles.length
+    } vehículo(s)`;
   }
 
   // ✅ filtro tabla (empresa + estado + search)
@@ -1745,8 +1752,7 @@ export default function Camiones() {
             <div style={{ fontSize: 13, color: "rgba(0,0,0,.7)" }}>
               <b>Empresa:</b> {empresaLabel(deleteTarget?.empresa)} <br />
               <b>Patente:</b> {fixText(deleteTarget?.patente || "-")} <br />
-              <b>Marca/Modelo:</b>{" "}
-              {fixText((deleteTarget?.marca || "-") + " " + (deleteTarget?.modelo || ""))}
+              <b>Marca/Modelo:</b> {fixText((deleteTarget?.marca || "-") + " " + (deleteTarget?.modelo || ""))}
             </div>
           </div>
         }

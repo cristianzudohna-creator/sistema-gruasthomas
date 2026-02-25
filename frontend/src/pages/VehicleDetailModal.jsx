@@ -1,4 +1,4 @@
-// ✅ Archivo: src/pages/VehicleDetailModal.jsx (COMPLETO - acciones 2 columnas + estado operativo visible)
+// ✅ Archivo: src/pages/VehicleDetailModal.jsx (COMPLETO - TEXT FIX + acciones 2 columnas + estado operativo visible)
 import { fixText } from "../utils/fixText";
 
 export default function VehicleDetailModal({
@@ -18,7 +18,13 @@ export default function VehicleDetailModal({
   const opLabel = op === "EN_PANA" ? "En pana" : op === "PARADO" ? "Parado" : "Operativo";
   const opCls = op === "OPERATIVO" ? "status ok" : op === "EN_PANA" ? "status warn" : "status danger";
 
-  const marcaModelo = `${vehicle.marca || ""} ${vehicle.modelo || ""}`.trim() || "-";
+  const patente = fixText(vehicle.patente || "-");
+  const marca = fixText(vehicle.marca || "");
+  const modelo = fixText(vehicle.modelo || "");
+  const tipo = fixText(vehicle.tipoVehiculo || "-");
+  const detalle = fixText(vehicle.detalle || "");
+
+  const marcaModelo = fixText(`${marca} ${modelo}`.trim()) || "-";
 
   return (
     <div className="vdetail-overlay" onMouseDown={onClose}>
@@ -47,7 +53,7 @@ export default function VehicleDetailModal({
                   whiteSpace: "nowrap",
                 }}
               >
-                {vehicle.patente || "-"}
+                {patente}
               </span>
 
               <span
@@ -77,16 +83,16 @@ export default function VehicleDetailModal({
 
         <div className="vdetail-body">
           <div className="vdetail-grid">
-            <Field label="Empresa" value={empresaLabel(vehicle.empresa)} />
-            <Field label="Patente" value={vehicle.patente || "-"} />
-            <Field label="Marca" value={vehicle.marca || "-"} />
-            <Field label="Modelo" value={vehicle.modelo || "-"} />
+            <Field label="Empresa" value={fixText(empresaLabel(vehicle.empresa))} />
+            <Field label="Patente" value={patente} />
+            <Field label="Marca" value={marca || "-"} />
+            <Field label="Modelo" value={modelo || "-"} />
             <Field label="Año" value={vehicle.year || "-"} />
-            <Field label="Tipo" value={vehicle.tipoVehiculo || "-"} />
+            <Field label="Tipo" value={tipo || "-"} />
 
             <Field
               label="Estado (mantención)"
-              value={`${estadoLabel(vehicle.estado)}${vehicle.detalle ? ` • ${vehicle.detalle}` : ""}`}
+              value={`${fixText(estadoLabel(vehicle.estado))}${detalle ? ` • ${detalle}` : ""}`}
               wide
             />
           </div>
@@ -127,7 +133,7 @@ function Field({ label, value, wide }) {
   return (
     <div className={`vdetail-field ${wide ? "wide" : ""}`}>
       <div className="vdetail-label">{label}</div>
-      <div className="vdetail-value">{value}</div>
+      <div className="vdetail-value">{fixText(value)}</div>
     </div>
   );
 }

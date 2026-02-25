@@ -1,4 +1,5 @@
-// ✅ Archivo: frontend/src/auth/auth.js (COMPLETO)
+// ✅ Archivo: frontend/src/auth/auth.js (COMPLETO - PROD SAFE)
+import { fixText } from "../utils/fixText";
 
 function safeJsonParse(raw) {
   try {
@@ -11,13 +12,8 @@ function safeJsonParse(raw) {
 function normalizeUser(u) {
   if (!u || typeof u !== "object") return null;
 
-  // soporta variantes comunes
   const role =
-    u.role ||
-    u.rol ||
-    u.perfil ||
-    u.tipo ||
-    "";
+    fixText(u.role || u.rol || u.perfil || u.tipo || "").toUpperCase();
 
   return {
     ...u,
@@ -26,17 +22,16 @@ function normalizeUser(u) {
 }
 
 export function getToken() {
-  // ✅ Soporta varias llaves por compatibilidad
+  // ✅ Soporta varias llaves + limpia espacios
   return (
     localStorage.getItem("access_token") ||
     localStorage.getItem("token") ||
     localStorage.getItem("accessToken") ||
     ""
-  );
+  ).trim();
 }
 
 export function getUser() {
-  // ✅ Soporta varias llaves por compatibilidad
   const raw =
     localStorage.getItem("user") ||
     localStorage.getItem("me") ||
@@ -47,7 +42,6 @@ export function getUser() {
   const parsed = safeJsonParse(raw);
   const normalized = normalizeUser(parsed);
 
-  // ✅ si no es válido, limpiamos para no quedar en estado raro
   if (!normalized) {
     localStorage.removeItem("user");
     localStorage.removeItem("me");
@@ -55,8 +49,11 @@ export function getUser() {
     return null;
   }
 
-  // ✅ si falta role, igual devolvemos objeto, pero con role vacío (ProtectedRoute lo manejará)
-  return normalized;
+  return {
+    ...normalized,
+    name: fixText(normalized.name || normalized.nombre || ""),
+    email: fixText(normalized.email || ""),
+  };
 }
 
 export function logout() {

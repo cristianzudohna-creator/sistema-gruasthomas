@@ -1,9 +1,9 @@
-// ✅ Archivo: frontend/src/api/vehicles.js (COMPLETO)
+// ✅ Archivo: frontend/src/api/vehicles.js (COMPLETO - PROD SAFE)
 import { getToken } from "../auth/auth";
 
 // ✅ Producción: usamos NGINX -> /api
-// ✅ Local: puedes setear VITE_API_URL="http://localhost:3000" si quieres
-const API_URL = import.meta.env.VITE_API_URL || "/api";
+// ✅ Local: VITE_API_URL="http://localhost:3000" o "/api"
+const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
 
 async function apiFetch(path, options = {}) {
   const token = getToken();
@@ -19,6 +19,7 @@ async function apiFetch(path, options = {}) {
   }
 
   const res = await fetch(`${API_URL}${path}`, {
+    credentials: "include",
     ...options,
     headers,
   });

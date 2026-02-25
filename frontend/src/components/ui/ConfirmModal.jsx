@@ -1,12 +1,14 @@
-// ✅ Archivo: src/components/ui/ConfirmModal.jsx (RESPONSIVE PRO)
+// ✅ Archivo: src/components/ui/ConfirmModal.jsx (RESPONSIVE PRO + TEXT FIX)
+import { useMemo } from "react";
 import Modal from "./Modal";
+import { fixText } from "../../utils/fixText";
 
 /**
  * ConfirmModal
  *
  * Props:
  * - open: boolean
- * - title: string
+ * - title: string | JSX
  * - description?: string | JSX
  * - confirmText?: string
  * - cancelText?: string
@@ -26,14 +28,24 @@ export default function ConfirmModal({
   onClose,
   loading = false,
 }) {
-  const subtitle = typeof description === "string" ? description : undefined;
+  // ✅ TEXT FIX (solo strings)
+  const safeTitle = useMemo(() => (typeof title === "string" ? fixText(title) : title), [title]);
+
+  const subtitle = useMemo(() => {
+    if (typeof description === "string") return fixText(description);
+    return undefined;
+  }, [description]);
+
   const body = typeof description !== "string" ? description : null;
+
+  const safeCancel = useMemo(() => fixText(cancelText), [cancelText]);
+  const safeConfirm = useMemo(() => fixText(confirmText), [confirmText]);
 
   return (
     <Modal
       open={open}
       onClose={() => !loading && onClose?.()}
-      title={title}
+      title={safeTitle}
       subtitle={subtitle}
       width={560}
       footer={
@@ -58,7 +70,7 @@ export default function ConfirmModal({
               height: 44,
             }}
           >
-            {cancelText}
+            {safeCancel}
           </button>
 
           <button
@@ -73,15 +85,13 @@ export default function ConfirmModal({
               ...(danger ? { background: "#dc2626", borderColor: "#dc2626" } : null),
             }}
           >
-            {loading ? "Procesando..." : confirmText}
+            {loading ? "Procesando..." : safeConfirm}
           </button>
         </div>
       }
     >
       {body ? (
-        <div style={{ fontSize: 14, color: "rgba(0,0,0,.75)", lineHeight: 1.45 }}>
-          {body}
-        </div>
+        <div style={{ fontSize: 14, color: "rgba(0,0,0,.75)", lineHeight: 1.45 }}>{body}</div>
       ) : null}
     </Modal>
   );

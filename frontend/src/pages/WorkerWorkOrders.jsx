@@ -1,15 +1,17 @@
-// ✅ Archivo: src/pages/WorkerWorkOrders.jsx (COMPLETO)
+// ✅ Archivo: src/pages/WorkerWorkOrders.jsx (COMPLETO + TEXT FIX)
 // ✅ FIX:
 // - API_URL dinámico (no hardcode localhost)
 // - fetch con credentials + manejo de errores
 // - Botones: Ver detalle + Completar OT (abre modales)
 // - Días: prioriza diasProgramados (fechas) y si no diasTrabajo
+// ✅ TEXT FIX:
+// - fixText() en strings que vienen del backend (titulo/cliente/lugar/errores)
 
 import { useEffect, useMemo, useState } from "react";
 import WorkOrderDetailModal from "./WorkOrderDetailModal";
 import WorkOrderCompleteModal from "./WorkOrderCompleteModal";
 import { getApiUrl } from "../api/apiUrl";
-
+import { fixText } from "../utils/fixText";
 
 const API_URL = getApiUrl();
 
@@ -49,7 +51,8 @@ async function apiGet(path) {
    Helpers UI
 ========================= */
 function normalizeText(s) {
-  return String(s || "").trim();
+  // ✅ TEXT FIX: arregla mojibake + trim
+  return fixText(String(s || "")).trim();
 }
 
 function fmtDate(v) {
@@ -98,10 +101,7 @@ function diasProgramadosPretty(arrISO) {
   const shown = arr.slice(0, max);
   const rest = arr.length - shown.length;
 
-  const txt = shown
-    .map((iso) => `${dowLabelFromISO(iso)} ${fmtDDMMYYYYFromISO(iso)}`)
-    .join(" | ");
-
+  const txt = shown.map((iso) => `${dowLabelFromISO(iso)} ${fmtDDMMYYYYFromISO(iso)}`).join(" | ");
   return rest > 0 ? `${txt} +${rest}` : txt;
 }
 
@@ -122,7 +122,7 @@ export default function WorkerWorkOrders() {
       const data = await apiGet("/work-orders/worker");
       setItems(Array.isArray(data) ? data : []);
     } catch (e) {
-      setErr(e.message || "Error cargando OTs");
+      setErr(fixText(e?.message || "Error cargando OTs"));
     } finally {
       setLoading(false);
     }
@@ -152,15 +152,18 @@ export default function WorkerWorkOrders() {
         titulo: normalizeText(x?.titulo) || "—",
         cliente: normalizeText(x?.cliente) || "—",
         lugar: normalizeText(x?.direccionFaena || x?.lugar || x?.direccion) || "—",
-        dias: diasProg || diasTrabajo || "—",
+        dias: normalizeText(diasProg || diasTrabajo) || "—",
       };
     });
   }, [items]);
 
   return (
     <div className="panel">
-      <div className="panel-head" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-        <h2 style={{ margin: 0 }}>Órdenes de trabajo</h2>
+      <div
+        className="panel-head"
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}
+      >
+        <h2 style={{ margin: 0 }}>{fixText("Órdenes de trabajo")}</h2>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <button className="btn" onClick={load} disabled={loading}>
@@ -171,7 +174,7 @@ export default function WorkerWorkOrders() {
 
       {err ? (
         <div className="gt-error" style={{ marginTop: 12 }}>
-          {err}
+          {fixText(err)}
         </div>
       ) : null}
 
@@ -227,13 +230,7 @@ export default function WorkerWorkOrders() {
       </div>
 
       {/* ✅ MODAL DETALLE */}
-      <WorkOrderDetailModal
-        open={detailOpen}
-        onClose={() => setDetailOpen(false)}
-        data={selected}
-        loading={false}
-        error={""}
-      />
+      <WorkOrderDetailModal open={detailOpen} onClose={() => setDetailOpen(false)} data={selected} loading={false} error={""} />
 
       {/* ✅ MODAL COMPLETAR (modo worker) */}
       <WorkOrderCompleteModal
@@ -244,7 +241,6 @@ export default function WorkerWorkOrders() {
         error={""}
         mode="worker"
         onSaved={async () => {
-          // cerrar modal y refrescar lista
           setCompleteOpen(false);
           await load();
         }}

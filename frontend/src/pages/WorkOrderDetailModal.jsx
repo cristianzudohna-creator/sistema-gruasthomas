@@ -1,4 +1,4 @@
-// ✅ Archivo: src/pages/WorkOrderDetailModal.jsx (COMPLETO)
+// ✅ Archivo: src/pages/WorkOrderDetailModal.jsx (COMPLETO + TEXT FIX GLOBAL)
 // ✅ FIX:
 // 1) Texto de banner COMpletada más correcto para admin/superadmin
 // 2) Quita “Empresa” del subtitle y chips (no es dato del cliente en este modal)
@@ -12,9 +12,12 @@
 // - Si NO viene, se mantiene como antes (LUN, MAR, ...)
 // ✅ NUEVO (OBRA):
 // - Muestra inicioServicioObra + terminoServicioObra desde workerReport.detalleHoras
+// ✅ TEXT FIX:
+// - fixText() en strings que vienen del backend para evitar mojibake
 
 import { useEffect, useState } from "react";
 import Modal from "../components/ui/Modal";
+import { fixText } from "../utils/fixText";
 
 // ✅ API dinámico (igual al estándar que estamos dejando)
 const baseFromEnv = (import.meta?.env?.VITE_API_URL || "").trim();
@@ -23,6 +26,7 @@ const baseFromHost =
     ? `${window.location.protocol}//${window.location.host}/api`
     : "";
 const API_URL = (baseFromEnv || "/api").replace(/\/+$/, "");
+
 // ⚠️ Si tu backend NO usa /api en prod, cambia a:
 // const baseFromHost = `${window.location.protocol}//${window.location.host}`;
 
@@ -88,11 +92,23 @@ function pick(...vals) {
   return "";
 }
 
+function normalizeText(s) {
+  // ✅ TEXT FIX global
+  return fixText(String(s || "")).trim();
+}
+
 function Field({ label, value, right, valueContainerStyle }) {
+  // ✅ label también puede venir desde backend en algunos casos
+  const cleanLabel = fixText(String(label ?? ""));
+
+  // ✅ si value es string, lo arreglamos
+  const cleanValue =
+    typeof value === "string" ? fixText(value) : value;
+
   const isEmpty =
-    value === null ||
-    value === undefined ||
-    (typeof value === "string" && !String(value || "").trim());
+    cleanValue === null ||
+    cleanValue === undefined ||
+    (typeof cleanValue === "string" && !String(cleanValue || "").trim());
 
   return (
     <div
@@ -104,7 +120,9 @@ function Field({ label, value, right, valueContainerStyle }) {
         position: "relative",
       }}
     >
-      <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 900 }}>{label}</div>
+      <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 900 }}>
+        {cleanLabel}
+      </div>
 
       <div
         style={{
@@ -114,11 +132,13 @@ function Field({ label, value, right, valueContainerStyle }) {
           ...valueContainerStyle,
         }}
       >
-        {isEmpty ? "—" : value}
+        {isEmpty ? "—" : cleanValue}
       </div>
 
       {right ? (
-        <div style={{ position: "absolute", right: 10, top: 10 }}>{right}</div>
+        <div style={{ position: "absolute", right: 10, top: 10 }}>
+          {right}
+        </div>
       ) : null}
     </div>
   );
@@ -143,7 +163,9 @@ function Section({ title, children, right }) {
           gap: 10,
         }}
       >
-        <div style={{ fontWeight: 900, marginBottom: 8 }}>{title}</div>
+        <div style={{ fontWeight: 900, marginBottom: 8 }}>
+          {fixText(String(title ?? ""))}
+        </div>
         {right ? <div style={{ marginBottom: 8 }}>{right}</div> : null}
       </div>
       {children}
@@ -175,7 +197,7 @@ function Badge({ children, tone = "neutral" }) {
         fontSize: 12,
       }}
     >
-      {children}
+      {typeof children === "string" ? fixText(children) : children}
     </span>
   );
 }
@@ -197,7 +219,7 @@ function statusLabel(s) {
   if (v === "RECHAZADA") return "❌ Rechazada";
   if (v === "APROBADA") return "✅ Aprobada";
   if (v === "CERRADA") return "📦 Cerrada";
-  return v || "—";
+  return fixText(v || "—");
 }
 
 function safeParseWorkerReport(v) {
@@ -213,10 +235,6 @@ function safeParseWorkerReport(v) {
     }
   }
   return null;
-}
-
-function normalizeText(s) {
-  return String(s || "").trim();
 }
 
 function isValidHora(h) {
@@ -302,8 +320,8 @@ function LabeledInput({ label, placeholder, value, onChange, disabled, error, cl
   return (
     <div className={className}>
       <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.75, marginBottom: 6 }}>
-        {label}
-        {error ? <span style={{ color: "#dc2626" }}> • {error}</span> : null}
+        {fixText(String(label ?? ""))}
+        {error ? <span style={{ color: "#dc2626" }}> • {fixText(String(error))}</span> : null}
       </div>
       <input
         className="gt-input"
@@ -325,8 +343,8 @@ function LabeledTextarea({ label, placeholder, value, onChange, disabled, error,
   return (
     <div className={className}>
       <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.75, marginBottom: 6 }}>
-        {label}
-        {error ? <span style={{ color: "#dc2626" }}> • {error}</span> : null}
+        {fixText(String(label ?? ""))}
+        {error ? <span style={{ color: "#dc2626" }}> • {fixText(String(error))}</span> : null}
       </div>
       <textarea
         className="gt-input ot-textarea"
@@ -343,23 +361,23 @@ function LabeledTextarea({ label, placeholder, value, onChange, disabled, error,
 export default function WorkOrderDetailModal({ open, onClose, data, loading, error }) {
   const status = pick(data?.status, data?.estado);
 
-  const cliente = pick(data?.cliente, data?.clienteNombre, data?.razonSocial);
-  const rut = pick(data?.rut, data?.clienteRut);
-  const giro = pick(data?.giro);
+  const cliente = normalizeText(pick(data?.cliente, data?.clienteNombre, data?.razonSocial));
+  const rut = normalizeText(pick(data?.rut, data?.clienteRut));
+  const giro = normalizeText(pick(data?.giro));
 
-  const direccionCliente = pick(data?.direccion);
-  const direccionFaena = pick(data?.direccionFaena);
-  const lugar = pick(data?.lugar, data?.ubicacion);
+  const direccionCliente = normalizeText(pick(data?.direccion));
+  const direccionFaena = normalizeText(pick(data?.direccionFaena));
+  const lugar = normalizeText(pick(data?.lugar, data?.ubicacion));
 
-  const comuna = pick(data?.comuna);
-  const ciudad = pick(data?.ciudad);
+  const comuna = normalizeText(pick(data?.comuna));
+  const ciudad = normalizeText(pick(data?.ciudad));
 
-  const horario = pick(data?.horario, data?.horarioLlegada);
-  const mapsLink = String(pick(data?.mapsLink, data?.maps, data?.googleMapsLink) || "").trim();
+  const horario = normalizeText(pick(data?.horario, data?.horarioLlegada));
+  const mapsLink = normalizeText(pick(data?.mapsLink, data?.maps, data?.googleMapsLink));
 
-  const camion = pick(data?.camion, data?.camionNumero);
-  const conductor = pick(data?.conductor);
-  const rigger = pick(data?.rigger);
+  const camion = normalizeText(pick(data?.camion, data?.camionNumero));
+  const conductor = normalizeText(pick(data?.conductor));
+  const rigger = normalizeText(pick(data?.rigger));
 
   // ✅ días: prioriza fechas si existen
   const diasProgramadosArr = Array.isArray(data?.diasProgramados) ? data.diasProgramados : [];
@@ -373,53 +391,63 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
 
   // ✅ “Solicitado por”
   const solicitadoPor =
-    pick(
-      data?.solicitadoPor,
-      data?.solicitadoPorNombre,
-      data?.requestedByName,
-      data?.requestedBy,
-      data?.contactoSolicitante,
-      data?.nombreSolicitante
+    normalizeText(
+      pick(
+        data?.solicitadoPor,
+        data?.solicitadoPorNombre,
+        data?.requestedByName,
+        data?.requestedBy,
+        data?.contactoSolicitante,
+        data?.nombreSolicitante
+      )
     ) || "—";
 
-  const nota = pick(data?.descripcion, data?.nota);
+  const nota = normalizeText(pick(data?.descripcion, data?.nota));
 
-  const modalTitle = `OT • ${pick(cliente, direccionFaena, lugar, direccionCliente, data?.titulo, "Detalle")}`;
+  const modalTitle = fixText(
+    `OT • ${pick(cliente, direccionFaena, lugar, direccionCliente, data?.titulo, "Detalle")}`
+  );
 
-  const rejectReason = String(pick(data?.rejectReason) || "").trim();
-  const approvalComment = String(pick(data?.approvalComment) || "").trim();
+  const rejectReason = normalizeText(pick(data?.rejectReason));
+  const approvalComment = normalizeText(pick(data?.approvalComment));
   const approvedAt = data?.approvedAt;
 
   const approvedBy =
     data?.approvedBy
-      ? (
-          `${pick(data.approvedBy?.nombre)}${
-            pick(data.approvedBy?.apellido) ? " " + pick(data.approvedBy?.apellido) : ""
-          }`.trim() ||
-          pick(data.approvedBy?.email) ||
-          ""
+      ? fixText(
+          (
+            `${pick(data.approvedBy?.nombre)}${
+              pick(data.approvedBy?.apellido) ? " " + pick(data.approvedBy?.apellido) : ""
+            }`.trim() ||
+            pick(data.approvedBy?.email) ||
+            ""
+          )
         )
       : "";
 
   // ✅ SUBTITLE sin “Empresa”
-  const subtitle = data ? `Creada: ${fmtDate(data?.createdAt)} • Estado: ${statusLabel(status)}` : "Detalle de orden";
+  const subtitle = data
+    ? fixText(`Creada: ${fmtDate(data?.createdAt)} • Estado: ${statusLabel(status)}`)
+    : "Detalle de orden";
 
   const workerReport = safeParseWorkerReport(data?.workerReport);
   const detalleHoras = workerReport?.detalleHoras || null;
-  const movimientos = workerReport?.movimientos || "";
+  const movimientos = normalizeText(workerReport?.movimientos);
 
   const completedBy =
     data?.completedBy
-      ? (
-          `${pick(data.completedBy?.nombre)}${
-            pick(data.completedBy?.apellido) ? " " + pick(data.completedBy?.apellido) : ""
-          }`.trim() ||
-          pick(data.completedBy?.email) ||
-          ""
+      ? fixText(
+          (
+            `${pick(data.completedBy?.nombre)}${
+              pick(data.completedBy?.apellido) ? " " + pick(data.completedBy?.apellido) : ""
+            }`.trim() ||
+            pick(data.completedBy?.email) ||
+            ""
+          )
         )
       : "";
 
-  const comentarioFinal = pick(data?.comentarioFinal);
+  const comentarioFinal = normalizeText(pick(data?.comentarioFinal));
 
   const stUp = String(status || "").toUpperCase();
   const isCompletedLike = ["COMPLETADA", "APROBADA", "CERRADA", "RECHAZADA"].includes(stUp);
@@ -450,11 +478,9 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
   const [adminF, setAdminF] = useState({
     salidaPlanta: "",
     llegadaFaena: "",
-
     // ✅ NUEVO OBRA
     inicioServicioObra: "",
     terminoServicioObra: "",
-
     salidaFaena: "",
     llegadaPlanta: "",
     colacion: "",
@@ -577,7 +603,7 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
       setAdminErr("✅ Reporte corregido. Si no se refresca altiro, cierra y vuelve a abrir el detalle.");
       return updated;
     } catch (e) {
-      setAdminErr(e.message || "Error guardando corrección");
+      setAdminErr(fixText(e?.message || "Error guardando corrección"));
     } finally {
       setAdminSaving(false);
     }
@@ -649,7 +675,9 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
       {loading ? (
         <div style={{ padding: 14, fontWeight: 900, opacity: 0.8 }}>Cargando detalle...</div>
       ) : error ? (
-        <div style={{ padding: 14, color: "#b00020", fontWeight: 900 }}>{error}</div>
+        <div style={{ padding: 14, color: "#b00020", fontWeight: 900 }}>
+          {fixText(String(error))}
+        </div>
       ) : !data ? (
         <div style={{ padding: 14, opacity: 0.75 }}>Sin datos.</div>
       ) : (
@@ -657,7 +685,7 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
           {/* ✅ chips sin Empresa */}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
             <Badge tone={statusTone(status)}>{statusLabel(status)}</Badge>
-            <Badge>Creada: {fmtDate(data?.createdAt)}</Badge>
+            <Badge>{`Creada: ${fmtDate(data?.createdAt)}`}</Badge>
           </div>
 
           {/* ✅ banner COMpletada: texto correcto para admin */}
@@ -687,10 +715,11 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
                 fontWeight: 900,
               }}
             >
-              ✅ OT aprobada {approvedAt ? `(${fmtDate(approvedAt)})` : ""} {approvedBy ? `• Por: ${approvedBy}` : ""}
+              ✅ OT aprobada {approvedAt ? `(${fmtDate(approvedAt)})` : ""}{" "}
+              {approvedBy ? `• Por: ${approvedBy}` : ""}
               {approvalComment ? (
                 <div style={{ marginTop: 8, fontWeight: 900, opacity: 0.9 }}>
-                  Comentario: <span style={{ fontWeight: 800 }}>{approvalComment}</span>
+                  Comentario: <span style={{ fontWeight: 800 }}>{fixText(approvalComment)}</span>
                 </div>
               ) : null}
             </div>
@@ -708,9 +737,10 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
                 color: "#b00020",
               }}
             >
-              ❌ OT rechazada {approvedAt ? `(${fmtDate(approvedAt)})` : ""} {approvedBy ? `• Por: ${approvedBy}` : ""}
+              ❌ OT rechazada {approvedAt ? `(${fmtDate(approvedAt)})` : ""}{" "}
+              {approvedBy ? `• Por: ${approvedBy}` : ""}
               <div style={{ marginTop: 8, color: "#111", fontWeight: 900 }}>
-                Motivo: <span style={{ fontWeight: 800 }}>{rejectReason || "—"}</span>
+                Motivo: <span style={{ fontWeight: 800 }}>{fixText(rejectReason || "—")}</span>
               </div>
             </div>
           ) : null}
@@ -826,7 +856,7 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
           {/* ===== NOTA ===== */}
           <Section title="Descripción / Nota">
             <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
-              {String(nota || "").trim() ? nota : "—"}
+              {nota ? nota : "—"}
             </div>
             {!mapsLink ? (
               <div style={{ marginTop: 10 }}>
@@ -851,8 +881,8 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
               }
             >
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-                <Badge>Completada: {fmtDate(data?.completedAt)}</Badge>
-                <Badge>Por: {completedBy || "—"}</Badge>
+                <Badge>{`Completada: ${fmtDate(data?.completedAt)}`}</Badge>
+                <Badge>{`Por: ${completedBy || "—"}`}</Badge>
               </div>
 
               {adminEditOpen ? (
@@ -876,7 +906,7 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
                         fontWeight: 900,
                       }}
                     >
-                      {adminErr}
+                      {fixText(adminErr)}
                     </div>
                   ) : null}
 
@@ -972,15 +1002,15 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
               <div style={{ fontWeight: 900, marginTop: 6, marginBottom: 6, opacity: 0.85 }}>Detalle de horas</div>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
-                <Field label="Salida planta" value={pick(detalleHoras?.salidaPlanta)} />
-                <Field label="Llegada faena" value={pick(detalleHoras?.llegadaFaena)} />
+                <Field label="Salida planta" value={normalizeText(pick(detalleHoras?.salidaPlanta))} />
+                <Field label="Llegada faena" value={normalizeText(pick(detalleHoras?.llegadaFaena))} />
 
                 <Field label="Inicio servicio en obra" value={inicioServicioObra} />
                 <Field label="Término servicio en obra" value={terminoServicioObra} />
 
-                <Field label="Salida faena" value={pick(detalleHoras?.salidaFaena)} />
-                <Field label="Llegada planta" value={pick(detalleHoras?.llegadaPlanta)} />
-                <Field label="Colación" value={pick(detalleHoras?.colacion)} />
+                <Field label="Salida faena" value={normalizeText(pick(detalleHoras?.salidaFaena))} />
+                <Field label="Llegada planta" value={normalizeText(pick(detalleHoras?.llegadaPlanta))} />
+                <Field label="Colación" value={normalizeText(pick(detalleHoras?.colacion))} />
 
                 <Field label="Km salida planta" value={kmSalidaPlanta} />
                 <Field label="Km llegada faena" value={kmLlegadaFaena} />
@@ -1000,7 +1030,7 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
                   border: "1px solid rgba(0,0,0,0.08)",
                 }}
               >
-                {String(movimientos || "").trim() ? movimientos : "—"}
+                {movimientos ? movimientos : "—"}
               </div>
 
               <div style={{ fontWeight: 900, marginTop: 14, marginBottom: 8, opacity: 0.9 }}>Firma del cliente</div>
@@ -1042,7 +1072,7 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
                 <div style={{ fontWeight: 900, opacity: 0.7 }}>Sin firma registrada.</div>
               )}
 
-              {String(comentarioFinal || "").trim() ? (
+              {comentarioFinal ? (
                 <>
                   <div style={{ fontWeight: 900, marginTop: 12, marginBottom: 6, opacity: 0.85 }}>Comentario final</div>
                   <div
@@ -1063,7 +1093,9 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
               {workerReport?.raw ? (
                 <>
                   <div style={{ fontWeight: 900, marginTop: 12, marginBottom: 6, opacity: 0.85 }}>Reporte (raw)</div>
-                  <div style={{ whiteSpace: "pre-wrap", fontFamily: "monospace", fontSize: 12 }}>{workerReport.raw}</div>
+                  <div style={{ whiteSpace: "pre-wrap", fontFamily: "monospace", fontSize: 12 }}>
+                    {fixText(workerReport.raw)}
+                  </div>
                 </>
               ) : null}
             </Section>

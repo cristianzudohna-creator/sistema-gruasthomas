@@ -1,11 +1,14 @@
-// ✅ Archivo: src/components/ui/Modal.jsx (RESPONSIVE PRO - TABLET/CEL)
+// ✅ Archivo: src/components/ui/Modal.jsx (RESPONSIVE PRO - TABLET/CEL + TEXT FIX)
 // ✅ FIX:
 // - Safe area iOS (notch)
 // - Mobile bottom-sheet (más cómodo)
 // - Lock scroll sin “saltos” (guarda/restaura scrollY)
 // - Header/Footer compactos en móvil
-import { useEffect, useRef } from "react";
+// ✅ TEXT FIX:
+// - title/subtitle/aria-label pasan por fixText() para evitar mojibake en headers de modales
+import { useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
+import { fixText } from "../../utils/fixText";
 
 let lockCount = 0;
 let savedScrollY = 0;
@@ -45,6 +48,23 @@ function unlockBodyScroll() {
 export default function Modal({ open, onClose, title, subtitle, children, footer, width = 600 }) {
   const overlayRef = useRef(null);
 
+  // ✅ TEXT FIX (solo string): no tocamos ReactNodes (por si algún día usas JSX)
+  const safeTitle = useMemo(() => {
+    if (typeof title === "string") return fixText(title);
+    return title;
+  }, [title]);
+
+  const safeSubtitle = useMemo(() => {
+    if (typeof subtitle === "string") return fixText(subtitle);
+    return subtitle;
+  }, [subtitle]);
+
+  const ariaLabel = useMemo(() => {
+    if (typeof title === "string") return fixText(title);
+    // si title es JSX o null, usamos fallback fijo para accesibilidad
+    return "Modal";
+  }, [title]);
+
   useEffect(() => {
     if (!open) return;
 
@@ -69,12 +89,7 @@ export default function Modal({ open, onClose, title, subtitle, children, footer
   }
 
   const node = (
-    <div
-      ref={overlayRef}
-      style={styles.overlay}
-      onMouseDown={handleOverlayMouseDown}
-      role="presentation"
-    >
+    <div ref={overlayRef} style={styles.overlay} onMouseDown={handleOverlayMouseDown} role="presentation">
       <div
         style={{
           ...styles.modal,
@@ -82,29 +97,23 @@ export default function Modal({ open, onClose, title, subtitle, children, footer
         }}
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-label={ariaLabel}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div style={styles.header}>
           <div style={{ minWidth: 0 }}>
-            <h2 style={styles.title}>{title}</h2>
-            {subtitle && <p style={styles.subtitle}>{subtitle}</p>}
+            <h2 style={styles.title}>{safeTitle}</h2>
+            {safeSubtitle ? <p style={styles.subtitle}>{safeSubtitle}</p> : null}
           </div>
 
-          <button
-            type="button"
-            style={styles.closeBtn}
-            onClick={onClose}
-            aria-label="Cerrar"
-            title="Cerrar"
-          >
+          <button type="button" style={styles.closeBtn} onClick={onClose} aria-label="Cerrar" title="Cerrar">
             ✕
           </button>
         </div>
 
         <div style={styles.body}>{children}</div>
 
-        {footer && <div style={styles.footer}>{footer}</div>}
+        {footer ? <div style={styles.footer}>{footer}</div> : null}
       </div>
     </div>
   );
@@ -123,7 +132,8 @@ const styles = {
     zIndex: 999999,
 
     // ✅ Safe area + padding responsive
-    padding: "max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))",
+    padding:
+      "max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))",
 
     overflowY: "auto",
   },
