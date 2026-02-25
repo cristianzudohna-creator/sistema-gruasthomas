@@ -173,7 +173,7 @@ export class VehiclesService {
 
     if (role === "SUPERADMIN" || role === "CONTROL_FLOTA") return;
 
-    throw new ForbiddenException("No tienes permisos.");
+    throw new ForbiddenException(`No tienes permisos. [VEHICLES_SERVICE role=${role}]`);
   }
 
   // ✅ usado por controller para proteger /vehicles/:id/***
