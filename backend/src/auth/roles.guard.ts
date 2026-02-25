@@ -5,33 +5,12 @@ import {
   Injectable,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
-import { ROLES_KEY } from "./roles.decorator";
 
-function norm(role: any) {
-  let r = String(role || "").trim().toUpperCase();
+const ROLES_KEY = "roles";
 
-  // normaliza separadores
-  r = r.replace(/[-\s]+/g, "_"); // "CONTROL DE FLOTA" -> "CONTROL_DE_FLOTA"
-
-  // aliases / mapeos
-  const ALIASES: Record<string, string> = {
-    CONTROL_DE_FLOTA: "CONTROL_FLOTA",
-    CONTROLFLOTA: "CONTROL_FLOTA",
-    CONTROL_FLOTA: "CONTROL_FLOTA",
-    ADMINISTRADORA: "ADMINISTRADORA",
-    SUPERADMIN: "SUPERADMIN",
-  };
-
-  return ALIASES[r] || r;
+function normRole(v: any) {
+  return String(v ?? "").trim().toUpperCase();
 }
-
-// Jerarquía (ajústala si quieres otra)
-// SUPERADMIN > CONTROL_FLOTA > ADMINISTRADORA
-const ROLE_LEVEL: Record<string, number> = {
-  ADMINISTRADORA: 1,
-  CONTROL_FLOTA: 2,
-  SUPERADMIN: 3,
-};
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -44,26 +23,29 @@ export class RolesGuard implements CanActivate {
         context.getClass(),
       ]) || [];
 
-    if (requiredRoles.length === 0) return true;
+    // Si no hay roles requeridos, dejamos pasar
+    if (!requiredRoles.length) return true;
 
     const req = context.switchToHttp().getRequest();
-    const user = req.user;
+    const user = req?.user ?? null;
 
-    const userRole = norm(user?.role);
-    if (!userRole) throw new ForbiddenException("No tienes permisos.");
+    const userRole = normRole(user?.role);
+    const required = requiredRoles.map(normRole);
 
-    const required = requiredRoles.map(norm);
+    // ✅ DEBUG (temporal): para ver por qué se cae
+    // OJO: esto SÍ se ejecuta aunque el service no se ejecute
+    // eslint-disable-next-line no-console
+    console.log("[RolesGuard] required:", required, "| userRole:", userRole, "| rawUser:", user);
 
-    // match directo
-    if (required.includes(userRole)) return true;
-
-    // match por jerarquía
-    const userLevel = ROLE_LEVEL[userRole] || 0;
-    for (const r of required) {
-      const requiredLevel = ROLE_LEVEL[r] || 0;
-      if (requiredLevel > 0 && userLevel >= requiredLevel) return true;
+    if (!userRole) {
+      throw new ForbiddenException("No tienes permisos.");
     }
 
-    throw new ForbiddenException("No tienes permisos.");
+    const ok = required.includes(userRole);
+    if (!ok) {
+      throw new ForbiddenException("No tienes permisos.");
+    }
+
+    return true;
   }
 }
