@@ -84,12 +84,20 @@ export class VehicleDocumentsService {
     return normRole(actor?.role);
   }
 
-  // ✅ SOLO roles permitidos en camiones
   private assertFleetAccessOrThrow(actor?: ActorLike) {
-    const role = this.roleUpper(actor ?? null);
-    if (role === "SUPERADMIN" || role === "CONTROL_FLOTA") return;
-    throw new ForbiddenException("No tienes permisos.");
-  }
+  const role = this.roleUpper(actor ?? null);
+
+  // DEBUG TEMPORAL
+  // eslint-disable-next-line no-console
+  console.log("[DOCS] actor:", actor);
+  // eslint-disable-next-line no-console
+  console.log("[DOCS] actor.role:", actor?.role);
+  // eslint-disable-next-line no-console
+  console.log("[DOCS] normRole:", role);
+
+  if (role === "SUPERADMIN" || role === "CONTROL_FLOTA") return;
+  throw new ForbiddenException("No tienes permisos.");
+}
 
   private calcEstado(fechaVencimiento: Date | null) {
     if (!fechaVencimiento) return "VIGENTE";
