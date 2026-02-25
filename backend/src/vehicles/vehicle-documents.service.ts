@@ -1,13 +1,14 @@
-// ✅ Archivo: src/vehicles/vehicle-documents.service.ts
-// (COMPLETO) ✅ Opción 1: 1 documento por tipo (excepto OTRO) => se REEMPLAZA (update) en vez de acumular
+// ✅ Archivo: backend/src/vehicles/vehicle-documents.service.ts
+// (COMPLETO)
+// ✅ Opción 1: 1 documento por tipo (excepto OTRO) => se REEMPLAZA (update) en vez de acumular
 // ✅ CAMBIO: Al eliminar, se deja RESPALDO:
-// - Se guarda snapshot completo en AuditLog (data.before)
+// - Se guarda snapshot completo en AuditLog
 // - Si el archivo era físico, se MUEVE a /uploads/archive/vehicle-docs/ (no se borra)
 // - Luego se elimina el registro en BD (delete)
 //
-// ✅ PERMISOS (SOLO CAMIONES):
-// - Roles permitidos: SUPERADMIN, CONTROL_FLOTA (FULL)
-// - Cualquier otro rol: 403
+// ✅ PERMISOS (CAMBIO SOLICITADO):
+// - SOLO: SUPERADMIN y CONTROL_FLOTA (full access)
+// - Admin/Trabajador NO tienen acceso en este módulo
 
 import {
   BadRequestException,
@@ -79,21 +80,10 @@ export class VehicleDocumentsService {
     return String(actor?.role || "").toUpperCase();
   }
 
-  private isGlobalRole(actor?: ActorLike) {
-    const r = this.roleUpper(actor ?? null);
-    return r === "SUPERADMIN" || r === "CONTROL_FLOTA";
-  }
-
-  private empresaFromActorOrThrow(actor: ActorLike): Empresa {
-    const emp = actor?.empresa as Empresa | undefined | null;
-    if (!emp)
-      throw new ForbiddenException("No se pudo determinar la empresa del usuario.");
-    return emp;
-  }
-
-  // ✅ AHORA: SOLO SUPERADMIN / CONTROL_FLOTA
-  private assertEmpresaAccessOrThrow(actor: ActorLike, _resourceEmpresa: Empresa) {
-    if (this.isGlobalRole(actor)) return;
+  // ✅ SOLO roles permitidos en camiones
+  private assertFleetAccessOrThrow(actor?: ActorLike) {
+    const role = this.roleUpper(actor ?? null);
+    if (role === "SUPERADMIN" || role === "CONTROL_FLOTA") return;
     throw new ForbiddenException("No tienes permisos.");
   }
 
@@ -155,10 +145,6 @@ export class VehicleDocumentsService {
     return join(process.cwd(), clean);
   }
 
-  private normalizeEmpresaFromVehicleRow(empresaValue: any): Empresa {
-    return String(empresaValue) === "INSPROTEL" ? "INSPROTEL" : "GRUAS_THOMAS";
-  }
-
   // ✅ tipos que deben ser 1 por vehículo (NO acumular)
   private isSinglePerType(t: DocumentType) {
     return t !== DocumentType.OTRO;
@@ -175,21 +161,28 @@ export class VehicleDocumentsService {
     return `/uploads/archive/vehicle-docs/${stamp}-${rand}${oldExt}`;
   }
 
+  // ✅ Vehículo debe existir y estar activo
+  private async ensureVehicleActiveOrThrow(vehicleId: string) {
+    const v = await this.prisma.vehicle.findUnique({
+      where: { id: vehicleId },
+      select: { id: true, patente: true, activo: true as any, empresa: true as any },
+    });
+
+    if (!v) throw new NotFoundException("Vehículo no existe");
+    if ((v as any).activo === false) throw new NotFoundException("Vehículo no existe");
+
+    return v;
+  }
+
   // =========================
   // Listar documentos por vehículo
   // =========================
   async listByVehicle(vehicleId: string, actor?: ActorLike) {
-    const vehicle = await this.prisma.vehicle.findUnique({
-      where: { id: vehicleId },
-      select: { id: true, patente: true, empresa: true as any, activo: true as any },
-    });
-    if (!vehicle) throw new NotFoundException("Vehículo no existe");
-    if ((vehicle as any).activo === false) throw new NotFoundException("Vehículo no existe");
+    // ✅ SOLO SUPERADMIN / CONTROL_FLOTA
+    this.assertFleetAccessOrThrow(actor);
 
-    if (actor) {
-      const vEmp = this.normalizeEmpresaFromVehicleRow((vehicle as any).empresa);
-      this.assertEmpresaAccessOrThrow(actor, vEmp);
-    }
+    // ✅ valida activo
+    await this.ensureVehicleActiveOrThrow(vehicleId);
 
     const docs = await this.prisma.vehicleDocument.findMany({
       where: { vehicleId },
@@ -208,22 +201,14 @@ export class VehicleDocumentsService {
   // - otros => si existe => UPDATE, si no => CREATE
   // =========================
   async upsertByVehicleType(vehicleId: string, dto: CreateDocDto, actor?: ActorLike) {
+    this.assertFleetAccessOrThrow(actor);
+
     // OTRO acumula
     if (!this.isSinglePerType(dto.type)) {
       return this.create(vehicleId, dto, actor);
     }
 
-    const vehicle = await this.prisma.vehicle.findUnique({
-      where: { id: vehicleId },
-      select: { id: true, patente: true, empresa: true as any, activo: true as any },
-    });
-    if (!vehicle) throw new NotFoundException("Vehículo no existe");
-    if ((vehicle as any).activo === false) throw new NotFoundException("Vehículo no existe");
-
-    if (actor) {
-      const vEmp = this.normalizeEmpresaFromVehicleRow((vehicle as any).empresa);
-      this.assertEmpresaAccessOrThrow(actor, vEmp);
-    }
+    const vehicle = await this.ensureVehicleActiveOrThrow(vehicleId);
 
     const fecha = dto.fechaVencimiento ? this.parseFechaOrThrow(dto.fechaVencimiento) : null;
     this.validateTipoNombre(dto.type, dto.nombre);
@@ -241,6 +226,7 @@ export class VehicleDocumentsService {
           fechaVencimiento: fecha,
           observacion: dto.observacion?.trim() || null,
           archivoUrl: meta.archivoUrl,
+
           filePath: meta.filePath,
           originalName: meta.originalName,
           mimeType: meta.mimeType,
@@ -255,7 +241,7 @@ export class VehicleDocumentsService {
         actor: this.safeActor(actor),
         meta: {
           title: "Reemplazó documento (mismo tipo) en vehículo",
-          vehicle: { id: vehicleId, patente: vehicle.patente },
+          vehicle: { id: vehicleId, patente: (vehicle as any).patente },
           document: {
             id: updated.id,
             before: {
@@ -290,6 +276,8 @@ export class VehicleDocumentsService {
   // - otros => si existe => replaceFile(existing.id), si no => create
   // =========================
   async upsertFileByVehicleType(vehicleId: string, dto: ReplaceFileDto, actor?: ActorLike) {
+    this.assertFleetAccessOrThrow(actor);
+
     // OTRO acumula
     if (!this.isSinglePerType(dto.type as any)) {
       return this.create(
@@ -309,17 +297,7 @@ export class VehicleDocumentsService {
       );
     }
 
-    const vehicle = await this.prisma.vehicle.findUnique({
-      where: { id: vehicleId },
-      select: { id: true, patente: true, empresa: true as any, activo: true as any },
-    });
-    if (!vehicle) throw new NotFoundException("Vehículo no existe");
-    if ((vehicle as any).activo === false) throw new NotFoundException("Vehículo no existe");
-
-    if (actor) {
-      const vEmp = this.normalizeEmpresaFromVehicleRow((vehicle as any).empresa);
-      this.assertEmpresaAccessOrThrow(actor, vEmp);
-    }
+    await this.ensureVehicleActiveOrThrow(vehicleId);
 
     this.validateTipoNombre(dto.type as any, dto.nombre);
 
@@ -352,17 +330,9 @@ export class VehicleDocumentsService {
   // ✅ Crear documento
   // =========================
   async create(vehicleId: string, dto: CreateDocDto, actor?: ActorLike) {
-    const vehicle = await this.prisma.vehicle.findUnique({
-      where: { id: vehicleId },
-      select: { id: true, patente: true, empresa: true as any, activo: true as any },
-    });
-    if (!vehicle) throw new NotFoundException("Vehículo no existe");
-    if ((vehicle as any).activo === false) throw new NotFoundException("Vehículo no existe");
+    this.assertFleetAccessOrThrow(actor);
 
-    if (actor) {
-      const vEmp = this.normalizeEmpresaFromVehicleRow((vehicle as any).empresa);
-      this.assertEmpresaAccessOrThrow(actor, vEmp);
-    }
+    const vehicle = await this.ensureVehicleActiveOrThrow(vehicleId);
 
     const fecha = dto.fechaVencimiento ? this.parseFechaOrThrow(dto.fechaVencimiento) : null;
     this.validateTipoNombre(dto.type, dto.nombre);
@@ -393,7 +363,7 @@ export class VehicleDocumentsService {
         actor: this.safeActor(actor),
         meta: {
           title: "Agregó documento a vehículo",
-          vehicle: { id: vehicleId, patente: vehicle.patente },
+          vehicle: { id: vehicleId, patente: (vehicle as any).patente },
           document: {
             id: created.id,
             type: created.type,
@@ -407,12 +377,11 @@ export class VehicleDocumentsService {
       return { ...created, estado: this.calcEstado(created.fechaVencimiento ?? null) };
     }
 
-    // ✅ 1) Buscar si ya existe doc para este vehículo + type
+    // ✅ single-per-type: si existe => update (reemplazo lógico)
     const existing = await this.prisma.vehicleDocument.findFirst({
       where: { vehicleId, type: dto.type },
     });
 
-    // ✅ 2) Si existe => UPDATE (reemplazo)
     if (existing) {
       const oldFilePath = (existing as any).filePath || existing.archivoUrl || null;
 
@@ -422,7 +391,6 @@ export class VehicleDocumentsService {
           nombre: dto.nombre?.trim() || null,
           fechaVencimiento: fecha,
           observacion: dto.observacion?.trim() || null,
-
           archivoUrl: meta.archivoUrl,
 
           filePath: meta.filePath,
@@ -449,7 +417,7 @@ export class VehicleDocumentsService {
         actor: this.safeActor(actor),
         meta: {
           title: "Reemplazó documento (mismo tipo) en vehículo",
-          vehicle: { id: vehicleId, patente: vehicle.patente },
+          vehicle: { id: vehicleId, patente: (vehicle as any).patente },
           document: {
             id: updated.id,
             before: {
@@ -481,7 +449,7 @@ export class VehicleDocumentsService {
       return { ...updated, estado: this.calcEstado(updated.fechaVencimiento ?? null) };
     }
 
-    // ✅ 3) Si NO existe => CREATE normal
+    // ✅ no existe => create
     const created = await this.prisma.vehicleDocument.create({
       data: {
         vehicleId,
@@ -489,7 +457,6 @@ export class VehicleDocumentsService {
         nombre: dto.nombre?.trim() || null,
         fechaVencimiento: fecha,
         observacion: dto.observacion?.trim() || null,
-
         archivoUrl: meta.archivoUrl,
 
         filePath: meta.filePath,
@@ -506,7 +473,7 @@ export class VehicleDocumentsService {
       actor: this.safeActor(actor),
       meta: {
         title: "Agregó documento a vehículo",
-        vehicle: { id: vehicleId, patente: vehicle.patente },
+        vehicle: { id: vehicleId, patente: (vehicle as any).patente },
         document: {
           id: created.id,
           type: created.type,
@@ -524,17 +491,16 @@ export class VehicleDocumentsService {
   // Actualizar documento (sin archivo)
   // =========================
   async update(docId: string, dto: UpdateDocDto, actor?: ActorLike) {
+    this.assertFleetAccessOrThrow(actor);
+
     const existing = await this.prisma.vehicleDocument.findUnique({
       where: { id: docId },
       include: { vehicle: true },
     });
     if (!existing) throw new NotFoundException("Documento no existe");
-    if ((existing.vehicle as any)?.activo === false) throw new NotFoundException("Documento no existe");
 
-    if (actor) {
-      const vEmp = this.normalizeEmpresaFromVehicleRow((existing.vehicle as any)?.empresa);
-      this.assertEmpresaAccessOrThrow(actor, vEmp);
-    }
+    // ✅ si vehículo está inactivo => NotFound
+    if ((existing.vehicle as any)?.activo === false) throw new NotFoundException("Documento no existe");
 
     let fecha: Date | null | undefined = undefined;
     if (dto.fechaVencimiento !== undefined) {
@@ -594,17 +560,15 @@ export class VehicleDocumentsService {
   // Reemplazar archivo + actualizar campos
   // =========================
   async replaceFile(docId: string, dto: ReplaceFileDto, actor?: ActorLike) {
+    this.assertFleetAccessOrThrow(actor);
+
     const existing = await this.prisma.vehicleDocument.findUnique({
       where: { id: docId },
       include: { vehicle: true },
     });
     if (!existing) throw new NotFoundException("Documento no existe");
-    if ((existing.vehicle as any)?.activo === false) throw new NotFoundException("Documento no existe");
 
-    if (actor) {
-      const vEmp = this.normalizeEmpresaFromVehicleRow((existing.vehicle as any)?.empresa);
-      this.assertEmpresaAccessOrThrow(actor, vEmp);
-    }
+    if ((existing.vehicle as any)?.activo === false) throw new NotFoundException("Documento no existe");
 
     let fecha: Date | null | undefined = undefined;
     if (dto.fechaVencimiento !== undefined) {
@@ -634,7 +598,7 @@ export class VehicleDocumentsService {
       },
     });
 
-    // ✅ borra SIEMPRE el archivo anterior si era físico (porque es reemplazo explícito)
+    // ✅ borra SIEMPRE el archivo anterior si era físico
     try {
       if (this.shouldDeletePhysicalFile(oldFilePath)) {
         await unlink(this.toDiskPath(oldFilePath));
@@ -685,21 +649,19 @@ export class VehicleDocumentsService {
   // ✅ respaldo + archivo a carpeta archive
   // =========================
   async remove(docId: string, actor?: ActorLike) {
+    this.assertFleetAccessOrThrow(actor);
+
     const existing = await this.prisma.vehicleDocument.findUnique({
       where: { id: docId },
       include: { vehicle: true },
     });
     if (!existing) throw new NotFoundException("Documento no existe");
-    if ((existing.vehicle as any)?.activo === false) throw new NotFoundException("Documento no existe");
 
-    if (actor) {
-      const vEmp = this.normalizeEmpresaFromVehicleRow((existing.vehicle as any)?.empresa);
-      this.assertEmpresaAccessOrThrow(actor, vEmp);
-    }
+    if ((existing.vehicle as any)?.activo === false) throw new NotFoundException("Documento no existe");
 
     const oldFilePath = (existing as any).filePath || existing.archivoUrl || null;
 
-    // ✅ 1) Intentar respaldar archivo físico moviéndolo a /uploads/archive/vehicle-docs/
+    // ✅ 1) mover a archive si aplica
     let archivedUrl: string | null = null;
     try {
       if (this.shouldDeletePhysicalFile(oldFilePath)) {
@@ -717,7 +679,7 @@ export class VehicleDocumentsService {
       archivedUrl = null;
     }
 
-    // ✅ 2) Guardar respaldo completo en auditoría ANTES de borrar
+    // ✅ 2) auditoría snapshot
     await this.audit.log({
       entity: AuditEntity.VEHICLE,
       entityId: existing.vehicleId,
@@ -743,19 +705,15 @@ export class VehicleDocumentsService {
           sizeBytes: (existing as any).sizeBytes,
           createdAt: (existing as any).createdAt ?? null,
           estado: this.calcEstado(existing.fechaVencimiento ?? null),
-          backup: {
-            archivedUrl,
-            oldFilePath,
-          },
+          backup: { archivedUrl, oldFilePath },
         },
       },
     });
 
-    // ✅ 3) Borrar registro en BD
+    // ✅ 3) borrar BD
     await this.prisma.vehicleDocument.delete({ where: { id: docId } });
 
-    // ✅ 4) Si NO se pudo archivar y era físico, lo borramos (opcional).
-    //     Si prefieres JAMÁS borrar, comenta este bloque.
+    // ✅ 4) si no se pudo archivar y era físico, lo borramos (opcional)
     try {
       if (!archivedUrl && this.shouldDeletePhysicalFile(oldFilePath)) {
         await unlink(this.toDiskPath(String(oldFilePath)));

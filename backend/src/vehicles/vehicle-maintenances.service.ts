@@ -5,11 +5,10 @@
 // - Se registra auditoría con snapshot completo (before) y archivedUrl
 // - Luego se elimina el registro en BD
 //
-// ✅ NUEVO (SCOPING):
-// - Roles globales: SUPERADMIN, CONTROL_FLOTA => pueden ver/editar todo
-// - Roles scoped: ADMIN, ADMINISTRADORA, TRABAJADOR => solo su empresa
+// ✅ NUEVO (PERMISOS):
+// - Roles globales: SUPERADMIN, CONTROL_FLOTA => FULL ACCESS
+// - Cualquier otro rol => 403
 // - Si vehículo está inactivo => NotFound
-// - Se valida empresa del vehículo antes de listar/crear/editar/eliminar
 
 import {
   BadRequestException,
@@ -116,7 +115,7 @@ export class VehicleMaintenancesService {
   constructor(private prisma: PrismaService, private audit: AuditService) {}
 
   // =========================
-  // 🔒 SCOPING POR EMPRESA / ROLES
+  // 🔒 PERMISOS (SOLO CAMIONES)
   // =========================
 
   private roleUpper(actor?: ActorLike) {
@@ -128,6 +127,7 @@ export class VehicleMaintenancesService {
     return r === "SUPERADMIN" || r === "CONTROL_FLOTA";
   }
 
+  // (se mantiene por compat, pero ya NO se usa para scoping)
   private empresaFromActorOrThrow(actor: ActorLike): Empresa {
     const emp = actor?.empresa as Empresa | undefined | null;
     if (!emp) {
@@ -140,25 +140,9 @@ export class VehicleMaintenancesService {
     return String(value) === "INSPROTEL" ? "INSPROTEL" : "GRUAS_THOMAS";
   }
 
-  private assertEmpresaAccess(actor: ActorLike, resourceEmpresa: Empresa) {
-    // ✅ roles globales => todo
+  // ✅ ahora: SOLO SUPERADMIN / CONTROL_FLOTA
+  private assertEmpresaAccess(actor: ActorLike, _resourceEmpresa: Empresa) {
     if (this.isGlobalRole(actor)) return;
-
-    const role = this.roleUpper(actor);
-
-    // ✅ roles scoped => solo su empresa
-    if (
-      role === "ADMIN" ||
-      role === "ADMINISTRADORA" ||
-      role === "TRABAJADOR"
-    ) {
-      const myEmp = this.empresaFromActorOrThrow(actor);
-      if (String(myEmp) !== String(resourceEmpresa)) {
-        throw new ForbiddenException("No tienes permisos para acceder a otra empresa.");
-      }
-      return;
-    }
-
     throw new ForbiddenException("No tienes permisos.");
   }
 
@@ -513,7 +497,6 @@ export class VehicleMaintenancesService {
     return { ok: true, archivedUrl };
   }
 }
-
 
 
 
