@@ -1,4 +1,4 @@
-// ✅ Archivo: src/pages/Camiones.jsx (COMPLETO - PROD FIX + COOKIES FIX)
+// ✅ Archivo: src/pages/Camiones.jsx (COMPLETO - PROD FIX + COOKIES FIX + TEXT FIX)
 import { useEffect, useMemo, useState } from "react";
 import "./Admin.css";
 
@@ -13,17 +13,17 @@ import ConfirmModal from "../components/ui/ConfirmModal";
 
 // ✅ Excel export
 import * as XLSX from "xlsx";
+
+// ✅ Fix encoding / mojibake
 import { fixText } from "../utils/fixText";
 
-// ✅ PROD/LOCAL
 // ✅ PROD/LOCAL
 // - Producción: NGINX proxy -> /api  (NO usar :3000)
 // - Local (opcional): VITE_API_URL="http://localhost:3000" o "/api"
 const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
 
 /* =========================
-   ✅ FIX: Tipo de vehículo (texto bonito + arregla caracteres rotos)
-   - Ej: "Cami|n" / "Cami�n" => "Camión"
+   ✅ Tipo de vehículo (texto bonito + key normalizada)
    ========================= */
 const VEHICLE_TYPE_LABELS = {
   CAMION: "Camión",
@@ -42,21 +42,19 @@ function normalizeVehicleTypeKey(raw) {
   const s0 = String(raw ?? "").trim();
   if (!s0) return "";
 
-  // arreglos típicos cuando un encoding se rompe
-  const fixed = s0
-    .replace(/\s+/g, " ")
-    .trim();
+  // arregla mojibake si viene roto
+  const fixed = fixText(s0).replace(/\s+/g, " ").trim();
 
   // quita tildes => CAMION
   const noDiacritics = fixed.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
   return noDiacritics.toUpperCase();
 }
 
 function displayTipoVehiculo(value) {
   const key = normalizeVehicleTypeKey(value);
   if (!key) return "-";
-  return VEHICLE_TYPE_LABELS[key] || String(value);
+  const out = VEHICLE_TYPE_LABELS[key] || String(value);
+  return fixText(out);
 }
 
 /** ✅ Botón consistente y visible (evita que el CSS lo “aplane” o lo deje invisible) */
@@ -263,17 +261,17 @@ export default function Camiones() {
         return {
           id: v.id,
           empresa: v.empresa || "GRUAS_THOMAS",
-          patente: v.patente,
+          patente: fixText(v.patente),
 
-          marca: v.marca || mm.marca,
-          modelo: v.modelo || mm.modelo,
+          marca: fixText(v.marca || mm.marca),
+          modelo: fixText(v.modelo || mm.modelo),
 
           year: v.year ?? "",
-          tipoVehiculo: v.tipoVehiculo || (typeof v.type === "string" ? v.type : "") || "",
+          tipoVehiculo: fixText(v.tipoVehiculo || (typeof v.type === "string" ? v.type : "") || ""),
 
           // ⚠️ estado por próxima mantención
           estado: v.estado || "VIGENTE",
-          detalle: v.detalle || "",
+          detalle: fixText(v.detalle || ""),
 
           // ✅ estado operativo
           estadoOperativo: v.estadoOperativo || "OPERATIVO",
@@ -455,7 +453,7 @@ export default function Camiones() {
     setDocsVehicle({
       id: row.id,
       patente: row.patente,
-      marcaModelo: `${row.marca} ${row.modelo}`.trim(),
+      marcaModelo: `${row.marca || ""} ${row.modelo || ""}`.trim(),
       conductor: "-",
     });
     setOpenDocs(true);
@@ -470,7 +468,7 @@ export default function Camiones() {
     setMaintVehicle({
       id: row.id,
       patente: row.patente,
-      marcaModelo: `${row.marca} ${row.modelo}`.trim(),
+      marcaModelo: `${row.marca || ""} ${row.modelo || ""}`.trim(),
       conductor: "-",
     });
     setOpenMaint(true);
@@ -594,14 +592,14 @@ export default function Camiones() {
         const mapped = (list || []).map((r) => ({
           id: r.id,
           horas: r.horas,
-          comentario: r.comentario || "",
+          comentario: fixText(r.comentario || ""),
           fotoUrl: r.fotoUrl || r.fotoURL || r.archivoUrl || r.fileUrl || "",
           createdAt: r.createdAt,
-          trabajadorNombre: r.trabajadorNombre || r.workerNombre || "",
-          trabajadorApellido: r.trabajadorApellido || r.workerApellido || "",
-          trabajadorRut: r.trabajadorRut || r.workerRut || "",
-          trabajadorEmail: r.trabajadorEmail || r.workerEmail || "",
-          originalName: r.originalName || r.filename || "",
+          trabajadorNombre: fixText(r.trabajadorNombre || r.workerNombre || ""),
+          trabajadorApellido: fixText(r.trabajadorApellido || r.workerApellido || ""),
+          trabajadorRut: fixText(r.trabajadorRut || r.workerRut || ""),
+          trabajadorEmail: fixText(r.trabajadorEmail || r.workerEmail || ""),
+          originalName: fixText(r.originalName || r.filename || ""),
         }));
 
         mapped.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -618,7 +616,7 @@ export default function Camiones() {
   function openPhoto(url, title) {
     if (!url) return;
     setPhotoUrl(url.startsWith("http") ? url : `${API_URL}${url}`);
-    setPhotoTitle(title || "Evidencia");
+    setPhotoTitle(fixText(title || "Evidencia"));
     setPhotoOpen(true);
   }
 
@@ -683,7 +681,7 @@ export default function Camiones() {
       ...v,
       count,
       kind,
-      marcaModelo: `${v.marca || ""} ${v.modelo || ""}`.trim(),
+      marcaModelo: fixText(`${v.marca || ""} ${v.modelo || ""}`.trim()),
     });
 
     if (alertsMode === "DOCS_CRIT") {
@@ -737,7 +735,8 @@ export default function Camiones() {
     if (!q) return base;
 
     return base.filter((t) => {
-      const haystack = `${t.empresa} ${t.patente} ${t.marca} ${t.modelo} ${t.tipoVehiculo} ${t.estado} ${t.estadoOperativo}`.toLowerCase();
+      const haystack =
+        `${t.empresa} ${t.patente} ${t.marca} ${t.modelo} ${t.tipoVehiculo} ${t.estado} ${t.estadoOperativo}`.toLowerCase();
       return haystack.includes(q);
     });
   }, [search, vehicles, statusFilter, empresaFilter]);
@@ -805,10 +804,10 @@ export default function Camiones() {
   function toExcelRowsVehicles(list) {
     return (list || []).map((v) => ({
       Empresa: empresaLabel(v.empresa || "GRUAS_THOMAS"),
-      Patente: v.patente || "",
-      Marca: v.marca || "",
-      Modelo: v.modelo || "",
-      "Tipo de vehículo": displayTipoVehiculo(v.tipoVehiculo || ""), // ✅ FIX
+      Patente: fixText(v.patente || ""),
+      Marca: fixText(v.marca || ""),
+      Modelo: fixText(v.modelo || ""),
+      "Tipo de vehículo": displayTipoVehiculo(v.tipoVehiculo || ""),
     }));
   }
 
@@ -984,7 +983,7 @@ export default function Camiones() {
         />
       </div>
 
-      {/* ✅ Cards (5) - FIX RESPONSIVE: sin inline style */}
+      {/* ✅ Cards (5) */}
       <div className="cards cards-5">
         <div
           className={`card ${totalCardActive ? "card-active" : ""}`}
@@ -1112,7 +1111,9 @@ export default function Camiones() {
               {empresaFilter === "ALL" ? "Todas las empresas" : `Empresa: ${empresaLabel(empresaFilter)}`} •{" "}
               {statusFilter === "ALL"
                 ? "Todos los estados"
-                : `Estado: ${statusFilter === "VENCIDO" ? "Críticos" : statusFilter === "POR_VENCER" ? "Por vencer" : "Vigentes"}`}{" "}
+                : `Estado: ${
+                    statusFilter === "VENCIDO" ? "Críticos" : statusFilter === "POR_VENCER" ? "Por vencer" : "Vigentes"
+                  }`}{" "}
               • {pageSize} por página
             </p>
           </div>
@@ -1204,7 +1205,13 @@ export default function Camiones() {
               {exporting ? "Exportando..." : "Exportar Mantenciones"}
             </ActionButton>
 
-            <ActionButton variant="primary" type="button" onClick={() => setOpenAdd(true)} disabled={exporting} title="Crear un nuevo vehículo">
+            <ActionButton
+              variant="primary"
+              type="button"
+              onClick={() => setOpenAdd(true)}
+              disabled={exporting}
+              title="Crear un nuevo vehículo"
+            >
               + Agregar vehículo
             </ActionButton>
           </div>
@@ -1234,7 +1241,7 @@ export default function Camiones() {
 
             <tbody>
               {paged.map((t) => {
-                const marcaModelo = `${t.marca || ""} ${t.modelo || ""}`.trim() || "-";
+                const marcaModelo = fixText(`${t.marca || ""} ${t.modelo || ""}`.trim() || "-");
                 const docs = docsLabelByCounts(t.docsCriticos, t.docsPorVencer);
                 const maint = maintLabelByCounts(t.maintCriticos, t.maintPorVencer);
 
@@ -1275,7 +1282,7 @@ export default function Camiones() {
                     </td>
 
                     <td className="mono">{empresaLabel(t.empresa)}</td>
-                    <td className="mono">{t.patente}</td>
+                    <td className="mono">{fixText(t.patente)}</td>
 
                     <td>
                       <OperationalPill estadoOperativo={t.estadoOperativo} />
@@ -1283,7 +1290,6 @@ export default function Camiones() {
 
                     <td title={marcaModelo}>{marcaModelo}</td>
 
-                    {/* ✅ FIX AQUÍ */}
                     <td title={displayTipoVehiculo(t.tipoVehiculo || "")}>
                       {displayTipoVehiculo(t.tipoVehiculo || "")}
                     </td>
@@ -1316,7 +1322,6 @@ export default function Camiones() {
                           Horómetro
                         </ActionButton>
 
-                        {/* ✅ menú rápido */}
                         <div className="gt-actions-wrap">
                           <details className="gt-actions" onClick={(e) => e.stopPropagation()}>
                             <summary className="gt-actions-btn" aria-label="Acciones">
@@ -1328,30 +1333,15 @@ export default function Camiones() {
                                 Estado operativo
                               </div>
 
-                              <button
-                                className="gt-actions-item"
-                                type="button"
-                                onClick={() => askOperationalStatus(t, "OPERATIVO")}
-                                disabled={opSaving}
-                              >
+                              <button className="gt-actions-item" type="button" onClick={() => askOperationalStatus(t, "OPERATIVO")} disabled={opSaving}>
                                 Marcar como Operativo
                               </button>
 
-                              <button
-                                className="gt-actions-item"
-                                type="button"
-                                onClick={() => askOperationalStatus(t, "EN_PANA")}
-                                disabled={opSaving}
-                              >
+                              <button className="gt-actions-item" type="button" onClick={() => askOperationalStatus(t, "EN_PANA")} disabled={opSaving}>
                                 Marcar como En pana
                               </button>
 
-                              <button
-                                className="gt-actions-item danger"
-                                type="button"
-                                onClick={() => askOperationalStatus(t, "PARADO")}
-                                disabled={opSaving}
-                              >
+                              <button className="gt-actions-item danger" type="button" onClick={() => askOperationalStatus(t, "PARADO")} disabled={opSaving}>
                                 Marcar como Parado
                               </button>
                             </div>
@@ -1425,7 +1415,13 @@ export default function Camiones() {
         initialValues={{ empresa: empresaFilter === "ALL" ? "GRUAS_THOMAS" : empresaFilter }}
       />
 
-      <VehicleModal open={openEdit} onClose={closeEditModal} onSave={updateVehicle} mode="edit" initialValues={editInitial} />
+      <VehicleModal
+        open={openEdit}
+        onClose={closeEditModal}
+        onSave={updateVehicle}
+        mode="edit"
+        initialValues={editInitial}
+      />
 
       <DocumentsModal open={openDocs} onClose={closeDocsModal} vehicle={docsVehicle} apiUrl={API_URL} />
       <MaintenancesModal open={openMaint} onClose={closeMaintModal} vehicle={maintVehicle} apiUrl={API_URL} />
@@ -1461,7 +1457,7 @@ export default function Camiones() {
       <Modal
         open={horoOpen}
         onClose={closeHorometer}
-        title={`Horómetro • ${horoVehicle?.patente || "-"}`}
+        title={`Horómetro • ${fixText(horoVehicle?.patente || "-")}`}
         subtitle={`${horoVehicle ? empresaLabel(horoVehicle.empresa) : ""} • Historial de registros del horómetro`}
         width={980}
         footer={
@@ -1472,7 +1468,7 @@ export default function Camiones() {
       >
         {horoError ? (
           <div className="gt-error" style={{ marginBottom: 12 }}>
-            {horoError}
+            {fixText(horoError)}
           </div>
         ) : null}
 
@@ -1510,7 +1506,8 @@ export default function Camiones() {
                   </tr>
                 ) : (
                   horoItems.map((r) => {
-                    const fullName = `${r.trabajadorNombre || ""} ${r.trabajadorApellido || ""}`.trim() || "—";
+                    const fullName =
+                      fixText(`${r.trabajadorNombre || ""} ${r.trabajadorApellido || ""}`.trim()) || "—";
                     return (
                       <tr key={r.id}>
                         <td className="mono">{formatDateTime(r.createdAt)}</td>
@@ -1519,15 +1516,17 @@ export default function Camiones() {
                         </td>
                         <td>{fullName}</td>
                         <td className="mono" style={{ fontWeight: 900 }}>
-                          {r.trabajadorRut || "—"}
+                          {fixText(r.trabajadorRut || "—")}
                         </td>
-                        <td className="mono">{r.trabajadorEmail || "—"}</td>
+                        <td className="mono">{fixText(r.trabajadorEmail || "—")}</td>
                         <td style={{ textAlign: "right" }}>
                           {r.fotoUrl ? (
                             <ActionButton
                               variant="ghost"
                               type="button"
-                              onClick={() => openPhoto(r.fotoUrl, r.originalName || `Evidencia • ${horoVehicle?.patente || ""}`)}
+                              onClick={() =>
+                                openPhoto(r.fotoUrl, r.originalName || `Evidencia • ${horoVehicle?.patente || ""}`)
+                              }
                               style={{ height: 34, padding: "0 12px", borderRadius: 12, fontWeight: 900 }}
                             >
                               Ver
@@ -1550,7 +1549,7 @@ export default function Camiones() {
       <Modal
         open={photoOpen}
         onClose={closePhoto}
-        title={photoTitle || "Evidencia"}
+        title={fixText(photoTitle || "Evidencia")}
         subtitle="Imagen subida por el trabajador"
         width={860}
         footer={
@@ -1565,7 +1564,7 @@ export default function Camiones() {
           <div style={{ width: "100%", display: "flex", justifyContent: "center" }}>
             <img
               src={photoUrl}
-              alt={photoTitle}
+              alt={fixText(photoTitle)}
               style={{
                 maxWidth: "100%",
                 maxHeight: "70vh",
@@ -1622,15 +1621,19 @@ export default function Camiones() {
                         }}
                         title={empresaLabel(v.empresa)}
                       >
-                        <img src={empresaLogo(v.empresa)} alt={empresaLabel(v.empresa)} style={{ width: 24, height: 24, objectFit: "contain" }} />
+                        <img
+                          src={empresaLogo(v.empresa)}
+                          alt={empresaLabel(v.empresa)}
+                          style={{ width: 24, height: 24, objectFit: "contain" }}
+                        />
                       </div>
                     </td>
                     <td className="mono">{empresaLabel(v.empresa)}</td>
-                    <td className="mono">{v.patente}</td>
+                    <td className="mono">{fixText(v.patente)}</td>
                     <td>
                       <OperationalPill estadoOperativo={v.estadoOperativo} />
                     </td>
-                    <td>{v.marcaModelo || "-"}</td>
+                    <td>{fixText(v.marcaModelo || "-")}</td>
                     <td className="mono" style={{ fontWeight: 900 }}>
                       {v.count}
                     </td>
@@ -1690,7 +1693,6 @@ export default function Camiones() {
 
                 {alertVehicles.length === 0 && (
                   <tr>
-                    {/* ✅ FIX: son 7 columnas */}
                     <td colSpan={7} className="empty">
                       No hay vehículos operativos para mostrar.
                     </td>
@@ -1713,7 +1715,7 @@ export default function Camiones() {
         description={
           <div>
             <div style={{ marginBottom: 8 }}>
-              Vas a cambiar el estado de <b>{opTarget?.patente || "-"}</b>.
+              Vas a cambiar el estado de <b>{fixText(opTarget?.patente || "-")}</b>.
             </div>
             <div style={{ fontSize: 13, color: "rgba(0,0,0,.7)" }}>
               <b>Actual:</b> {operationalLabel(opTarget?.estadoOperativo)} <br />
@@ -1742,8 +1744,9 @@ export default function Camiones() {
             </div>
             <div style={{ fontSize: 13, color: "rgba(0,0,0,.7)" }}>
               <b>Empresa:</b> {empresaLabel(deleteTarget?.empresa)} <br />
-              <b>Patente:</b> {deleteTarget?.patente || "-"} <br />
-              <b>Marca/Modelo:</b> {(deleteTarget?.marca || "-") + " " + (deleteTarget?.modelo || "")}
+              <b>Patente:</b> {fixText(deleteTarget?.patente || "-")} <br />
+              <b>Marca/Modelo:</b>{" "}
+              {fixText((deleteTarget?.marca || "-") + " " + (deleteTarget?.modelo || ""))}
             </div>
           </div>
         }
@@ -1778,7 +1781,7 @@ export default function Camiones() {
         }
       >
         <div style={{ fontSize: 14, color: "rgba(0,0,0,.75)", lineHeight: 1.5 }}>
-          El vehículo <b>{deleteTarget?.patente || ""}</b> se eliminó correctamente.
+          El vehículo <b>{fixText(deleteTarget?.patente || "")}</b> se eliminó correctamente.
         </div>
       </Modal>
     </>

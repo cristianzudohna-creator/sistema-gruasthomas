@@ -170,7 +170,7 @@ function ActionsMenu({ disabled, options }) {
                   onClick={close}
                   style={menuItemStyle(op)}
                 >
-                  {op.label}
+                  {fixText(op.label)}
                 </a>
               );
             }
@@ -186,7 +186,7 @@ function ActionsMenu({ disabled, options }) {
                 disabled={!!op.disabled}
                 style={menuItemStyle(op)}
               >
-                {op.label}
+                {fixText(op.label)}
               </button>
             );
           })}
@@ -215,7 +215,6 @@ function menuItemStyle(op) {
 
 /* =========================
    Labels para tipos (ENUM -> texto bonito)
-   ✅ Esto arregla Revisi�n / circulaci�n / gr�a etc. (en ESTE modal)
    ========================= */
 const DOCUMENT_TYPE_LABELS = {
   SOAP: "SOAP",
@@ -310,15 +309,18 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
     return `${base}${path}`;
   }
 
-  // ✅ AQUÍ se arreglan los nombres que se ven en la tabla y modales
+  // ✅ FIX: Aquí se corrige TODO lo que se muestra al usuario
   function displayTipo(doc) {
     if (!doc) return "-";
 
     // OTRO => muestra el nombre escrito por el usuario
-    if (doc.type === "OTRO") return (doc.nombre || "Otro").trim();
+    if (String(doc.type || "").toUpperCase() === "OTRO") {
+      return fixText((doc.nombre || "Otro").trim());
+    }
 
     const key = String(doc.type || "").trim();
-    return DOCUMENT_TYPE_LABELS[key] || key || "-";
+    const pretty = DOCUMENT_TYPE_LABELS[key] || key || "-";
+    return fixText(pretty);
   }
 
   function displayVence(doc) {
@@ -358,10 +360,10 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
         data = [];
       }
 
-      setDocs(data);
+      setDocs(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error("fetchDocs error:", e);
-      setError(e?.message || "No se pudieron cargar los documentos.");
+      setError(fixText(e?.message || "No se pudieron cargar los documentos."));
       setDocs([]);
     } finally {
       setLoading(false);
@@ -459,7 +461,7 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
       closeForm();
     } catch (e) {
       console.error("createDoc error:", e);
-      setError(e?.message || "No se pudo guardar el documento.");
+      setError(fixText(e?.message || "No se pudo guardar el documento."));
     } finally {
       setSaving(false);
     }
@@ -519,7 +521,7 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
       closeForm();
     } catch (e) {
       console.error("updateDoc error:", e);
-      setError(e?.message || "No se pudo actualizar el documento.");
+      setError(fixText(e?.message || "No se pudo actualizar el documento."));
     } finally {
       setSaving(false);
     }
@@ -567,7 +569,7 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
       setToDelete(null);
     } catch (e) {
       console.error("deleteDoc error:", e);
-      setError(e?.message || "No se pudo eliminar el documento.");
+      setError(fixText(e?.message || "No se pudo eliminar el documento."));
     } finally {
       setSaving(false);
     }
@@ -579,11 +581,17 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
     setMode("edit");
     setEditingDocId(doc.id);
 
-    setNombre(doc.type === "OTRO" ? (doc.nombre || "") : (doc.type || ""));
+    // ✅ FIX: al cargar para editar también limpiamos texto
+    setNombre(
+      String(doc.type || "").toUpperCase() === "OTRO"
+        ? fixText(doc.nombre || "")
+        : fixText(doc.type || "")
+    );
+
     const fv = isoToDateInput(doc.fechaVencimiento);
     setFechaVencimiento(fv);
     setSinVencimiento(!fv);
-    setObservacion(doc.observacion || "");
+    setObservacion(fixText(doc.observacion || ""));
     setFile(null);
   }
 
@@ -604,7 +612,7 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
   const onSubmit = mode === "edit" ? submitUpdateDoc : submitCreateDoc;
 
   const title = "Documentos del vehículo";
-  const subtitle = vehicle ? `${vehicle.patente} • ${vehicle.marcaModelo}` : "";
+  const subtitle = vehicle ? `${fixText(vehicle.patente)} • ${fixText(vehicle.marcaModelo)}` : "";
 
   const footer = !isFormOpen ? (
     <>
@@ -629,9 +637,9 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
   ) : null;
 
   const confirmResumen = useMemo(() => {
-    const tipo = nombre.trim() || "-";
+    const tipo = fixText(nombre.trim() || "-");
     const vence = sinVencimiento ? "Sin vencimiento" : fechaVencimiento || "-";
-    const archivo = file?.name ? file.name : mode === "edit" ? "Sin cambio de archivo" : "—";
+    const archivo = file?.name ? fixText(file.name) : mode === "edit" ? "Sin cambio de archivo" : "—";
     return { tipo, vence, archivo };
   }, [nombre, sinVencimiento, fechaVencimiento, file, mode]);
 
@@ -657,7 +665,7 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
 
         {error && (
           <div className="gt-error" style={{ marginBottom: 12 }}>
-            {error}
+            {fixText(error)}
           </div>
         )}
 
@@ -674,7 +682,7 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
               fontSize: 13,
             }}
           >
-            {success}
+            {fixText(success)}
           </div>
         )}
 
@@ -741,7 +749,7 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
                   />
                   {file?.name && (
                     <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
-                      Seleccionado: <b>{file.name}</b> ({Math.round((file.size || 0) / 1024)} KB)
+                      Seleccionado: <b>{fixText(file.name)}</b> ({Math.round((file.size || 0) / 1024)} KB)
                     </div>
                   )}
                 </div>
@@ -757,7 +765,6 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
                   />
                 </div>
 
-                {/* ✅ Botonera responsive: en móvil queda 1 columna */}
                 <div className="docs-form-actions">
                   <button className="gt-btn ghost" type="button" onClick={closeForm} disabled={saving}>
                     Cancelar
@@ -810,7 +817,7 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
                           </td>
 
                           <td className="col-estado">
-                            <span className={pillClass(d.estado)} title={d.observacion || ""}>
+                            <span className={pillClass(d.estado)} title={fixText(d.observacion || "")}>
                               {pillLabel(d.estado)}
                             </span>
                           </td>
