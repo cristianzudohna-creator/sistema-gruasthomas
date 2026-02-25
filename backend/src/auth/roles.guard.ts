@@ -5,21 +5,9 @@ import {
   Injectable,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
+import { normRole } from "../common/utils/norm-role";
 
 const ROLES_KEY = "roles";
-
-function normRole(v: any) {
-  const r = String(v ?? "")
-    .trim()
-    .toUpperCase()
-    .replace(/[\s-]+/g, "_")
-    .replace(/__+/g, "_");
-
-  // ✅ alias fuerte: CONTROL DE FLOTA => CONTROL_FLOTA
-  if (r === "CONTROL_DE_FLOTA") return "CONTROL_FLOTA";
-
-  return r;
-}
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -40,13 +28,12 @@ export class RolesGuard implements CanActivate {
     const userRole = normRole(user?.role);
     const required = requiredRoles.map(normRole);
 
+    // deja este log mientras pruebas
     // eslint-disable-next-line no-console
     console.log("[RolesGuard] required:", required, "| userRole:", userRole, "| rawUser:", user);
 
-    if (!userRole) throw new ForbiddenException("No tienes permisos. [ROLES_GUARD]");
-
-    const ok = required.includes(userRole);
-    if (!ok) throw new ForbiddenException("No tienes permisos. [ROLES_GUARD]");
+    if (!userRole) throw new ForbiddenException("No tienes permisos.");
+    if (!required.includes(userRole)) throw new ForbiddenException("No tienes permisos.");
 
     return true;
   }

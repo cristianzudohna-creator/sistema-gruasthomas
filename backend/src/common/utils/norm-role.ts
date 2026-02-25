@@ -1,11 +1,15 @@
-export function normRole(input: any): string {
-  const r = String(input ?? "")
-    .trim()
-    .toUpperCase()
-    .replace(/[\s-]+/g, "_"); // espacios o guiones => "_"
+// backend/src/common/utils/norm-role.ts
+export function normRole(v: any) {
+  const s = String(v ?? "").trim().toUpperCase();
 
-  // ✅ alias: "CONTROL DE FLOTA" => "CONTROL_FLOTA"
-  if (r === "CONTROL_DE_FLOTA") return "CONTROL_FLOTA";
+  // espacios / guiones => _
+  const cleaned = s
+    .replace(/[\s-]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
 
-  return r;
+  // aliases comunes
+  if (cleaned === "CONTROL_DE_FLOTA" || cleaned === "CONTROLFLOTA") return "CONTROL_FLOTA";
+
+  return cleaned;
 }
