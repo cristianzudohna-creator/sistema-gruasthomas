@@ -8,17 +8,21 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // ============================
-  // ✅ CORS (LOCAL + PROD)
+  // CORS (LOCAL + PROD)
   // ============================
+  const allowedOrigins = [
+    "http://localhost:5173",
+    process.env.FRONTEND_URL || "https://sistemagruasthomas.cl",
+  ];
+
   app.enableCors({
-    origin: [
-      "http://localhost:5173",
-      "https://sistemagruasthomas.cl",
-      "https://www.sistemagruasthomas.cl",
-    ],
+    origin: (origin, callback) => {
+      // permite tools sin Origin (curl/postman)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error(`CORS blocked for origin: ${origin}`), false);
+    },
     credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
   });
 
   // ============================
@@ -30,8 +34,6 @@ async function bootstrap() {
     "horometer",
     "vehicle-docs",
     "vehicle-maint",
-
-    // ✅ NUEVO: OTs (fotos + firma) y branding (logo)
     "work-orders",
     "branding",
   ];
@@ -50,8 +52,8 @@ async function bootstrap() {
     prefix: "/uploads/",
   });
 
-  await app.listen(3000);
-  console.log("🚀 Backend corriendo en http://localhost:3000");
+  await app.listen(3000, "0.0.0.0");
+  console.log("🚀 Backend corriendo en puerto 3000");
 }
 
 bootstrap();
