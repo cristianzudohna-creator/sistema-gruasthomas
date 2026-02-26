@@ -8,11 +8,17 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // ============================
-  // CORS
+  // ✅ CORS (LOCAL + PROD)
   // ============================
   app.enableCors({
-    origin: "http://localhost:5173",
+    origin: [
+      "http://localhost:5173",
+      "https://sistemagruasthomas.cl",
+      "https://www.sistemagruasthomas.cl",
+    ],
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   });
 
   // ============================
