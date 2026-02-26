@@ -1792,9 +1792,10 @@ details.gt-actions summary::-webkit-details-marker {
 .gt-docs-table td.col-vence {
   width: 230px;
   text-align: center;
-  white-space: nowrap;      /* una línea */
-  overflow: hidden;
-  text-overflow: ellipsis;  /* … */
+
+  white-space: normal;       /* 🔥 permite salto de línea */
+  overflow-wrap: anywhere;   /* 🔥 corta palabras largas */
+  word-break: break-word;
 }
 
 
