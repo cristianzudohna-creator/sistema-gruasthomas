@@ -324,7 +324,8 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
   }
 
   function displayVence(doc) {
-  if (!doc?.fechaVencimiento) return "—"; // corto para no romper la tabla
+  // ✅ limpio en tabla
+  if (!doc?.fechaVencimiento) return "Sin vencimiento";
   return String(doc.fechaVencimiento).slice(0, 10);
 }
 
@@ -812,8 +813,8 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
                           </td>
 
                           <td className="col-vence" title={vence}>
-                            {vence}
-                          </td>
+  <span className="vence-text">{vence}</span>
+</td>
 
                           <td className="col-estado">
                             <span className={pillClass(d.estado)} title={fixText(d.observacion || "")}>

@@ -1788,14 +1788,17 @@ details.gt-actions summary::-webkit-details-marker {
   .gt-btn{ height: 44px; }
 }
 /* SOLO para la tabla del modal documentos */
-.gt-docs-table th.col-vence,
 .gt-docs-table td.col-vence {
   width: 230px;
   text-align: center;
+}
 
-  white-space: normal;       /* 🔥 permite salto de línea */
-  overflow-wrap: anywhere;   /* 🔥 corta palabras largas */
-  word-break: break-word;
+.gt-docs-table td.col-vence .vence-text {
+  display: block;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 
