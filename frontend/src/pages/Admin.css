@@ -1258,8 +1258,10 @@ details.gt-actions summary::-webkit-details-marker {
 }
 
 /* ==================================================
-   FIX: Tabla DocumentosModal (gt-docs-table)
-   Evita que "Tipo" empuje el layout y rompe columnas
+   ✅ FIX DEFINITIVO: Tabla DocumentosModal (gt-docs-table)
+   - Evita que "Vence" (texto largo) pise "Estado"
+   - Mantiene "Tipo" con ellipsis
+   - Tabla estable en PROD
    ================================================== */
 
 .gt-docs-wrap {
@@ -1269,75 +1271,93 @@ details.gt-actions summary::-webkit-details-marker {
 
 .gt-docs-table {
   width: 100%;
-  table-layout: fixed; /* ✅ clave */
+  border-collapse: collapse;
+  table-layout: fixed; /* 🔥 CLAVE: columnas estables */
 }
 
-/* Reset controlado solo para esta tabla */
+/* Base: no heredar reglas globales de .table (nowrap) */
 .gt-docs-table th,
 .gt-docs-table td {
-  white-space: nowrap;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   vertical-align: middle;
+  white-space: normal; /* ✅ por defecto SÍ permite wrap */
 }
 
-/* Anchos fijos para columnas chicas */
-.gt-docs-table .col-vence {
-  width: 130px;
+/* Encabezado */
+.gt-docs-table th {
+  font-size: 12px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.02);
 }
-.gt-docs-table .col-estado {
+
+/* Columnas: anchos */
+.gt-docs-table th.col-estado,
+.gt-docs-table td.col-estado {
   width: 140px;
-}
-.gt-docs-table .col-actions {
-  width: 110px;
-  text-align: right;
+  text-align: center;
+  white-space: nowrap; /* pill siempre en 1 línea */
 }
 
-/* "Tipo" NO debe romper el layout: ellipsis */
-.gt-docs-table .col-tipo,
-.gt-docs-table td.col-tipo,
-.gt-docs-table td.mono {
+.gt-docs-table th.col-actions,
+.gt-docs-table td.col-actions {
+  width: 110px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.gt-docs-table th.col-vence,
+.gt-docs-table td.col-vence {
+  width: 230px;                 /* ✅ más espacio para texto largo */
+  text-align: center;
+  white-space: normal;          /* ✅ permite 2+ líneas */
+  overflow-wrap: anywhere;      /* 🔥 CLAVE: corta texto largo */
+  word-break: break-word;
+}
+
+/* "Tipo" con ellipsis (no rompe layout) */
+.gt-docs-table th.col-tipo,
+.gt-docs-table td.col-tipo {
+  text-align: left;
+  white-space: nowrap;          /* ✅ solo tipo en una línea */
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 0;
 }
 
-/* Asegura que el menú ⋮ quede por encima del modal */
-.gt-docs-table .gt-actions {
-  position: relative;
-}
-.gt-docs-table .gt-actions-menu {
-  z-index: 9999999;
-}
-
-/* Centrar columnas chicas */
-.gt-docs-table th.col-vence,
-.gt-docs-table td:nth-child(2) {
-  text-align: center;
-}
-.gt-docs-table th.col-estado,
-.gt-docs-table td:nth-child(3) {
-  text-align: center;
-}
-.gt-docs-table th.col-actions,
-.gt-docs-table td:nth-child(4) {
-  text-align: center;
-}
-
-/* Reducir protagonismo visual de "Tipo" */
-.gt-docs-table td.mono {
-  font-size: 14px;
-  font-weight: 600;
-  color: #111;
-}
-
-/* Estado pill mejor centrado */
+/* Estado pill centrado */
 .gt-docs-table .status {
   margin-inline: auto;
 }
 
-/* Acciones: botón más compacto visualmente */
-.gt-docs-table .gt-actions-btn {
-  margin-inline: auto;
+/* Asegura que tu menú ⋮ (ActionsMenu fixed) se vea siempre arriba */
+.gt-docs-table .gt-actions,
+.gt-docs-table .gt-actions-menu {
+  z-index: 9999999;
+}
+
+/* Responsive: en pantallas chicas, reduce ancho de columnas fijas */
+@media (max-width: 640px) {
+  .gt-docs-table th,
+  .gt-docs-table td {
+    padding: 10px 10px;
+  }
+
+  .gt-docs-table th.col-vence,
+  .gt-docs-table td.col-vence {
+    width: 200px;
+  }
+
+  .gt-docs-table th.col-estado,
+  .gt-docs-table td.col-estado {
+    width: 120px;
+  }
+
+  .gt-docs-table th.col-actions,
+  .gt-docs-table td.col-actions {
+    width: 86px;
+  }
 }
 
 /* =========================

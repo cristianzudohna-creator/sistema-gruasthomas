@@ -1,3 +1,5 @@
+@import "./Admin.css";
+
 :root {
   --gt-yellow: #f5b800;
   --gt-yellow-hover: #e0aa00;
@@ -32,6 +34,7 @@ body {
   background: var(--gt-bg);
   color: var(--gt-black);
 }
+
 /* =========================
    FIX DEFINITIVO: Scroll GLOBAL de la página
    - sidebar fija (sticky) OK
