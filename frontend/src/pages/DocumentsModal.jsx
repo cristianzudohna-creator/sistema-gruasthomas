@@ -324,10 +324,9 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
   }
 
   function displayVence(doc) {
-    // ✅ cuando NO tiene fecha => texto en vez de "—"
-    if (!doc?.fechaVencimiento) return "Este documento no tiene fecha de vencimiento";
-    return String(doc.fechaVencimiento).slice(0, 10);
-  }
+  if (!doc?.fechaVencimiento) return "—"; // corto para no romper la tabla
+  return String(doc.fechaVencimiento).slice(0, 10);
+}
 
   async function fetchDocs() {
     if (!vehicle?.id) return;
