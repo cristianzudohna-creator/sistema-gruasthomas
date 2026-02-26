@@ -1794,11 +1794,12 @@ details.gt-actions summary::-webkit-details-marker {
 }
 
 .gt-docs-table td.col-vence .vence-text {
-  display: block;
-  width: 100%;
+  display: inline-block;   /* 🔥 clave */
+  max-width: 200px;        /* 🔥 clave */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  vertical-align: middle;
 }
 
 
