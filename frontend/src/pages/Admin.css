@@ -1787,6 +1787,17 @@ details.gt-actions summary::-webkit-details-marker {
 @media (max-width: 640px){
   .gt-btn{ height: 44px; }
 }
+/* SOLO para la tabla del modal documentos */
+.gt-docs-table th.col-vence,
+.gt-docs-table td.col-vence {
+  width: 230px;
+  text-align: center;
+  white-space: nowrap;      /* una línea */
+  overflow: hidden;
+  text-overflow: ellipsis;  /* … */
+}
+
+
 
 
 
