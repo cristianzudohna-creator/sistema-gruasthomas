@@ -1,9 +1,16 @@
-// ✅ Archivo: frontend/src/api/vehicles.js (COMPLETO - PROD SAFE)
+// ✅ Archivo: frontend/src/api/vehicles.js (COMPLETO - PROD SAFE + SEARCH)
 import { getToken } from "../auth/auth";
+import { getApiUrl } from "./apiUrl";
 
-// ✅ Producción: usamos NGINX -> /api
-// ✅ Local: VITE_API_URL="http://localhost:3000" o "/api"
-const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
+const API_URL = getApiUrl();
+
+function normalizeMsg(data, fallback) {
+  if (!data) return fallback;
+  if (typeof data === "string") return data;
+  if (Array.isArray(data?.message)) return data.message.join(" | ");
+  if (typeof data?.message === "string") return data.message;
+  return fallback;
+}
 
 async function apiFetch(path, options = {}) {
   const token = getToken();
@@ -13,7 +20,6 @@ async function apiFetch(path, options = {}) {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
-  // ✅ Solo seteamos Content-Type si mandamos body (JSON)
   if (options.body && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
   }
@@ -24,7 +30,6 @@ async function apiFetch(path, options = {}) {
     headers,
   });
 
-  // Intentar leer JSON siempre que se pueda
   const text = await res.text();
   let data = null;
   try {
@@ -34,31 +39,33 @@ async function apiFetch(path, options = {}) {
   }
 
   if (!res.ok) {
-    const msg =
-      (data && data.message) ||
-      (typeof data === "string" ? data : "") ||
-      `Error ${res.status}`;
-    throw new Error(msg);
+    if ((res.status === 401 || res.status === 403) && !token) {
+      throw new Error("Sesión expirada o no estás logueado. Vuelve a iniciar sesión.");
+    }
+    if (res.status === 403 && token) {
+      throw new Error(normalizeMsg(data, "Tu rol no tiene permiso para ver vehículos/patentes."));
+    }
+    throw new Error(normalizeMsg(data, `Error ${res.status}`));
   }
 
   return data;
 }
 
-/**
- * ✅ Obtener camiones eliminados (Papelera)
- * Backend: GET /vehicles/deleted
- */
+export async function searchVehicles({ q, limit = 8, empresa } = {}) {
+  const qs = new URLSearchParams();
+  if (q) qs.set("q", String(q).toUpperCase());
+  if (limit) qs.set("limit", String(limit));
+  if (empresa) qs.set("empresa", String(empresa).toUpperCase());
+
+  return apiFetch(`/vehicles/search?${qs.toString()}`, { method: "GET" });
+}
+
 export async function getDeletedVehicles() {
   return apiFetch(`/vehicles/deleted`, { method: "GET" });
 }
 
-/**
- * ✅ Restaurar camión eliminado
- * Backend: PATCH /vehicles/:id/restore
- */
 export async function restoreVehicle(vehicleId) {
   if (!vehicleId) throw new Error("vehicleId requerido");
   return apiFetch(`/vehicles/${vehicleId}/restore`, { method: "PATCH" });
 }
-
 

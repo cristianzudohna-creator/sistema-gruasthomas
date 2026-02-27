@@ -172,52 +172,43 @@ export class VehiclesController {
   }
 
   // =========================================================
-  // ✅ SEARCH AUTOCOMPLETE (SOLO GRUAS_THOMAS)
-  // GET /vehicles/search?q=ab&limit=8
+  // ✅ SEARCH AUTOCOMPLETE (SEGÚN EMPRESA)
+  // GET /vehicles/search?q=ab&limit=8&empresa=INSPROTEL
   // =========================================================
   @Get("search")
-  @Roles("SUPERADMIN", "CONTROL_FLOTA", "ADMINISTRADORA", "TRABAJADOR")
-  async search(
-    @Req() req: Request,
-    @Query("q") q?: string,
-    @Query("limit") limit?: string
-  ) {
-    const actor = this.getActor(req);
-    const query = String(q || "").trim().toUpperCase();
-    const lim = Math.min(Math.max(Number(limit || 8) || 8, 1), 30);
+@Roles("SUPERADMIN", "CONTROL_FLOTA", "ADMINISTRADORA", "TRABAJADOR")
+async search(
+  @Req() req: Request,
+  @Query("q") q?: string,
+  @Query("limit") limit?: string,
+  @Query("empresa") empresa?: string
+) {
+  const actor = this.getActor(req);
 
-    if (!query) return { items: [] };
+  const query = String(q || "").trim().toUpperCase();
+  const lim = Math.min(Math.max(Number(limit || 8) || 8, 1), 30);
 
-    const data: any = await this.vehicles.list(actor);
+  if (!query) return { items: [] };
 
-    const list: any[] = Array.isArray(data)
-      ? data
-      : Array.isArray(data?.records)
-      ? data.records
-      : Array.isArray(data?.items)
-      ? data.items
-      : [];
+  // ✅ usamos empresa del usuario SIEMPRE
+  const actorEmpresa = String(actor?.empresa || "").toUpperCase();
 
-    const items = list
-      .filter((v) => String(v?.empresa || "").toUpperCase() === "GRUAS_THOMAS")
-      .filter((v) => {
-        const patente = String(v?.patente || "").toUpperCase();
-        return patente.includes(query);
-      })
-      .slice(0, lim)
-      .map((v) => ({
-        id: v?.id,
-        patente: v?.patente,
-        empresa: v?.empresa,
-        marcaModelo: v?.marcaModelo,
-        type: v?.type,
-        tipoVehiculo: v?.tipoVehiculo,
-        year: v?.year,
-        estadoOperativo: v?.estadoOperativo,
-      }));
+  // si viene empresa por query, usamos esa SOLO si coincide
+  const emp = String(empresa || actorEmpresa).toUpperCase();
 
-    return { items };
+  if (emp && actorEmpresa && emp !== actorEmpresa) {
+    throw new BadRequestException("No puedes buscar vehículos de otra empresa");
   }
+
+  // ✅ consulta directa a BD (NO usar list())
+  const items = await this.vehicles.searchSimple({
+    empresa: emp || actorEmpresa,
+    query,
+    limit: lim,
+  });
+
+  return { items };
+}
 
   // =====================
   // SUMMARY
@@ -264,7 +255,7 @@ export class VehiclesController {
     const status = body?.status ? String(body.status).trim().toUpperCase() : "";
 
     if (status !== "OPERATIVO" && status !== "EN_PANA" && status !== "PARADO") {
-      throw new BadRequestException("status debe ser OPERATIVO, EN_PANA o PARADO");
+      throw new BadRequestException("status debe ser OPERATIVO o EN_PANA o PARADO");
     }
 
     const actor = this.getActor(req);
@@ -296,10 +287,7 @@ export class VehiclesController {
     return this.horometer.listByVehicleAdmin({
       vehicleId: id,
       page: Number.isFinite(pageNum) && pageNum > 0 ? pageNum : 1,
-      limit:
-        Number.isFinite(limitNum) && limitNum > 0
-          ? Math.min(limitNum, 100)
-          : 50,
+      limit: Number.isFinite(limitNum) && limitNum > 0 ? Math.min(limitNum, 100) : 50,
     });
   }
 

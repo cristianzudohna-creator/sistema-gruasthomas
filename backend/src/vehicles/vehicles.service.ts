@@ -165,7 +165,6 @@ export class VehiclesService {
     const role = this.roleUpper(actor ?? null);
 
     // ✅ DEBUG: confirma qué llega realmente al backend
-    // (Cuando ya funcione, borra estos logs)
     // eslint-disable-next-line no-console
     console.log("[FLEET] actor:", actor);
     // eslint-disable-next-line no-console
@@ -234,7 +233,6 @@ export class VehiclesService {
   }
 
   // ⚠️ Si este método se usa en otro módulo público, déjalo.
-  // Si quieres también restringirlo, dime y lo bloqueamos.
   async listWorkerVehicles(empresa: Empresa) {
     return this.prisma.vehicle.findMany({
       where: { empresa: empresa as any, activo: true as any },
@@ -276,6 +274,41 @@ export class VehiclesService {
 
   private whereActivosOnly() {
     return { activo: true as any };
+  }
+
+  // ==========================================================
+  // ✅ SEARCH SIMPLE (para autocomplete de patentes)
+  // ✅ OJO: tu soft delete es activo=false (NO deletedAt)
+  // ==========================================================
+  async searchSimple(params: { empresa: string; query: string; limit: number }) {
+    const empresa = String(params?.empresa || "").toUpperCase();
+    const query = String(params?.query || "").trim();
+    const limit = Math.min(Math.max(Number(params?.limit || 8) || 8, 1), 30);
+
+    if (empresa !== "GRUAS_THOMAS" && empresa !== "INSPROTEL") {
+      throw new BadRequestException("empresa inválida");
+    }
+    if (!query) return [];
+
+    return this.prisma.vehicle.findMany({
+      where: {
+        empresa: empresa as any,
+        activo: true as any,
+        patente: { contains: query, mode: "insensitive" },
+      } as any,
+      take: limit,
+      orderBy: { patente: "asc" },
+      select: {
+        id: true,
+        patente: true,
+        empresa: true as any,
+        marcaModelo: true,
+        type: true,
+        tipoVehiculo: true as any,
+        year: true as any,
+        estadoOperativo: true as any,
+      },
+    });
   }
 
   // ==========================================================

@@ -6,6 +6,7 @@ type Empresa = "GRUAS_THOMAS" | "INSPROTEL";
 type ActorLike = {
   id?: string;
   role?: string;
+  empresa?: string;
 } | null;
 
 type UpdateCompanyDto = {
@@ -20,12 +21,19 @@ type UpdateCompanyDto = {
 export class CompanyService {
   constructor(private prisma: PrismaService) {}
 
+  // ✅ Solo determina empresa. NO aplica permisos.
   private async getEmpresaFromDbOrThrow(actor: ActorLike): Promise<Empresa> {
-    if (actor?.role !== "ADMIN" && actor?.role !== "SUPERADMIN") {
-  throw new ForbiddenException("Solo ADMIN puede modificar datos de la empresa.");
-}
+    if (!actor?.id) {
+      throw new ForbiddenException("No autenticado.");
+    }
 
+    // ✅ si ya viene empresa en req.user (jwt.strategy), úsala
+    const empFromToken = String(actor?.empresa || "").toUpperCase();
+    if (empFromToken === "GRUAS_THOMAS" || empFromToken === "INSPROTEL") {
+      return empFromToken as Empresa;
+    }
 
+    // ✅ fallback: traer desde BD
     const user = await this.prisma.user.findUnique({
       where: { id: actor.id },
       select: { id: true, empresa: true, role: true },
@@ -35,17 +43,17 @@ export class CompanyService {
       throw new ForbiddenException("No se pudo determinar el usuario de la sesión.");
     }
 
-    const emp = (user as any).empresa as Empresa | null;
-
-    if (!emp) {
+    const emp = String((user as any).empresa || "").toUpperCase();
+    if (emp !== "GRUAS_THOMAS" && emp !== "INSPROTEL") {
       throw new ForbiddenException("No se pudo determinar la empresa del usuario.");
     }
 
-    return emp;
+    return emp as Empresa;
   }
 
+  // ✅ Permiso para editar settings
   private canEditCompany(actor: ActorLike) {
-    const role = String(actor?.role || "").toUpperCase();
+    const role = String(actor?.role || "").trim().toUpperCase();
     return role === "ADMIN" || role === "SUPERADMIN";
   }
 
@@ -81,8 +89,10 @@ export class CompanyService {
         where: { empresa: empresa as any },
       })) ?? (await this.getMyCompany(actor));
 
-    const nombre = (dto.nombre ?? current.nombre ?? "").trim();
-    if (!nombre) throw new BadRequestException("El nombre de empresa no puede quedar vacío.");
+    const nombre = String(dto.nombre ?? current.nombre ?? "").trim();
+    if (!nombre) {
+      throw new BadRequestException("El nombre de empresa no puede quedar vacío.");
+    }
 
     return this.prisma.companySettings.update({
       where: { id: current.id },

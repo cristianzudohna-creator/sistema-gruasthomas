@@ -13,6 +13,16 @@ const ROLES_KEY = "roles";
 export class RolesGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
+  private pickRole(user: any) {
+    return (
+      normRole(user?.role) ||
+      normRole(user?.rol) ||
+      normRole(user?.perfil) ||
+      normRole(user?.tipo) ||
+      normRole(user?.userRole)
+    );
+  }
+
   canActivate(context: ExecutionContext): boolean {
     const requiredRoles =
       this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [
@@ -25,15 +35,23 @@ export class RolesGuard implements CanActivate {
     const req = context.switchToHttp().getRequest();
     const user = req?.user ?? null;
 
-    const userRole = normRole(user?.role);
+    const userRole = this.pickRole(user);
     const required = requiredRoles.map(normRole);
 
-    // deja este log mientras pruebas
     // eslint-disable-next-line no-console
     console.log("[RolesGuard] required:", required, "| userRole:", userRole, "| rawUser:", user);
 
-    if (!userRole) throw new ForbiddenException(`No tienes permisos. [ROLES_GUARD role=${userRole} req=${required.join(",")}]`);
-    if (!required.includes(userRole)) throw new ForbiddenException(`No tienes permisos. [ROLES_GUARD role=${userRole} req=${required.join(",")}]`);
+    if (!userRole) {
+      throw new ForbiddenException(
+        `No tienes permisos (sin rol). required=${required.join(",")}`
+      );
+    }
+
+    if (!required.includes(userRole)) {
+      throw new ForbiddenException(
+        `No tienes permisos. role=${userRole} required=${required.join(",")}`
+      );
+    }
 
     return true;
   }

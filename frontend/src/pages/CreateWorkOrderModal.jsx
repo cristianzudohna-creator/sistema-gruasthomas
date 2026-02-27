@@ -1,4 +1,4 @@
-// ✅ Archivo: src/pages/CreateWorkOrderModal.jsx (COMPLETO)
+// ✅ Archivo: frontend/src/pages/CreateWorkOrderModal.jsx (COMPLETO)
 // ✅ Calendario: seleccionar días con click (fechas ISO)
 // ✅ Se elimina "Días (texto)" y el "Interpretado como..."
 // ✅ "Días programado" deja de ser título grande en negrita (queda como label normal)
@@ -9,12 +9,17 @@
 //
 // ✅ FIX UI: dropdown de WorkerAutocomplete (Operador/Rigger) se renderiza FIXED
 //    para que NO se vea “muy abajo” dentro del modal con scroll.
+//
+// ✅ FIX PATENTES: VehicleAutocomplete usa frontend/src/api/vehicles.js (searchVehicles)
+//    y manda empresa para que INSPROTEL vea INSPROTEL y GRUAS_THOMAS vea GRUAS_THOMAS.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
 import ConfirmModal from "../components/ui/ConfirmModal";
 
-const API_URL = "/api";
+import { searchVehicles } from "../api/vehicles";
+
+const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
 
 function getToken() {
   return localStorage.getItem("access_token") || "";
@@ -168,7 +173,9 @@ function Row({ label, value }) {
       }}
     >
       <div style={{ fontWeight: 900, opacity: 0.7 }}>{label}</div>
-      <div style={{ fontWeight: 900, wordBreak: "break-word" }}>{value || "—"}</div>
+      <div style={{ fontWeight: 900, wordBreak: "break-word" }}>
+        {value || "—"}
+      </div>
     </div>
   );
 }
@@ -181,7 +188,10 @@ function Resumen({ f, photosCount }) {
     diasProgramados.length > 0
       ? diasProgramados
           .slice(0, 12)
-          .map((iso, i) => `Día ${i + 1}: ${dowLabelFromISO(iso)} ${fmtDDMMYYYYFromISO(iso)}`)
+          .map(
+            (iso, i) =>
+              `Día ${i + 1}: ${dowLabelFromISO(iso)} ${fmtDDMMYYYYFromISO(iso)}`
+          )
           .join(" | ")
       : "—";
 
@@ -643,9 +653,7 @@ function ClientAutocomplete({
         onKeyDown={onKeyDown}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         style={
-          error
-            ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220, 38, 38, .15)" }
-            : undefined
+          error ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220, 38, 38, .15)" } : undefined
         }
       />
 
@@ -944,9 +952,18 @@ function WorkerAutocomplete({
 }
 
 /* =========================
-   Autocomplete (vehículos / patentes)
+   Autocomplete (vehículos / patentes) ✅ FIX empresa + api unificada
 ========================= */
-function VehicleAutocomplete({ label, placeholder, value, onChangeValue, onPickVehicle, disabled, error }) {
+function VehicleAutocomplete({
+  label,
+  placeholder,
+  value,
+  onChangeValue,
+  onPickVehicle,
+  disabled,
+  error,
+  empresa,
+}) {
   const wrapRef = useRef(null);
   const inputRef = useRef(null);
   const [open, setOpen] = useState(false);
@@ -966,12 +983,9 @@ function VehicleAutocomplete({ label, placeholder, value, onChangeValue, onPickV
     setLoading(true);
     setTip("");
     try {
-      const qs = new URLSearchParams();
-      qs.set("q", query);
-      qs.set("limit", "8");
+      const data = await searchVehicles({ q: query, limit: 8, empresa });
+      const list = Array.isArray(data) ? data : data?.items || [];
 
-      const data = await apiGet(`/vehicles/search?${qs.toString()}`);
-      const list = data?.items || [];
       setItems(list);
 
       if (list.length === 0) setTip("No se encontró. Puedes escribir la patente manual.");
@@ -1028,7 +1042,7 @@ function VehicleAutocomplete({ label, placeholder, value, onChangeValue, onPickV
       setTip("Escribe para buscar por patente (ej: AB).");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, empresa]);
 
   return (
     <div ref={wrapRef} style={{ position: "relative" }}>
@@ -1065,7 +1079,9 @@ function VehicleAutocomplete({ label, placeholder, value, onChangeValue, onPickV
             overflow: "hidden",
           }}
         >
-          <div style={{ padding: "10px 12px", fontWeight: 900, opacity: 0.75 }}>Patentes</div>
+          <div style={{ padding: "10px 12px", fontWeight: 900, opacity: 0.75 }}>
+            Patentes {empresa ? `(${String(empresa).toUpperCase()})` : ""}
+          </div>
 
           <div style={{ maxHeight: 220, overflow: "auto", borderTop: "1px solid rgba(0,0,0,0.06)" }}>
             {loading ? (
@@ -1074,8 +1090,8 @@ function VehicleAutocomplete({ label, placeholder, value, onChangeValue, onPickV
               items.map((v) => {
                 const patente = normalizeText(v?.patente);
                 const marcaModelo = normalizeText(v?.marcaModelo);
-                const empresa = normalizeText(v?.empresa);
-                const sub = [marcaModelo, empresa].filter(Boolean).join(" • ");
+                const emp = normalizeText(v?.empresa);
+                const sub = [marcaModelo, emp].filter(Boolean).join(" • ");
 
                 return (
                   <button
@@ -1566,6 +1582,7 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
                 label="Patente"
                 placeholder="Escribe para buscar (ej: AB)"
                 value={f.camion}
+                empresa={f.empresa}
                 onChangeValue={(v) => setField("camion", v)}
                 onPickVehicle={(veh) => {
                   const vEmp = String(veh?.empresa || "").toUpperCase();
@@ -1683,7 +1700,12 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
                     title={p.name}
                   >
                     <div style={{ width: "100%", height: 92, background: "#fff" }}>
-                      <img src={p.url} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />
+                      <img
+                        src={p.url}
+                        alt={p.name}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        loading="lazy"
+                      />
                     </div>
 
                     <button

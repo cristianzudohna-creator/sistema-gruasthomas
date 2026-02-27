@@ -1,4 +1,4 @@
-// ✅ Archivo: frontend/src/auth/auth.js (COMPLETO - PROD SAFE)
+// ✅ Archivo: frontend/src/auth/auth.js (FIX TOKEN REAL)
 import { fixText } from "../utils/fixText";
 
 function safeJsonParse(raw) {
@@ -21,14 +21,22 @@ function normalizeUser(u) {
   };
 }
 
+// ✅ 🔥 FIX REAL: buscar token en TODAS las posibles formas
 export function getToken() {
-  // ✅ Soporta varias llaves + limpia espacios
-  return (
-    localStorage.getItem("access_token") ||
-    localStorage.getItem("token") ||
-    localStorage.getItem("accessToken") ||
-    ""
-  ).trim();
+  const keys = [
+    "access_token",
+    "token",
+    "accessToken",
+    "jwt",
+    "jwt_token",
+  ];
+
+  for (const k of keys) {
+    const val = localStorage.getItem(k);
+    if (val && val.trim()) return val.trim();
+  }
+
+  return "";
 }
 
 export function getUser() {
@@ -43,9 +51,7 @@ export function getUser() {
   const normalized = normalizeUser(parsed);
 
   if (!normalized) {
-    localStorage.removeItem("user");
-    localStorage.removeItem("me");
-    localStorage.removeItem("profile");
+    localStorage.clear();
     return null;
   }
 
@@ -57,13 +63,7 @@ export function getUser() {
 }
 
 export function logout() {
-  localStorage.removeItem("access_token");
-  localStorage.removeItem("token");
-  localStorage.removeItem("accessToken");
-
-  localStorage.removeItem("user");
-  localStorage.removeItem("me");
-  localStorage.removeItem("profile");
+  localStorage.clear();
 }
 
 
