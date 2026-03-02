@@ -1,11 +1,11 @@
-// ✅ Archivo: src/components/ui/Modal.jsx (RESPONSIVE PRO - TABLET/CEL + TEXT FIX)
-// ✅ FIX:
-// - Safe area iOS (notch)
-// - Mobile bottom-sheet (más cómodo)
+// ✅ Archivo: src/components/ui/Modal.jsx
+// ✅ FIX definitivo:
+// - Cierra SOLO si el click fue en el backdrop (overlay) y NO viene desde dentro del modal
+// - Evita cierres al clickear scrollbar o elementos internos con scroll
+// - Safe area iOS
 // - Lock scroll sin “saltos” (guarda/restaura scrollY)
-// - Header/Footer compactos en móvil
-// ✅ TEXT FIX:
-// - title/subtitle/aria-label pasan por fixText() para evitar mojibake en headers de modales
+// - Text fix (mojibake)
+
 import { useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { fixText } from "../../utils/fixText";
@@ -17,7 +17,6 @@ function lockBodyScroll() {
   lockCount += 1;
   if (lockCount !== 1) return;
 
-  // ✅ guarda scroll actual y fija body
   savedScrollY = window.scrollY || 0;
 
   document.body.style.position = "fixed";
@@ -32,8 +31,8 @@ function unlockBodyScroll() {
   lockCount = Math.max(0, lockCount - 1);
   if (lockCount !== 0) return;
 
-  // ✅ restaura body + scroll
   const top = document.body.style.top;
+
   document.body.style.position = "";
   document.body.style.top = "";
   document.body.style.left = "";
@@ -45,10 +44,19 @@ function unlockBodyScroll() {
   window.scrollTo(0, Number.isFinite(y) ? y : savedScrollY);
 }
 
-export default function Modal({ open, onClose, title, subtitle, children, footer, width = 600 }) {
+export default function Modal({
+  open,
+  onClose,
+  title,
+  subtitle,
+  children,
+  footer,
+  width = 600,
+}) {
   const overlayRef = useRef(null);
+  const modalRef = useRef(null);
 
-  // ✅ TEXT FIX (solo string): no tocamos ReactNodes (por si algún día usas JSX)
+  // ✅ TEXT FIX (solo string)
   const safeTitle = useMemo(() => {
     if (typeof title === "string") return fixText(title);
     return title;
@@ -61,7 +69,6 @@ export default function Modal({ open, onClose, title, subtitle, children, footer
 
   const ariaLabel = useMemo(() => {
     if (typeof title === "string") return fixText(title);
-    // si title es JSX o null, usamos fallback fijo para accesibilidad
     return "Modal";
   }, [title]);
 
@@ -84,13 +91,39 @@ export default function Modal({ open, onClose, title, subtitle, children, footer
 
   if (!open) return null;
 
-  function handleOverlayMouseDown(e) {
-    if (e.target === overlayRef.current) onClose?.();
+  function isClickInsideModal(e) {
+    const modalEl = modalRef.current;
+    if (!modalEl) return false;
+
+    // ✅ super robusto (soporta portales / shadowdom)
+    const path = typeof e.composedPath === "function" ? e.composedPath() : null;
+    if (Array.isArray(path) && path.includes(modalEl)) return true;
+
+    // fallback normal
+    return modalEl.contains(e.target);
+  }
+
+  function handleOverlayClick(e) {
+    // ✅ cerrar SOLO si:
+    // - el click fue en el overlay (backdrop)
+    // - y NO fue realmente dentro del modal (scrollbar / portales raros)
+    const clickedBackdrop = e.target === e.currentTarget;
+
+    if (!clickedBackdrop) return;
+    if (isClickInsideModal(e)) return;
+
+    onClose?.();
   }
 
   const node = (
-    <div ref={overlayRef} style={styles.overlay} onMouseDown={handleOverlayMouseDown} role="presentation">
+    <div
+      ref={overlayRef}
+      style={styles.overlay}
+      onClick={handleOverlayClick}
+      role="presentation"
+    >
       <div
+        ref={modalRef}
         style={{
           ...styles.modal,
           maxWidth: width,
@@ -98,7 +131,8 @@ export default function Modal({ open, onClose, title, subtitle, children, footer
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
-        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()} // ✅ evita burbujeo
+        onMouseDown={(e) => e.stopPropagation()} // ✅ extra defensa
       >
         <div style={styles.header}>
           <div style={{ minWidth: 0 }}>
@@ -106,7 +140,13 @@ export default function Modal({ open, onClose, title, subtitle, children, footer
             {safeSubtitle ? <p style={styles.subtitle}>{safeSubtitle}</p> : null}
           </div>
 
-          <button type="button" style={styles.closeBtn} onClick={onClose} aria-label="Cerrar" title="Cerrar">
+          <button
+            type="button"
+            style={styles.closeBtn}
+            onClick={onClose}
+            aria-label="Cerrar"
+            title="Cerrar"
+          >
             ✕
           </button>
         </div>
@@ -131,7 +171,6 @@ const styles = {
     justifyContent: "center",
     zIndex: 999999,
 
-    // ✅ Safe area + padding responsive
     padding:
       "max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))",
 
@@ -146,12 +185,7 @@ const styles = {
     overflow: "hidden",
     display: "flex",
     flexDirection: "column",
-
-    // ✅ en desktop sigue centrado y limitado
     maxHeight: "calc(100vh - 24px)",
-
-    // ✅ en móvil se siente bottom-sheet (sin tocar CSS global)
-    //   (usa clamp para verse bien en tablet también)
     marginTop: "clamp(0px, 6vh, 32px)",
   },
 

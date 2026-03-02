@@ -1443,7 +1443,7 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
         open={open}
         onClose={handleClose}
         title="Programación Orden de Trabajo"
-        subtitle={`Registro (${String(f.empresa).toUpperCase() === "INSPROTEL" ? "Insp rotel" : "Grúas Thomas"})`}
+        subtitle={`Registro (${String(f.empresa).toUpperCase() === "INSPROTEL" ? "Insprotel" : "Grúas Thomas"})`}
         width={920}
         footer={
           <>

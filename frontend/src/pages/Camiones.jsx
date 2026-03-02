@@ -209,38 +209,6 @@ export default function Camiones() {
     return "Operativo";
   }
 
-  function docsLabelByCounts(crit, soon) {
-    const c = Number(crit || 0);
-    const s = Number(soon || 0);
-    if (c > 0) return { estado: "VENCIDO", label: `Docs • Crítico${c > 1 ? ` (${c})` : ""}` };
-    if (s > 0) return { estado: "POR_VENCER", label: `Docs • Por vencer${s > 1 ? ` (${s})` : ""}` };
-    return { estado: "VIGENTE", label: "Docs • Vigente" };
-  }
-
-  function maintLabelByCounts(crit, soon) {
-    const c = Number(crit || 0);
-    const s = Number(soon || 0);
-    if (c > 0) return { estado: "VENCIDO", label: `Mant • Crítico${c > 1 ? ` (${c})` : ""}` };
-    if (s > 0) return { estado: "POR_VENCER", label: `Mant • Por vencer${s > 1 ? ` (${s})` : ""}` };
-    return { estado: "VIGENTE", label: "Mant • Vigente" };
-  }
-
-  function cardSubtextTotal() {
-    if (empresaFilter === "ALL") return "Toda la flota en el sistema";
-    if (empresaFilter === "GRUAS_THOMAS") return "Solo vehículos de Grúas Thomas";
-    return "Solo vehículos de Insprotel";
-  }
-
-  function scopeText() {
-    if (empresaFilter === "ALL") return "Todas las empresas";
-    return empresaLabel(empresaFilter);
-  }
-
-  function scopeLogo() {
-    if (empresaFilter === "ALL") return null;
-    return empresaLogo(empresaFilter);
-  }
-
   function setEmpresaFilterAndScroll(val) {
     setEmpresaFilter(val);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -277,7 +245,6 @@ export default function Camiones() {
       const data = await res.json();
 
       const mapped = (Array.isArray(data) ? data : []).map((v) => {
-        // ✅ FIX: arreglar mojibake ANTES de splitMarcaModelo
         const mmRaw = v.marcaModelo || v.marca_modelo || "";
         const mm = splitMarcaModelo(fixText(mmRaw));
 
@@ -292,14 +259,11 @@ export default function Camiones() {
           year: v.year ?? "",
           tipoVehiculo: fixText(v.tipoVehiculo || (typeof v.type === "string" ? v.type : "") || ""),
 
-          // ⚠️ estado por próxima mantención
           estado: v.estado || "VIGENTE",
           detalle: fixText(v.detalle || ""),
 
-          // ✅ estado operativo
           estadoOperativo: v.estadoOperativo || "OPERATIVO",
 
-          // ✅ Contadores
           docsCriticos: Number(v.docsCriticos || 0),
           docsPorVencer: Number(v.docsPorVencer || 0),
           maintCriticos: Number(v.maintCriticos || 0),
@@ -329,7 +293,6 @@ export default function Camiones() {
         modelo: String(payload?.modelo ?? "").trim(),
         tipoVehiculo: String(payload?.tipoVehiculo ?? "").trim(),
         year: payload?.year ?? null,
-        // ✅ compat (NUNCA undefined)
         marcaModelo: String(payload?.marcaModelo ?? "").trim(),
         type: String(payload?.type ?? payload?.tipoVehiculo ?? "").trim(),
       }),
@@ -358,7 +321,6 @@ export default function Camiones() {
       modelo: String(payload?.modelo ?? "").trim(),
       tipoVehiculo: String(payload?.tipoVehiculo ?? "").trim(),
       year: payload?.year ?? null,
-      // ✅ compat (NUNCA undefined)
       marcaModelo: String(payload?.marcaModelo ?? "").trim(),
       type: String(payload?.type ?? payload?.tipoVehiculo ?? "").trim(),
     };
@@ -383,7 +345,6 @@ export default function Camiones() {
     await fetchVehicles();
   }
 
-  // ✅ ELIMINAR VEHÍCULO (REQUEST REAL)
   async function deleteVehicleRequest(row) {
     if (!row?.id) throw new Error("No se pudo eliminar: falta ID del vehículo.");
 
@@ -404,7 +365,6 @@ export default function Camiones() {
     await fetchVehicles();
   }
 
-  // ✅ CAMBIAR ESTADO OPERATIVO
   async function setOperationalStatusRequest(vehicleId, status) {
     const res = await fetch(`${API_URL}/vehicles/${vehicleId}/operational-status`, {
       method: "PATCH",
@@ -460,7 +420,6 @@ export default function Camiones() {
       modelo: row.modelo,
       tipoVehiculo: row.tipoVehiculo,
       year: row.year ?? null,
-      // compat
       marcaModelo: `${row.marca} ${row.modelo}`.trim(),
       type: row.tipoVehiculo,
     });
@@ -537,7 +496,6 @@ export default function Camiones() {
     }
   }
 
-  // ✅ Abrir modal con detalle de “cards”
   function openAlerts(mode) {
     setAlertsMode(mode);
     setAlertsOpen(true);
@@ -547,10 +505,6 @@ export default function Camiones() {
     setAlertsOpen(false);
     setAlertsMode(null);
   }
-
-  // =========================
-  // ✅ HORÓMETRO (ADMIN)
-  // =========================
 
   function formatDateTime(value) {
     if (!value) return "—";
@@ -575,8 +529,6 @@ export default function Camiones() {
     setHoroVehicle(null);
     setHoroItems([]);
     setHoroError("");
-
-    // ✅ limpia forms
     resetHoroForm();
     setHoroDeleteConfirmOpen(false);
     setHoroDeleteTarget(null);
@@ -608,7 +560,6 @@ export default function Camiones() {
     return normalizeHorometerResponse(data);
   }
 
-  // ✅ CREATE (SIN comentario)
   async function createHorometerRequest(vehicleId, { horas, file }) {
     const fd = new FormData();
     fd.append("horas", String(horas));
@@ -617,7 +568,7 @@ export default function Camiones() {
     const res = await fetch(`${API_URL}/vehicles/${vehicleId}/horometers`, {
       method: "POST",
       credentials: "include",
-      headers: tokenHeaders(), // ✅ sin Content-Type
+      headers: tokenHeaders(),
       body: fd,
     });
 
@@ -694,13 +645,10 @@ export default function Camiones() {
     fetchVehicles();
   }, []);
 
-  // ✅ Stats
   const stats = useMemo(() => {
     const all = vehicles || [];
     const scoped =
-      empresaFilter === "ALL"
-        ? all
-        : all.filter((v) => (v.empresa || "GRUAS_THOMAS") === empresaFilter);
+      empresaFilter === "ALL" ? all : all.filter((v) => (v.empresa || "GRUAS_THOMAS") === empresaFilter);
 
     const total = scoped.length;
 
@@ -733,12 +681,10 @@ export default function Camiones() {
       docsPorVencer,
       maintCriticos,
       maintPorVencer,
-      scopedVehicles: scoped,
       scopedOperativos,
     };
   }, [vehicles, empresaFilter]);
 
-  // ✅ Lista para modal según card (SOLO OPERATIVOS)
   const alertVehicles = useMemo(() => {
     const scoped = stats.scopedOperativos || [];
     const toItem = (v, count, kind) => ({
@@ -748,26 +694,14 @@ export default function Camiones() {
       marcaModelo: fixText(`${v.marca || ""} ${v.modelo || ""}`.trim()),
     });
 
-    if (alertsMode === "DOCS_CRIT") {
-      return scoped
-        .filter((v) => Number(v.docsCriticos || 0) > 0)
-        .map((v) => toItem(v, Number(v.docsCriticos || 0), "DOCS"));
-    }
-    if (alertsMode === "DOCS_SOON") {
-      return scoped
-        .filter((v) => Number(v.docsPorVencer || 0) > 0)
-        .map((v) => toItem(v, Number(v.docsPorVencer || 0), "DOCS"));
-    }
-    if (alertsMode === "MAINT_CRIT") {
-      return scoped
-        .filter((v) => Number(v.maintCriticos || 0) > 0)
-        .map((v) => toItem(v, Number(v.maintCriticos || 0), "MAINT"));
-    }
-    if (alertsMode === "MAINT_SOON") {
-      return scoped
-        .filter((v) => Number(v.maintPorVencer || 0) > 0)
-        .map((v) => toItem(v, Number(v.maintPorVencer || 0), "MAINT"));
-    }
+    if (alertsMode === "DOCS_CRIT")
+      return scoped.filter((v) => Number(v.docsCriticos || 0) > 0).map((v) => toItem(v, Number(v.docsCriticos || 0), "DOCS"));
+    if (alertsMode === "DOCS_SOON")
+      return scoped.filter((v) => Number(v.docsPorVencer || 0) > 0).map((v) => toItem(v, Number(v.docsPorVencer || 0), "DOCS"));
+    if (alertsMode === "MAINT_CRIT")
+      return scoped.filter((v) => Number(v.maintCriticos || 0) > 0).map((v) => toItem(v, Number(v.maintCriticos || 0), "MAINT"));
+    if (alertsMode === "MAINT_SOON")
+      return scoped.filter((v) => Number(v.maintPorVencer || 0) > 0).map((v) => toItem(v, Number(v.maintPorVencer || 0), "MAINT"));
     return [];
   }, [alertsMode, stats.scopedOperativos]);
 
@@ -780,29 +714,20 @@ export default function Camiones() {
   }
 
   function alertsSubtitle() {
-    return `${empresaFilter === "ALL" ? "Todas las empresas" : empresaLabel(empresaFilter)} • ${
-      alertVehicles.length
-    } vehículo(s)`;
+    return `${empresaFilter === "ALL" ? "Todas las empresas" : empresaLabel(empresaFilter)} • ${alertVehicles.length} vehículo(s)`;
   }
 
-  // ✅ filtro tabla (empresa + estado + search)
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     let base = vehicles;
 
-    if (empresaFilter !== "ALL") {
-      base = base.filter((t) => (t.empresa || "GRUAS_THOMAS") === empresaFilter);
-    }
-
-    if (statusFilter !== "ALL") {
-      base = base.filter((t) => t.estado === statusFilter);
-    }
+    if (empresaFilter !== "ALL") base = base.filter((t) => (t.empresa || "GRUAS_THOMAS") === empresaFilter);
+    if (statusFilter !== "ALL") base = base.filter((t) => t.estado === statusFilter);
 
     if (!q) return base;
 
     return base.filter((t) => {
-      const haystack =
-        `${t.empresa} ${t.patente} ${t.marca} ${t.modelo} ${t.tipoVehiculo} ${t.estado} ${t.estadoOperativo}`.toLowerCase();
+      const haystack = `${t.empresa} ${t.patente} ${t.marca} ${t.modelo} ${t.tipoVehiculo} ${t.estado} ${t.estadoOperativo}`.toLowerCase();
       return haystack.includes(q);
     });
   }, [search, vehicles, statusFilter, empresaFilter]);
@@ -819,7 +744,6 @@ export default function Camiones() {
     setPage(1);
   }, [search, statusFilter, empresaFilter]);
 
-  // ✅ cerrar menús ⋮ al click afuera
   useEffect(() => {
     function onDocClick(e) {
       const openDetails = document.querySelectorAll("details.gt-actions[open]");
@@ -831,10 +755,22 @@ export default function Camiones() {
     return () => document.removeEventListener("click", onDocClick);
   }, []);
 
-  // =========================
-  // ✅ EXPORT EXCEL (helpers)
-  // =========================
+  // ✅ helpers cards
+  function cardSubtextTotal() {
+    if (empresaFilter === "ALL") return "Toda la flota en el sistema";
+    if (empresaFilter === "GRUAS_THOMAS") return "Solo vehículos de Grúas Thomas";
+    return "Solo vehículos de Insprotel";
+  }
+  function scopeText() {
+    if (empresaFilter === "ALL") return "Todas las empresas";
+    return empresaLabel(empresaFilter);
+  }
+  function scopeLogo() {
+    if (empresaFilter === "ALL") return null;
+    return empresaLogo(empresaFilter);
+  }
 
+  // ✅ Export helpers
   function formatDateISO(value) {
     if (!value) return "";
     try {
@@ -845,7 +781,6 @@ export default function Camiones() {
       return String(value);
     }
   }
-
   function todayStamp() {
     const today = new Date();
     const yyyy = today.getFullYear();
@@ -853,12 +788,10 @@ export default function Camiones() {
     const dd = String(today.getDate()).padStart(2, "0");
     return `${yyyy}-${mm}-${dd}`;
   }
-
   function scopeToEmpresaParam() {
     if (exportScope === "VISTA") return empresaFilter;
     return exportScope;
   }
-
   function scopeToLabelForFile() {
     const emp = scopeToEmpresaParam();
     if (emp === "ALL") return "todas";
@@ -866,7 +799,6 @@ export default function Camiones() {
     if (emp === "INSPROTEL") return "insprotel";
     return "vista";
   }
-
   function toExcelRowsVehicles(list) {
     return (list || []).map((v) => ({
       Empresa: empresaLabel(v.empresa || "GRUAS_THOMAS"),
@@ -876,7 +808,6 @@ export default function Camiones() {
       "Tipo de vehículo": displayTipoVehiculo(v.tipoVehiculo || ""),
     }));
   }
-
   function exportExcelSheet(rows, sheetName, fileBase) {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -890,15 +821,12 @@ export default function Camiones() {
     const headerRow = range.s.r;
     for (let C = range.s.c; C <= range.e.c; C++) {
       const addr = XLSX.utils.encode_cell({ r: headerRow, c: C });
-      if (ws[addr]) {
-        ws[addr].s = { font: { bold: true }, alignment: { vertical: "center" } };
-      }
+      if (ws[addr]) ws[addr].s = { font: { bold: true }, alignment: { vertical: "center" } };
     }
 
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
     XLSX.writeFile(wb, `${fileBase}_${todayStamp()}.xlsx`, { cellStyles: true });
   }
-
   function exportVehiculosExcel() {
     const emp = scopeToEmpresaParam();
 
@@ -920,10 +848,7 @@ export default function Camiones() {
 
   async function fetchExportFromApi(kind, empresaParam) {
     const url = `${API_URL}/vehicles/exports/${kind}?empresa=${encodeURIComponent(empresaParam)}`;
-    const res = await fetch(url, {
-      credentials: "include",
-      headers: tokenHeaders(),
-    });
+    const res = await fetch(url, { credentials: "include", headers: tokenHeaders() });
 
     if (!res.ok) {
       const txt = await res.text();
@@ -941,7 +866,6 @@ export default function Camiones() {
 
   async function exportDocumentosExcel() {
     const emp = scopeToEmpresaParam();
-
     try {
       setExporting(true);
       const list = await fetchExportFromApi("documents", emp);
@@ -969,7 +893,6 @@ export default function Camiones() {
 
   async function exportMantencionesExcel() {
     const emp = scopeToEmpresaParam();
-
     try {
       setExporting(true);
       const list = await fetchExportFromApi("maintenances", emp);
@@ -999,7 +922,6 @@ export default function Camiones() {
   const tabAllActive = empresaFilter === "ALL";
   const tabThomasActive = empresaFilter === "GRUAS_THOMAS";
   const tabInsActive = empresaFilter === "INSPROTEL";
-
   const totalCardActive = statusFilter === "ALL";
 
   return (
@@ -1352,20 +1274,10 @@ export default function Camiones() {
 
                     <td title={marcaModelo}>{marcaModelo}</td>
 
-                    <td title={displayTipoVehiculo(t.tipoVehiculo || "")}>
-                      {displayTipoVehiculo(t.tipoVehiculo || "")}
-                    </td>
+                    <td title={displayTipoVehiculo(t.tipoVehiculo || "")}>{displayTipoVehiculo(t.tipoVehiculo || "")}</td>
 
                     <td onClick={(e) => e.stopPropagation()}>
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: 8,
-                          justifyContent: "flex-end",
-                          alignItems: "center",
-                          flexWrap: "wrap",
-                        }}
-                      >
+                      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
                         <ActionButton
                           variant="ghost"
                           type="button"
@@ -1391,34 +1303,17 @@ export default function Camiones() {
                             </summary>
 
                             <div className="gt-actions-menu" onClick={(e) => e.stopPropagation()}>
-                              <div style={{ padding: "8px 10px", fontSize: 12, fontWeight: 900, opacity: 0.75 }}>
-                                Estado operativo
-                              </div>
+                              <div className="gt-actions-title">Estado operativo</div>
 
-                              <button
-                                className="gt-actions-item"
-                                type="button"
-                                onClick={() => askOperationalStatus(t, "OPERATIVO")}
-                                disabled={opSaving}
-                              >
+                              <button className="gt-actions-item" type="button" onClick={() => askOperationalStatus(t, "OPERATIVO")} disabled={opSaving}>
                                 Marcar como Operativo
                               </button>
 
-                              <button
-                                className="gt-actions-item"
-                                type="button"
-                                onClick={() => askOperationalStatus(t, "EN_PANA")}
-                                disabled={opSaving}
-                              >
+                              <button className="gt-actions-item" type="button" onClick={() => askOperationalStatus(t, "EN_PANA")} disabled={opSaving}>
                                 Marcar como En pana
                               </button>
 
-                              <button
-                                className="gt-actions-item danger"
-                                type="button"
-                                onClick={() => askOperationalStatus(t, "PARADO")}
-                                disabled={opSaving}
-                              >
+                              <button className="gt-actions-item danger" type="button" onClick={() => askOperationalStatus(t, "PARADO")} disabled={opSaving}>
                                 Marcar como Parado
                               </button>
                             </div>
@@ -1452,29 +1347,11 @@ export default function Camiones() {
           </span>
 
           <div className="pager">
-            <button
-              className="pager-btn"
-              type="button"
-              disabled={safePage <= 1}
-              onClick={() => {
-                setPage((p) => Math.max(1, p - 1));
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-            >
+            <button className="pager-btn" type="button" disabled={safePage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
               ◀
             </button>
-
             <span className="pager-page">{safePage}</span>
-
-            <button
-              className="pager-btn"
-              type="button"
-              disabled={safePage >= totalPages}
-              onClick={() => {
-                setPage((p) => Math.min(totalPages, p + 1));
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-            >
+            <button className="pager-btn" type="button" disabled={safePage >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
               ▶
             </button>
           </div>
@@ -1492,13 +1369,7 @@ export default function Camiones() {
         initialValues={{ empresa: empresaFilter === "ALL" ? "GRUAS_THOMAS" : empresaFilter }}
       />
 
-      <VehicleModal
-        open={openEdit}
-        onClose={closeEditModal}
-        onSave={updateVehicle}
-        mode="edit"
-        initialValues={editInitial}
-      />
+      <VehicleModal open={openEdit} onClose={closeEditModal} onSave={updateVehicle} mode="edit" initialValues={editInitial} />
 
       <DocumentsModal open={openDocs} onClose={closeDocsModal} vehicle={docsVehicle} apiUrl={API_URL} />
       <MaintenancesModal open={openMaint} onClose={closeMaintModal} vehicle={maintVehicle} apiUrl={API_URL} />
@@ -1530,7 +1401,7 @@ export default function Camiones() {
         }}
       />
 
-      {/* ✅ Modal: Horómetro (ADMIN / CONTROL FLOTA) */}
+      {/* ✅ Modal: Horómetro */}
       <Modal
         open={horoOpen}
         onClose={closeHorometer}
@@ -1549,7 +1420,6 @@ export default function Camiones() {
           </div>
         ) : null}
 
-        {/* ✅ Crear registro */}
         <div
           style={{
             border: "1px solid rgba(0,0,0,0.08)",
@@ -1577,12 +1447,7 @@ export default function Camiones() {
 
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <label style={{ fontSize: 12, fontWeight: 900, opacity: 0.7 }}>Foto</label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setHoroFormFile(e.target.files?.[0] || null)}
-                disabled={horoSaving || horoLoading}
-              />
+              <input type="file" accept="image/*" onChange={(e) => setHoroFormFile(e.target.files?.[0] || null)} disabled={horoSaving || horoLoading} />
             </div>
 
             <ActionButton
@@ -1601,11 +1466,7 @@ export default function Camiones() {
                 try {
                   setHoroSaving(true);
 
-                  await createHorometerRequest(horoVehicle.id, {
-                    horas,
-                    file: horoFormFile,
-                  });
-
+                  await createHorometerRequest(horoVehicle.id, { horas, file: horoFormFile });
                   resetHoroForm();
 
                   const list = await fetchHorometers(horoVehicle.id);
@@ -1638,14 +1499,12 @@ export default function Camiones() {
           </div>
         </div>
 
-        {/* Header mini */}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
           <span className="status ok" style={{ whiteSpace: "nowrap" }}>
             Registros: {horoItems.length}
           </span>
         </div>
 
-        {/* Tabla */}
         <div style={{ borderRadius: 14, border: "1px solid rgba(0,0,0,0.06)", overflow: "hidden" }}>
           <div style={{ width: "100%", overflowX: "auto" }}>
             <table className="table" style={{ minWidth: 980 }}>
@@ -1697,9 +1556,7 @@ export default function Camiones() {
                               <ActionButton
                                 variant="ghost"
                                 type="button"
-                                onClick={() =>
-                                  openPhoto(r.fotoUrl, r.originalName || `Evidencia • ${horoVehicle?.patente || ""}`)
-                                }
+                                onClick={() => openPhoto(r.fotoUrl, r.originalName || `Evidencia • ${horoVehicle?.patente || ""}`)}
                                 style={{ height: 34, padding: "0 12px", borderRadius: 12, fontWeight: 900 }}
                               >
                                 Ver
@@ -1731,7 +1588,6 @@ export default function Camiones() {
           </div>
         </div>
 
-        {/* ✅ Confirm eliminar */}
         <ConfirmModal
           open={horoDeleteConfirmOpen}
           title="¿Eliminar registro de horómetro?"
@@ -1779,7 +1635,6 @@ export default function Camiones() {
         />
       </Modal>
 
-      {/* ✅ Modal: evidencia (foto) */}
       <Modal
         open={photoOpen}
         onClose={closePhoto}
@@ -1812,22 +1667,22 @@ export default function Camiones() {
         )}
       </Modal>
 
-      {/* ✅ Modal: detalle de cards (vehículos con alertas) */}
+          {/* ✅ Modal: detalle de cards (vehículos con alertas) */}
       <Modal
         open={alertsOpen}
         onClose={closeAlerts}
         title={alertsTitle()}
         subtitle={alertsSubtitle()}
-        width={900}
+        width={1400}
         footer={
           <button className="gt-btn" type="button" onClick={closeAlerts}>
             Cerrar
           </button>
         }
       >
-        <div style={{ borderRadius: 14, border: "1px solid rgba(0,0,0,0.06)", overflow: "hidden" }}>
-          <div style={{ width: "100%", overflowX: "auto" }}>
-            <table className="table" style={{ minWidth: 860 }}>
+        <div style={{ borderRadius: 14, border: "1px solid rgba(0,0,0,0.06)", background: "#fff" }}>
+          <div style={{ width: "100%", overflowX: "auto", scrollbarGutter: "stable both-edges" }}>
+            <table className="table" style={{ minWidth: 1180 }}>
               <thead>
                 <tr>
                   <th style={{ width: 60 }}> </th>
@@ -1836,7 +1691,7 @@ export default function Camiones() {
                   <th>Operatividad</th>
                   <th>Marca/Modelo</th>
                   <th style={{ width: 120 }}>Cantidad</th>
-                  <th style={{ width: 260 }}>Acción</th>
+                  <th style={{ width: 360 }}>Acción</th>
                 </tr>
               </thead>
               <tbody>
@@ -1862,65 +1717,72 @@ export default function Camiones() {
                         />
                       </div>
                     </td>
+
                     <td className="mono">{empresaLabel(v.empresa)}</td>
                     <td className="mono">{fixText(v.patente)}</td>
+
                     <td>
                       <OperationalPill estadoOperativo={v.estadoOperativo} />
                     </td>
+
                     <td>{fixText(v.marcaModelo || "-")}</td>
+
                     <td className="mono" style={{ fontWeight: 900 }}>
                       {v.count}
                     </td>
-                    <td style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <ActionButton
-                        variant="ghost"
-                        type="button"
-                        onClick={() => {
-                          closeAlerts();
-                          openDetailModal(v);
-                        }}
-                        style={{ height: 36, padding: "0 12px", borderRadius: 12, fontWeight: 900 }}
-                      >
-                        Ver vehículo
-                      </ActionButton>
 
-                      <ActionButton
-                        variant="ghost"
-                        type="button"
-                        onClick={() => {
-                          closeAlerts();
-                          openHorometer(v);
-                        }}
-                        style={{ height: 36, padding: "0 12px", borderRadius: 12, fontWeight: 900 }}
-                      >
-                        Horómetro
-                      </ActionButton>
-
-                      {v.kind === "DOCS" ? (
+                    <td>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
                         <ActionButton
-                          variant="primary"
+                          variant="ghost"
                           type="button"
                           onClick={() => {
                             closeAlerts();
-                            openDocsModal(v);
+                            openDetailModal(v);
                           }}
                           style={{ height: 36, padding: "0 12px", borderRadius: 12, fontWeight: 900 }}
                         >
-                          Ver documentos
+                          Ver vehículo
                         </ActionButton>
-                      ) : (
+
                         <ActionButton
-                          variant="primary"
+                          variant="ghost"
                           type="button"
                           onClick={() => {
                             closeAlerts();
-                            openMaintModal(v);
+                            openHorometer(v);
                           }}
                           style={{ height: 36, padding: "0 12px", borderRadius: 12, fontWeight: 900 }}
                         >
-                          Ver mantenciones
+                          Horómetro
                         </ActionButton>
-                      )}
+
+                        {v.kind === "DOCS" ? (
+                          <ActionButton
+                            variant="primary"
+                            type="button"
+                            onClick={() => {
+                              closeAlerts();
+                              openDocsModal(v);
+                            }}
+                            style={{ height: 36, padding: "0 12px", borderRadius: 12, fontWeight: 900 }}
+                          >
+                            Ver documentos
+                          </ActionButton>
+                        ) : (
+                          <ActionButton
+                            variant="primary"
+                            type="button"
+                            onClick={() => {
+                              closeAlerts();
+                              openMaintModal(v);
+                            }}
+                            style={{ height: 36, padding: "0 12px", borderRadius: 12, fontWeight: 900 }}
+                          >
+                            Ver mantenciones
+                          </ActionButton>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1942,7 +1804,6 @@ export default function Camiones() {
         </div>
       </Modal>
 
-      {/* ✅ CONFIRM: cambiar estado operativo */}
       <ConfirmModal
         open={opConfirmOpen}
         title="¿Cambiar estado operativo?"
