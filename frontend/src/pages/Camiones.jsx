@@ -1,4 +1,4 @@
-// ✅ Archivo: src/pages/Camiones.jsx (COMPLETO - PROD FIX + COOKIES FIX + TEXT FIX)
+// ✅ Archivo: src/pages/Camiones.jsx (COMPLETO - PROD FIX + COOKIES FIX + TEXT FIX + HORÓMETRO CRUD)
 import { useEffect, useMemo, useState } from "react";
 import "./Admin.css";
 
@@ -155,10 +155,49 @@ export default function Camiones() {
   const [horoError, setHoroError] = useState("");
   const [horoItems, setHoroItems] = useState([]);
 
+  // ✅ HORÓMETRO CRUD (CONTROL FLOTA / SUPERADMIN)
+  const [horoFormHoras, setHoroFormHoras] = useState("");
+  const [horoFormComentario, setHoroFormComentario] = useState("");
+  const [horoFormFile, setHoroFormFile] = useState(null);
+  const [horoSaving, setHoroSaving] = useState(false);
+
+  const [horoEditId, setHoroEditId] = useState(null);
+  const [horoEditHoras, setHoroEditHoras] = useState("");
+  const [horoEditComentario, setHoroEditComentario] = useState("");
+  const [horoEditFile, setHoroEditFile] = useState(null);
+
+  const [horoDeleteConfirmOpen, setHoroDeleteConfirmOpen] = useState(false);
+  const [horoDeleteTarget, setHoroDeleteTarget] = useState(null);
+
   // ✅ Preview evidencia (foto)
   const [photoOpen, setPhotoOpen] = useState(false);
   const [photoUrl, setPhotoUrl] = useState("");
   const [photoTitle, setPhotoTitle] = useState("");
+
+  function resetHoroForm() {
+    setHoroFormHoras("");
+    setHoroFormComentario("");
+    setHoroFormFile(null);
+  }
+
+  function startEditHorometerRow(r) {
+    setHoroEditId(r.id);
+    setHoroEditHoras(String(r.horas ?? ""));
+    setHoroEditComentario(String(r.comentario ?? ""));
+    setHoroEditFile(null);
+  }
+
+  function cancelEditHorometerRow() {
+    setHoroEditId(null);
+    setHoroEditHoras("");
+    setHoroEditComentario("");
+    setHoroEditFile(null);
+  }
+
+  function askDeleteHorometerRow(r) {
+    setHoroDeleteTarget(r);
+    setHoroDeleteConfirmOpen(true);
+  }
 
   function splitMarcaModelo(mm) {
     const s = String(mm || "").trim();
@@ -552,11 +591,17 @@ export default function Camiones() {
   }
 
   function closeHorometer() {
-    if (horoLoading) return;
+    if (horoLoading || horoSaving) return;
     setHoroOpen(false);
     setHoroVehicle(null);
     setHoroItems([]);
     setHoroError("");
+
+    // ✅ limpia forms/edición
+    resetHoroForm();
+    cancelEditHorometerRow();
+    setHoroDeleteConfirmOpen(false);
+    setHoroDeleteTarget(null);
   }
 
   function normalizeHorometerResponse(data) {
@@ -585,6 +630,63 @@ export default function Camiones() {
     return normalizeHorometerResponse(data);
   }
 
+  async function createHorometerRequest(vehicleId, { horas, comentario, file }) {
+    const fd = new FormData();
+    fd.append("horas", String(horas));
+    if (comentario) fd.append("comentario", comentario);
+    if (file) fd.append("file", file);
+
+    const res = await fetch(`${API_URL}/vehicles/${vehicleId}/horometers`, {
+      method: "POST",
+      credentials: "include",
+      headers: tokenHeaders(), // ✅ sin Content-Type
+      body: fd,
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(txt || `Error ${res.status}`);
+    }
+
+    return res.json().catch(() => null);
+  }
+
+  async function updateHorometerRequest(vehicleId, recordId, { horas, comentario, file }) {
+    const fd = new FormData();
+    if (horas !== undefined && horas !== null && String(horas).trim() !== "") fd.append("horas", String(horas));
+    if (comentario !== undefined) fd.append("comentario", comentario ?? "");
+    if (file) fd.append("file", file);
+
+    const res = await fetch(`${API_URL}/vehicles/${vehicleId}/horometers/${recordId}`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: tokenHeaders(),
+      body: fd,
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(txt || `Error ${res.status}`);
+    }
+
+    return res.json().catch(() => null);
+  }
+
+  async function deleteHorometerRequest(vehicleId, recordId) {
+    const res = await fetch(`${API_URL}/vehicles/${vehicleId}/horometers/${recordId}`, {
+      method: "DELETE",
+      credentials: "include",
+      headers: tokenHeaders(),
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(txt || `Error ${res.status}`);
+    }
+
+    return res.json().catch(() => null);
+  }
+
   useEffect(() => {
     if (!horoOpen || !horoVehicle?.id) return;
 
@@ -600,10 +702,11 @@ export default function Camiones() {
           comentario: fixText(r.comentario || ""),
           fotoUrl: r.fotoUrl || r.fotoURL || r.archivoUrl || r.fileUrl || "",
           createdAt: r.createdAt,
-          trabajadorNombre: fixText(r.trabajadorNombre || r.workerNombre || ""),
-          trabajadorApellido: fixText(r.trabajadorApellido || r.workerApellido || ""),
-          trabajadorRut: fixText(r.trabajadorRut || r.workerRut || ""),
-          trabajadorEmail: fixText(r.trabajadorEmail || r.workerEmail || ""),
+
+          trabajadorNombre: fixText(r.trabajadorNombre || ""),
+          trabajadorApellido: fixText(r.trabajadorApellido || ""),
+          trabajadorRut: fixText(r.trabajadorRut || ""),
+
           originalName: fixText(r.originalName || r.filename || ""),
         }));
 
@@ -1240,8 +1343,6 @@ export default function Camiones() {
                 <th>Operatividad</th>
                 <th>Marca/Modelo</th>
                 <th>Tipo</th>
-                <th>Docs</th>
-                <th>Mant</th>
                 <th style={{ width: 180 }}>Acción</th>
               </tr>
             </thead>
@@ -1249,8 +1350,6 @@ export default function Camiones() {
             <tbody>
               {paged.map((t) => {
                 const marcaModelo = fixText(`${t.marca || ""} ${t.modelo || ""}`.trim() || "-");
-                const docs = docsLabelByCounts(t.docsCriticos, t.docsPorVencer);
-                const maint = maintLabelByCounts(t.maintCriticos, t.maintPorVencer);
 
                 return (
                   <tr
@@ -1301,16 +1400,16 @@ export default function Camiones() {
                       {displayTipoVehiculo(t.tipoVehiculo || "")}
                     </td>
 
-                    <td>
-                      <SmallStatusPill estado={docs.estado} label={docs.label} title="Estado de documentos según vencimientos" />
-                    </td>
-
-                    <td>
-                      <SmallStatusPill estado={maint.estado} label={maint.label} title="Estado de mantenciones según próximas fechas" />
-                    </td>
-
                     <td onClick={(e) => e.stopPropagation()}>
-                      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 8,
+                          justifyContent: "flex-end",
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                        }}
+                      >
                         <ActionButton
                           variant="ghost"
                           type="button"
@@ -1340,15 +1439,30 @@ export default function Camiones() {
                                 Estado operativo
                               </div>
 
-                              <button className="gt-actions-item" type="button" onClick={() => askOperationalStatus(t, "OPERATIVO")} disabled={opSaving}>
+                              <button
+                                className="gt-actions-item"
+                                type="button"
+                                onClick={() => askOperationalStatus(t, "OPERATIVO")}
+                                disabled={opSaving}
+                              >
                                 Marcar como Operativo
                               </button>
 
-                              <button className="gt-actions-item" type="button" onClick={() => askOperationalStatus(t, "EN_PANA")} disabled={opSaving}>
+                              <button
+                                className="gt-actions-item"
+                                type="button"
+                                onClick={() => askOperationalStatus(t, "EN_PANA")}
+                                disabled={opSaving}
+                              >
                                 Marcar como En pana
                               </button>
 
-                              <button className="gt-actions-item danger" type="button" onClick={() => askOperationalStatus(t, "PARADO")} disabled={opSaving}>
+                              <button
+                                className="gt-actions-item danger"
+                                type="button"
+                                onClick={() => askOperationalStatus(t, "PARADO")}
+                                disabled={opSaving}
+                              >
                                 Marcar como Parado
                               </button>
                             </div>
@@ -1362,7 +1476,7 @@ export default function Camiones() {
 
               {!loading && paged.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="empty">
+                  <td colSpan={7} className="empty">
                     {vehicles.length === 0
                       ? "No hay vehículos registrados."
                       : statusFilter !== "ALL" || empresaFilter !== "ALL"
@@ -1422,13 +1536,7 @@ export default function Camiones() {
         initialValues={{ empresa: empresaFilter === "ALL" ? "GRUAS_THOMAS" : empresaFilter }}
       />
 
-      <VehicleModal
-        open={openEdit}
-        onClose={closeEditModal}
-        onSave={updateVehicle}
-        mode="edit"
-        initialValues={editInitial}
-      />
+      <VehicleModal open={openEdit} onClose={closeEditModal} onSave={updateVehicle} mode="edit" initialValues={editInitial} />
 
       <DocumentsModal open={openDocs} onClose={closeDocsModal} vehicle={docsVehicle} apiUrl={API_URL} />
       <MaintenancesModal open={openMaint} onClose={closeMaintModal} vehicle={maintVehicle} apiUrl={API_URL} />
@@ -1460,15 +1568,15 @@ export default function Camiones() {
         }}
       />
 
-      {/* ✅ Modal: Horómetro (ADMIN) */}
+      {/* ✅ Modal: Horómetro (ADMIN / CONTROL FLOTA) */}
       <Modal
         open={horoOpen}
         onClose={closeHorometer}
         title={`Horómetro • ${fixText(horoVehicle?.patente || "-")}`}
-        subtitle={`${horoVehicle ? empresaLabel(horoVehicle.empresa) : ""} • Historial de registros del horómetro`}
-        width={980}
+        subtitle={`${horoVehicle ? empresaLabel(horoVehicle.empresa) : ""} • Gestión de registros del horómetro`}
+        width={1040}
         footer={
-          <button className="gt-btn" type="button" onClick={closeHorometer} disabled={horoLoading}>
+          <button className="gt-btn" type="button" onClick={closeHorometer} disabled={horoLoading || horoSaving}>
             Cerrar
           </button>
         }
@@ -1479,12 +1587,103 @@ export default function Camiones() {
           </div>
         ) : null}
 
+        {/* ✅ Crear registro */}
+        <div
+          style={{
+            border: "1px solid rgba(0,0,0,0.08)",
+            borderRadius: 14,
+            padding: 12,
+            marginBottom: 12,
+            background: "rgba(255,255,255,0.85)",
+          }}
+        >
+          <div style={{ fontWeight: 900, marginBottom: 8 }}>Agregar registro</div>
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <label style={{ fontSize: 12, fontWeight: 900, opacity: 0.7 }}>Horas</label>
+              <input
+                value={horoFormHoras}
+                onChange={(e) => setHoroFormHoras(e.target.value)}
+                placeholder="Ej: 4565161"
+                inputMode="numeric"
+                className="search-input"
+                style={{ width: 200, height: 38 }}
+                disabled={horoSaving || horoLoading}
+              />
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <label style={{ fontSize: 12, fontWeight: 900, opacity: 0.7 }}>Foto</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setHoroFormFile(e.target.files?.[0] || null)}
+                disabled={horoSaving || horoLoading}
+              />
+            </div>
+
+            <ActionButton
+              variant="primary"
+              type="button"
+              disabled={horoSaving || horoLoading || !horoVehicle?.id}
+              onClick={async () => {
+                if (!horoVehicle?.id) return;
+
+                const horas = Number(String(horoFormHoras || "").trim());
+                if (!Number.isFinite(horas) || horas < 0) {
+                  alert("Horas inválidas");
+                  return;
+                }
+
+                try {
+                  setHoroSaving(true);
+                  await createHorometerRequest(horoVehicle.id, {
+                    horas,
+                    comentario: String(horoFormComentario || "").trim(),
+                    file: horoFormFile,
+                  });
+                  resetHoroForm();
+
+                  const list = await fetchHorometers(horoVehicle.id);
+                  const mapped = (list || []).map((r) => ({
+                    id: r.id,
+                    horas: r.horas,
+                    comentario: fixText(r.comentario || ""),
+                    fotoUrl: r.fotoUrl || "",
+                    createdAt: r.createdAt,
+                    trabajadorNombre: fixText(r.trabajadorNombre || ""),
+                    trabajadorApellido: fixText(r.trabajadorApellido || ""),
+                    trabajadorRut: fixText(r.trabajadorRut || ""),
+                    originalName: fixText(r.originalName || ""),
+                  }));
+                  mapped.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+                  setHoroItems(mapped);
+                } catch (e) {
+                  alert(e?.message || "No se pudo crear registro de horómetro.");
+                } finally {
+                  setHoroSaving(false);
+                }
+              }}
+              style={{ height: 38, padding: "0 14px" }}
+            >
+              {horoSaving ? "Guardando..." : "Agregar"}
+            </ActionButton>
+          </div>
+
+          <div style={{ marginTop: 8, fontSize: 12, opacity: 0.7 }}>
+            Nota: este registro lo crea el <b>Control de Flota</b> o <b>Superadmin</b>.
+          </div>
+        </div>
+
+        {/* Header mini */}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
           <span className="status ok" style={{ whiteSpace: "nowrap" }}>
             Registros: {horoItems.length}
           </span>
         </div>
 
+        {/* Tabla */}
         <div style={{ borderRadius: 14, border: "1px solid rgba(0,0,0,0.06)", overflow: "hidden" }}>
           <div style={{ width: "100%", overflowX: "auto" }}>
             <table className="table" style={{ minWidth: 980 }}>
@@ -1492,12 +1691,13 @@ export default function Camiones() {
                 <tr>
                   <th style={{ width: 160 }}>Fecha</th>
                   <th style={{ width: 90 }}>Horas</th>
-                  <th style={{ width: 280 }}>Trabajador</th>
-                  <th style={{ width: 180 }}>RUT</th>
-                  <th style={{ width: 240 }}>Email</th>
-                  <th style={{ width: 140, textAlign: "right" }}>Evidencia</th>
+                  <th style={{ width: 260 }}>Registrado por</th>
+                  <th style={{ width: 170 }}>RUT</th>
+                  <th style={{ width: 170 }}>Evidencia</th>
+                  <th style={{ width: 210, textAlign: "right" }}>Acciones</th>
                 </tr>
               </thead>
+
               <tbody>
                 {horoLoading ? (
                   <tr>
@@ -1515,32 +1715,168 @@ export default function Camiones() {
                   horoItems.map((r) => {
                     const fullName =
                       fixText(`${r.trabajadorNombre || ""} ${r.trabajadorApellido || ""}`.trim()) || "—";
+                    const isEditing = horoEditId === r.id;
+
                     return (
                       <tr key={r.id}>
                         <td className="mono">{formatDateTime(r.createdAt)}</td>
+
                         <td className="mono" style={{ fontWeight: 900 }}>
-                          {Number(r.horas || 0)}
+                          {isEditing ? (
+                            <input
+                              value={horoEditHoras}
+                              onChange={(e) => setHoroEditHoras(e.target.value)}
+                              className="search-input"
+                              style={{ width: 120, height: 34 }}
+                              inputMode="numeric"
+                              disabled={horoSaving}
+                            />
+                          ) : (
+                            Number(r.horas || 0)
+                          )}
                         </td>
+
                         <td>{fullName}</td>
+
                         <td className="mono" style={{ fontWeight: 900 }}>
                           {fixText(r.trabajadorRut || "—")}
                         </td>
-                        <td className="mono">{fixText(r.trabajadorEmail || "—")}</td>
+
+                        <td>
+                          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                            {r.fotoUrl ? (
+                              <ActionButton
+                                variant="ghost"
+                                type="button"
+                                onClick={() =>
+                                  openPhoto(r.fotoUrl, r.originalName || `Evidencia • ${horoVehicle?.patente || ""}`)
+                                }
+                                style={{ height: 34, padding: "0 12px", borderRadius: 12, fontWeight: 900 }}
+                              >
+                                Ver
+                              </ActionButton>
+                            ) : (
+                              <span className="muted">—</span>
+                            )}
+                          </div>
+
+                          {isEditing ? (
+                            <div style={{ marginTop: 8 }}>
+                              <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.7, marginBottom: 6 }}>
+                                Cambiar foto (opcional)
+                              </div>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => setHoroEditFile(e.target.files?.[0] || null)}
+                                disabled={horoSaving}
+                              />
+                            </div>
+                          ) : null}
+                        </td>
+
                         <td style={{ textAlign: "right" }}>
-                          {r.fotoUrl ? (
-                            <ActionButton
-                              variant="ghost"
-                              type="button"
-                              onClick={() =>
-                                openPhoto(r.fotoUrl, r.originalName || `Evidencia • ${horoVehicle?.patente || ""}`)
-                              }
-                              style={{ height: 34, padding: "0 12px", borderRadius: 12, fontWeight: 900 }}
-                            >
-                              Ver
-                            </ActionButton>
+                          {isEditing ? (
+                            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                              <ActionButton
+                                variant="ghost"
+                                type="button"
+                                disabled={horoSaving}
+                                onClick={cancelEditHorometerRow}
+                                style={{ height: 34, padding: "0 12px" }}
+                              >
+                                Cancelar
+                              </ActionButton>
+
+                              <ActionButton
+                                variant="primary"
+                                type="button"
+                                disabled={horoSaving || !horoVehicle?.id}
+                                onClick={async () => {
+                                  if (!horoVehicle?.id) return;
+
+                                  const horas = Number(String(horoEditHoras || "").trim());
+                                  if (!Number.isFinite(horas) || horas < 0) {
+                                    alert("Horas inválidas");
+                                    return;
+                                  }
+
+                                  try {
+                                    setHoroSaving(true);
+                                    await updateHorometerRequest(horoVehicle.id, r.id, {
+                                      horas,
+                                      comentario: String(horoEditComentario || ""),
+                                      file: horoEditFile,
+                                    });
+
+                                    cancelEditHorometerRow();
+
+                                    const list = await fetchHorometers(horoVehicle.id);
+                                    const mapped = (list || []).map((x) => ({
+                                      id: x.id,
+                                      horas: x.horas,
+                                      comentario: fixText(x.comentario || ""),
+                                      fotoUrl: x.fotoUrl || "",
+                                      createdAt: x.createdAt,
+                                      trabajadorNombre: fixText(x.trabajadorNombre || ""),
+                                      trabajadorApellido: fixText(x.trabajadorApellido || ""),
+                                      trabajadorRut: fixText(x.trabajadorRut || ""),
+                                      originalName: fixText(x.originalName || ""),
+                                    }));
+                                    mapped.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+                                    setHoroItems(mapped);
+                                  } catch (e) {
+                                    alert(e?.message || "No se pudo actualizar.");
+                                  } finally {
+                                    setHoroSaving(false);
+                                  }
+                                }}
+                                style={{ height: 34, padding: "0 12px" }}
+                              >
+                                Guardar
+                              </ActionButton>
+                            </div>
                           ) : (
-                            <span className="muted">—</span>
+                            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                              <ActionButton
+                                variant="ghost"
+                                type="button"
+                                onClick={() => startEditHorometerRow(r)}
+                                style={{ height: 34, padding: "0 12px" }}
+                              >
+                                Editar
+                              </ActionButton>
+
+                              <ActionButton
+                                variant="ghost"
+                                type="button"
+                                onClick={() => askDeleteHorometerRow(r)}
+                                style={{ height: 34, padding: "0 12px", border: "1px solid rgba(200,0,0,0.25)" }}
+                              >
+                                Eliminar
+                              </ActionButton>
+                            </div>
                           )}
+
+                          {isEditing ? (
+                            <div style={{ marginTop: 8 }}>
+                              <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.7, marginBottom: 6 }}>
+                                Comentario (opcional)
+                              </div>
+                              <input
+                                value={horoEditComentario}
+                                onChange={(e) => setHoroEditComentario(e.target.value)}
+                                className="search-input"
+                                style={{ height: 34 }}
+                                disabled={horoSaving}
+                                placeholder="Comentario…"
+                              />
+                            </div>
+                          ) : r.comentario ? (
+                            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75, textAlign: "right" }}>
+                              {fixText(r.comentario)}
+                            </div>
+                          ) : null}
                         </td>
                       </tr>
                     );
@@ -1550,6 +1886,54 @@ export default function Camiones() {
             </table>
           </div>
         </div>
+
+        {/* ✅ Confirm eliminar */}
+        <ConfirmModal
+          open={horoDeleteConfirmOpen}
+          title="¿Eliminar registro de horómetro?"
+          description={
+            <div style={{ fontSize: 13, color: "rgba(0,0,0,.75)" }}>
+              Esta acción <b>no se puede deshacer</b>. <br />
+              Registro: <b>{fixText(horoVehicle?.patente || "-")}</b> • Horas:{" "}
+              <b>{horoDeleteTarget ? Number(horoDeleteTarget.horas || 0) : 0}</b>
+            </div>
+          }
+          confirmText="Sí, eliminar"
+          cancelText="Cancelar"
+          danger={true}
+          loading={horoSaving}
+          onClose={() => !horoSaving && setHoroDeleteConfirmOpen(false)}
+          onConfirm={async () => {
+            if (!horoVehicle?.id || !horoDeleteTarget?.id) return;
+
+            try {
+              setHoroSaving(true);
+              await deleteHorometerRequest(horoVehicle.id, horoDeleteTarget.id);
+
+              setHoroDeleteConfirmOpen(false);
+              setHoroDeleteTarget(null);
+
+              const list = await fetchHorometers(horoVehicle.id);
+              const mapped = (list || []).map((x) => ({
+                id: x.id,
+                horas: x.horas,
+                comentario: fixText(x.comentario || ""),
+                fotoUrl: x.fotoUrl || "",
+                createdAt: x.createdAt,
+                trabajadorNombre: fixText(x.trabajadorNombre || ""),
+                trabajadorApellido: fixText(x.trabajadorApellido || ""),
+                trabajadorRut: fixText(x.trabajadorRut || ""),
+                originalName: fixText(x.originalName || ""),
+              }));
+              mapped.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+              setHoroItems(mapped);
+            } catch (e) {
+              alert(e?.message || "No se pudo eliminar.");
+            } finally {
+              setHoroSaving(false);
+            }
+          }}
+        />
       </Modal>
 
       {/* ✅ Modal: evidencia (foto) */}
@@ -1557,7 +1941,7 @@ export default function Camiones() {
         open={photoOpen}
         onClose={closePhoto}
         title={fixText(photoTitle || "Evidencia")}
-        subtitle="Imagen subida por el trabajador"
+        subtitle="Imagen subida"
         width={860}
         footer={
           <button className="gt-btn gt-btn-primary" type="button" onClick={closePhoto}>
@@ -1830,15 +2214,6 @@ function OperationalPill({ estadoOperativo }) {
 
   return (
     <span className={cls} title="Estado operativo del vehículo">
-      {label}
-    </span>
-  );
-}
-
-function SmallStatusPill({ estado, label, title }) {
-  const cls = estado === "VENCIDO" ? "status danger" : estado === "POR_VENCER" ? "status warn" : "status ok";
-  return (
-    <span className={cls} title={title || ""} style={{ whiteSpace: "nowrap" }}>
       {label}
     </span>
   );

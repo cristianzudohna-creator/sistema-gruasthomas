@@ -13,9 +13,8 @@ import Configuracion from "./pages/Configuracion";
 // ✅ NUEVO
 import Clientes from "./pages/Clientes";
 
-// ✅ Portal trabajador + horómetro
+// ✅ Portal trabajador
 import PortalTrabajador from "./pages/PortalTrabajador";
-import Horometro from "./pages/Horometro";
 
 // ✅ Órdenes de trabajo (Admin)
 import WorkOrdersAdmin from "./pages/WorkOrdersAdmin";
@@ -149,14 +148,8 @@ export default function App() {
           }
         />
 
-        <Route
-          path="/trabajador/horometro"
-          element={
-            <ProtectedRoute role="TRABAJADOR">
-              <Horometro />
-            </ProtectedRoute>
-          }
-        />
+        {/* ✅ BLOQUEADO: si alguien pega la URL antigua, lo mandamos al portal */}
+        <Route path="/trabajador/horometro" element={<Navigate to="/trabajador" replace />} />
 
         <Route
           path="/trabajador/ordenes-trabajo"

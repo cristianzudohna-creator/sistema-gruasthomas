@@ -49,7 +49,7 @@ export default function PortalTrabajador() {
       <div className="pt-hero">
         <div className="pt-hero__text">
           <h1>Portal del Trabajador</h1>
-          <p>Acceso rápido a formularios (sin panel de administración)</p>
+          <p>Acceso rápido a formularios</p>
         </div>
 
         <div className="pt-hero__right">
@@ -75,38 +75,6 @@ export default function PortalTrabajador() {
       </div>
 
       <div className="pt-grid">
-        {/* ✅ Horómetro */}
-        <button
-          type="button"
-          className="pt-card"
-          onClick={() => navigate("/trabajador/horometro")}
-          title="Click para registrar horómetro"
-        >
-          <div className="pt-card__top">
-            <div className="pt-icon" aria-hidden="true">
-              ⏱️
-            </div>
-
-            <div className="pt-card__titles">
-              <div className="pt-card__title">Registrar Horómetro</div>
-              <div className="pt-card__sub">
-                Ingresar horas + foto evidencia
-              </div>
-            </div>
-
-            <div className="pt-badge">Disponible</div>
-          </div>
-
-          <div className="pt-card__desc">
-            Se enviará al administrador para control y conteo general de horas.
-          </div>
-
-          <div className="pt-card__cta">
-            <span>Ir al formulario</span>
-            <span aria-hidden="true">→</span>
-          </div>
-        </button>
-
         {/* ✅ Órdenes de trabajo */}
         <button
           type="button"

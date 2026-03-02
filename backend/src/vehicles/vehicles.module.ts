@@ -8,25 +8,31 @@ import { VehicleMaintenancesService } from "./vehicle-maintenances.service";
 import { PrismaModule } from "../prisma/prisma.module";
 import { AuditModule } from "../audit/audit.module";
 
-// ✅ IMPORTANTE: traer el módulo real del horómetro
+// ✅ ESTE es el que tu VehiclesController necesita (HorometerService)
 import { HorometerModule } from "../horometer/horometer.module";
+
+// ✅ CRUD admin de horómetro (dentro de /vehicles)
+import { VehicleHorometersController } from "./vehicle-horometers.controller";
+import { VehicleHorometersService } from "./vehicle-horometers.service";
 
 @Module({
   imports: [
     PrismaModule,
     AuditModule,
 
-    // ✅ NECESARIO para poder inyectar HorometerService
+    // ✅ NECESARIO para inyectar HorometerService en VehiclesController
     HorometerModule,
   ],
   controllers: [
     VehiclesController,
     WorkerVehiclesController,
+    VehicleHorometersController,
   ],
   providers: [
     VehiclesService,
     VehicleDocumentsService,
     VehicleMaintenancesService,
+    VehicleHorometersService,
   ],
 })
 export class VehiclesModule {}

@@ -162,6 +162,27 @@ export class VehiclesController {
   }
 
   // =========================================================
+  // ✅ LISTAR VEHÍCULOS PARA TRABAJADOR (dropdown horómetro)
+  // GET /vehicles/worker
+  // Devuelve solo activos de la empresa del usuario (según req.user.empresa)
+  // =========================================================
+  @Get("worker")
+  @Roles("TRABAJADOR", "ADMINISTRADORA", "ADMIN", "CONTROL_FLOTA", "SUPERADMIN")
+  async listForWorker(@Req() req: Request) {
+    const actor = this.getActor(req);
+
+    const empresa = String((actor as any)?.empresa || "").toUpperCase();
+
+    if (empresa !== "GRUAS_THOMAS" && empresa !== "INSPROTEL") {
+      throw new BadRequestException("No se pudo determinar la empresa del usuario.");
+    }
+
+    const items = await this.vehicles.listWorkerVehicles(empresa as any);
+
+    return { items };
+  }
+
+  // =========================================================
   // ✅ LISTAR
   // =========================================================
   @Get()
@@ -172,43 +193,52 @@ export class VehiclesController {
   }
 
   // =========================================================
-  // ✅ SEARCH AUTOCOMPLETE (SEGÚN EMPRESA)
-  // GET /vehicles/search?q=ab&limit=8&empresa=INSPROTEL
+  // ✅ SEARCH AUTOCOMPLETE (SOLO GRUAS_THOMAS)
+  // GET /vehicles/search?q=ab&limit=8
   // =========================================================
   @Get("search")
-@Roles("SUPERADMIN", "CONTROL_FLOTA", "ADMINISTRADORA", "TRABAJADOR")
-async search(
-  @Req() req: Request,
-  @Query("q") q?: string,
-  @Query("limit") limit?: string,
-  @Query("empresa") empresa?: string
-) {
-  const actor = this.getActor(req);
+  @Roles("SUPERADMIN", "CONTROL_FLOTA", "ADMINISTRADORA", "TRABAJADOR")
+  async search(
+    @Req() req: Request,
+    @Query("q") q?: string,
+    @Query("limit") limit?: string
+  ) {
+    const actor = this.getActor(req);
+    const query = String(q || "").trim().toUpperCase();
+    const lim = Math.min(Math.max(Number(limit || 8) || 8, 1), 30);
 
-  const query = String(q || "").trim().toUpperCase();
-  const lim = Math.min(Math.max(Number(limit || 8) || 8, 1), 30);
+    if (!query) return { items: [] };
 
-  if (!query) return { items: [] };
+    const data: any = await this.vehicles.list(actor);
 
-  // ✅ usamos empresa del usuario SIEMPRE
-  const actorEmpresa = String(actor?.empresa || "").toUpperCase();
+    const list: any[] = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.records)
+      ? data.records
+      : Array.isArray(data?.items)
+      ? data.items
+      : [];
 
-  // si viene empresa por query, usamos esa SOLO si coincide
-  const emp = String(empresa || actorEmpresa).toUpperCase();
+    const items = list
+      .filter((v) => String(v?.empresa || "").toUpperCase() === "GRUAS_THOMAS")
+      .filter((v) => {
+        const patente = String(v?.patente || "").toUpperCase();
+        return patente.includes(query);
+      })
+      .slice(0, lim)
+      .map((v) => ({
+        id: v?.id,
+        patente: v?.patente,
+        empresa: v?.empresa,
+        marcaModelo: v?.marcaModelo,
+        type: v?.type,
+        tipoVehiculo: v?.tipoVehiculo,
+        year: v?.year,
+        estadoOperativo: v?.estadoOperativo,
+      }));
 
-  if (emp && actorEmpresa && emp !== actorEmpresa) {
-    throw new BadRequestException("No puedes buscar vehículos de otra empresa");
+    return { items };
   }
-
-  // ✅ consulta directa a BD (NO usar list())
-  const items = await this.vehicles.searchSimple({
-    empresa: emp || actorEmpresa,
-    query,
-    limit: lim,
-  });
-
-  return { items };
-}
 
   // =====================
   // SUMMARY
@@ -255,7 +285,7 @@ async search(
     const status = body?.status ? String(body.status).trim().toUpperCase() : "";
 
     if (status !== "OPERATIVO" && status !== "EN_PANA" && status !== "PARADO") {
-      throw new BadRequestException("status debe ser OPERATIVO o EN_PANA o PARADO");
+      throw new BadRequestException("status debe ser OPERATIVO, EN_PANA o PARADO");
     }
 
     const actor = this.getActor(req);
@@ -287,7 +317,10 @@ async search(
     return this.horometer.listByVehicleAdmin({
       vehicleId: id,
       page: Number.isFinite(pageNum) && pageNum > 0 ? pageNum : 1,
-      limit: Number.isFinite(limitNum) && limitNum > 0 ? Math.min(limitNum, 100) : 50,
+      limit:
+        Number.isFinite(limitNum) && limitNum > 0
+          ? Math.min(limitNum, 100)
+          : 50,
     });
   }
 
