@@ -1,4 +1,4 @@
-// ✅ Archivo: src/pages/Camiones.jsx (COMPLETO - PROD FIX + COOKIES FIX + TEXT FIX + HORÓMETRO CRUD)
+// ✅ Archivo: src/pages/Camiones.jsx (COMPLETO - PROD FIX + COOKIES FIX + TEXT FIX + HORÓMETRO CRUD SIN EDITAR/SIN COMENTARIO)
 import { useEffect, useMemo, useState } from "react";
 import "./Admin.css";
 
@@ -155,16 +155,10 @@ export default function Camiones() {
   const [horoError, setHoroError] = useState("");
   const [horoItems, setHoroItems] = useState([]);
 
-  // ✅ HORÓMETRO CRUD (CONTROL FLOTA / SUPERADMIN)
+  // ✅ HORÓMETRO CREATE/DELETE (SIN EDITAR / SIN COMENTARIO)
   const [horoFormHoras, setHoroFormHoras] = useState("");
-  const [horoFormComentario, setHoroFormComentario] = useState("");
   const [horoFormFile, setHoroFormFile] = useState(null);
   const [horoSaving, setHoroSaving] = useState(false);
-
-  const [horoEditId, setHoroEditId] = useState(null);
-  const [horoEditHoras, setHoroEditHoras] = useState("");
-  const [horoEditComentario, setHoroEditComentario] = useState("");
-  const [horoEditFile, setHoroEditFile] = useState(null);
 
   const [horoDeleteConfirmOpen, setHoroDeleteConfirmOpen] = useState(false);
   const [horoDeleteTarget, setHoroDeleteTarget] = useState(null);
@@ -176,22 +170,7 @@ export default function Camiones() {
 
   function resetHoroForm() {
     setHoroFormHoras("");
-    setHoroFormComentario("");
     setHoroFormFile(null);
-  }
-
-  function startEditHorometerRow(r) {
-    setHoroEditId(r.id);
-    setHoroEditHoras(String(r.horas ?? ""));
-    setHoroEditComentario(String(r.comentario ?? ""));
-    setHoroEditFile(null);
-  }
-
-  function cancelEditHorometerRow() {
-    setHoroEditId(null);
-    setHoroEditHoras("");
-    setHoroEditComentario("");
-    setHoroEditFile(null);
   }
 
   function askDeleteHorometerRow(r) {
@@ -597,9 +576,8 @@ export default function Camiones() {
     setHoroItems([]);
     setHoroError("");
 
-    // ✅ limpia forms/edición
+    // ✅ limpia forms
     resetHoroForm();
-    cancelEditHorometerRow();
     setHoroDeleteConfirmOpen(false);
     setHoroDeleteTarget(null);
   }
@@ -630,37 +608,16 @@ export default function Camiones() {
     return normalizeHorometerResponse(data);
   }
 
-  async function createHorometerRequest(vehicleId, { horas, comentario, file }) {
+  // ✅ CREATE (SIN comentario)
+  async function createHorometerRequest(vehicleId, { horas, file }) {
     const fd = new FormData();
     fd.append("horas", String(horas));
-    if (comentario) fd.append("comentario", comentario);
     if (file) fd.append("file", file);
 
     const res = await fetch(`${API_URL}/vehicles/${vehicleId}/horometers`, {
       method: "POST",
       credentials: "include",
       headers: tokenHeaders(), // ✅ sin Content-Type
-      body: fd,
-    });
-
-    if (!res.ok) {
-      const txt = await res.text();
-      throw new Error(txt || `Error ${res.status}`);
-    }
-
-    return res.json().catch(() => null);
-  }
-
-  async function updateHorometerRequest(vehicleId, recordId, { horas, comentario, file }) {
-    const fd = new FormData();
-    if (horas !== undefined && horas !== null && String(horas).trim() !== "") fd.append("horas", String(horas));
-    if (comentario !== undefined) fd.append("comentario", comentario ?? "");
-    if (file) fd.append("file", file);
-
-    const res = await fetch(`${API_URL}/vehicles/${vehicleId}/horometers/${recordId}`, {
-      method: "PATCH",
-      credentials: "include",
-      headers: tokenHeaders(),
       body: fd,
     });
 
@@ -699,7 +656,6 @@ export default function Camiones() {
         const mapped = (list || []).map((r) => ({
           id: r.id,
           horas: r.horas,
-          comentario: fixText(r.comentario || ""),
           fotoUrl: r.fotoUrl || r.fotoURL || r.archivoUrl || r.fileUrl || "",
           createdAt: r.createdAt,
 
@@ -1536,7 +1492,13 @@ export default function Camiones() {
         initialValues={{ empresa: empresaFilter === "ALL" ? "GRUAS_THOMAS" : empresaFilter }}
       />
 
-      <VehicleModal open={openEdit} onClose={closeEditModal} onSave={updateVehicle} mode="edit" initialValues={editInitial} />
+      <VehicleModal
+        open={openEdit}
+        onClose={closeEditModal}
+        onSave={updateVehicle}
+        mode="edit"
+        initialValues={editInitial}
+      />
 
       <DocumentsModal open={openDocs} onClose={closeDocsModal} vehicle={docsVehicle} apiUrl={API_URL} />
       <MaintenancesModal open={openMaint} onClose={closeMaintModal} vehicle={maintVehicle} apiUrl={API_URL} />
@@ -1638,18 +1600,18 @@ export default function Camiones() {
 
                 try {
                   setHoroSaving(true);
+
                   await createHorometerRequest(horoVehicle.id, {
                     horas,
-                    comentario: String(horoFormComentario || "").trim(),
                     file: horoFormFile,
                   });
+
                   resetHoroForm();
 
                   const list = await fetchHorometers(horoVehicle.id);
                   const mapped = (list || []).map((r) => ({
                     id: r.id,
                     horas: r.horas,
-                    comentario: fixText(r.comentario || ""),
                     fotoUrl: r.fotoUrl || "",
                     createdAt: r.createdAt,
                     trabajadorNombre: fixText(r.trabajadorNombre || ""),
@@ -1694,7 +1656,7 @@ export default function Camiones() {
                   <th style={{ width: 260 }}>Registrado por</th>
                   <th style={{ width: 170 }}>RUT</th>
                   <th style={{ width: 170 }}>Evidencia</th>
-                  <th style={{ width: 210, textAlign: "right" }}>Acciones</th>
+                  <th style={{ width: 170, textAlign: "right" }}>Acciones</th>
                 </tr>
               </thead>
 
@@ -1713,27 +1675,14 @@ export default function Camiones() {
                   </tr>
                 ) : (
                   horoItems.map((r) => {
-                    const fullName =
-                      fixText(`${r.trabajadorNombre || ""} ${r.trabajadorApellido || ""}`.trim()) || "—";
-                    const isEditing = horoEditId === r.id;
+                    const fullName = fixText(`${r.trabajadorNombre || ""} ${r.trabajadorApellido || ""}`.trim()) || "—";
 
                     return (
                       <tr key={r.id}>
                         <td className="mono">{formatDateTime(r.createdAt)}</td>
 
                         <td className="mono" style={{ fontWeight: 900 }}>
-                          {isEditing ? (
-                            <input
-                              value={horoEditHoras}
-                              onChange={(e) => setHoroEditHoras(e.target.value)}
-                              className="search-input"
-                              style={{ width: 120, height: 34 }}
-                              inputMode="numeric"
-                              disabled={horoSaving}
-                            />
-                          ) : (
-                            Number(r.horas || 0)
-                          )}
+                          {Number(r.horas || 0)}
                         </td>
 
                         <td>{fullName}</td>
@@ -1759,124 +1708,19 @@ export default function Camiones() {
                               <span className="muted">—</span>
                             )}
                           </div>
-
-                          {isEditing ? (
-                            <div style={{ marginTop: 8 }}>
-                              <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.7, marginBottom: 6 }}>
-                                Cambiar foto (opcional)
-                              </div>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) => setHoroEditFile(e.target.files?.[0] || null)}
-                                disabled={horoSaving}
-                              />
-                            </div>
-                          ) : null}
                         </td>
 
                         <td style={{ textAlign: "right" }}>
-                          {isEditing ? (
-                            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
-                              <ActionButton
-                                variant="ghost"
-                                type="button"
-                                disabled={horoSaving}
-                                onClick={cancelEditHorometerRow}
-                                style={{ height: 34, padding: "0 12px" }}
-                              >
-                                Cancelar
-                              </ActionButton>
-
-                              <ActionButton
-                                variant="primary"
-                                type="button"
-                                disabled={horoSaving || !horoVehicle?.id}
-                                onClick={async () => {
-                                  if (!horoVehicle?.id) return;
-
-                                  const horas = Number(String(horoEditHoras || "").trim());
-                                  if (!Number.isFinite(horas) || horas < 0) {
-                                    alert("Horas inválidas");
-                                    return;
-                                  }
-
-                                  try {
-                                    setHoroSaving(true);
-                                    await updateHorometerRequest(horoVehicle.id, r.id, {
-                                      horas,
-                                      comentario: String(horoEditComentario || ""),
-                                      file: horoEditFile,
-                                    });
-
-                                    cancelEditHorometerRow();
-
-                                    const list = await fetchHorometers(horoVehicle.id);
-                                    const mapped = (list || []).map((x) => ({
-                                      id: x.id,
-                                      horas: x.horas,
-                                      comentario: fixText(x.comentario || ""),
-                                      fotoUrl: x.fotoUrl || "",
-                                      createdAt: x.createdAt,
-                                      trabajadorNombre: fixText(x.trabajadorNombre || ""),
-                                      trabajadorApellido: fixText(x.trabajadorApellido || ""),
-                                      trabajadorRut: fixText(x.trabajadorRut || ""),
-                                      originalName: fixText(x.originalName || ""),
-                                    }));
-                                    mapped.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-                                    setHoroItems(mapped);
-                                  } catch (e) {
-                                    alert(e?.message || "No se pudo actualizar.");
-                                  } finally {
-                                    setHoroSaving(false);
-                                  }
-                                }}
-                                style={{ height: 34, padding: "0 12px" }}
-                              >
-                                Guardar
-                              </ActionButton>
-                            </div>
-                          ) : (
-                            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
-                              <ActionButton
-                                variant="ghost"
-                                type="button"
-                                onClick={() => startEditHorometerRow(r)}
-                                style={{ height: 34, padding: "0 12px" }}
-                              >
-                                Editar
-                              </ActionButton>
-
-                              <ActionButton
-                                variant="ghost"
-                                type="button"
-                                onClick={() => askDeleteHorometerRow(r)}
-                                style={{ height: 34, padding: "0 12px", border: "1px solid rgba(200,0,0,0.25)" }}
-                              >
-                                Eliminar
-                              </ActionButton>
-                            </div>
-                          )}
-
-                          {isEditing ? (
-                            <div style={{ marginTop: 8 }}>
-                              <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.7, marginBottom: 6 }}>
-                                Comentario (opcional)
-                              </div>
-                              <input
-                                value={horoEditComentario}
-                                onChange={(e) => setHoroEditComentario(e.target.value)}
-                                className="search-input"
-                                style={{ height: 34 }}
-                                disabled={horoSaving}
-                                placeholder="Comentario…"
-                              />
-                            </div>
-                          ) : r.comentario ? (
-                            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75, textAlign: "right" }}>
-                              {fixText(r.comentario)}
-                            </div>
-                          ) : null}
+                          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                            <ActionButton
+                              variant="ghost"
+                              type="button"
+                              onClick={() => askDeleteHorometerRow(r)}
+                              style={{ height: 34, padding: "0 12px", border: "1px solid rgba(200,0,0,0.25)" }}
+                            >
+                              Eliminar
+                            </ActionButton>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -1917,7 +1761,6 @@ export default function Camiones() {
               const mapped = (list || []).map((x) => ({
                 id: x.id,
                 horas: x.horas,
-                comentario: fixText(x.comentario || ""),
                 fotoUrl: x.fotoUrl || "",
                 createdAt: x.createdAt,
                 trabajadorNombre: fixText(x.trabajadorNombre || ""),
