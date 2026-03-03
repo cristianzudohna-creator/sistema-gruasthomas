@@ -1,6 +1,21 @@
 import { Injectable, Logger } from "@nestjs/common";
 import * as nodemailer from "nodemailer";
 
+function normalizeRecipients(to: string | string[]) {
+  if (Array.isArray(to)) {
+    return to.map((x) => String(x).trim()).filter(Boolean);
+  }
+
+  // ✅ si viene "a@a.com,b@b.com" => ["a@a.com","b@b.com"]
+  const s = String(to || "").trim();
+  if (!s) return [];
+
+  return s
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
@@ -16,11 +31,12 @@ export class MailService {
   });
 
   private from() {
+    // ✅ El "FROM" real será SMTP_FROM si existe, si no SMTP_USER
     return process.env.SMTP_FROM || process.env.SMTP_USER;
   }
 
   /**
-   * ✅ NUEVO: Enviar correo HTML genérico (para alertas)
+   * ✅ Enviar correo HTML genérico (para alertas)
    */
   async sendHtml(params: {
     to: string | string[];
@@ -30,7 +46,9 @@ export class MailService {
   }) {
     const from = this.from();
 
-    if (!params?.to || (Array.isArray(params.to) && params.to.length === 0)) {
+    const toList = normalizeRecipients(params?.to);
+
+    if (!toList.length) {
       throw new Error("Falta destinatario en sendHtml({to,...}).");
     }
     if (!params?.subject) throw new Error("Falta subject en sendHtml({subject,...}).");
@@ -41,17 +59,17 @@ export class MailService {
 
     const info = await this.transporter.sendMail({
       from,
-      to: params.to,
+      to: toList, // ✅ SIEMPRE array ya normalizado
       subject: params.subject,
       html: params.html,
-      // fallback útil por si algún cliente bloquea HTML
       text: params.textFallback,
     });
 
-    const toStr = Array.isArray(params.to) ? params.to.join(", ") : params.to;
-    this.logger.log(`Correo enviado a ${toStr}. subject="${params.subject}" messageId=${info.messageId}`);
+    this.logger.log(
+      `Correo enviado a ${toList.join(", ")}. subject="${params.subject}" messageId=${info.messageId}`
+    );
 
-    return { ok: true, to: params.to, subject: params.subject, messageId: info.messageId };
+    return { ok: true, to: toList, subject: params.subject, messageId: info.messageId };
   }
 
   // ✅ EXISTENTE: no se toca (Auth lo usa)
@@ -79,20 +97,21 @@ export class MailService {
   // ✅ EXISTENTE: correo de prueba (para validar SMTP)
   async sendTestEmail(to?: string) {
     const from = this.from();
-    const target = to || process.env.SMTP_TEST_TO || process.env.SMTP_USER;
 
-    if (!target) {
+    const targetRaw = to || process.env.SMTP_TEST_TO || process.env.SMTP_USER;
+    const targetList = normalizeRecipients(targetRaw || "");
+
+    if (!targetList.length) {
       throw new Error(
         "Falta destinatario. Usa sendTestEmail(to) o define SMTP_TEST_TO/SMTP_USER."
       );
     }
 
-    // ✅ verifica conexión/config antes de enviar
     await this.transporter.verify();
 
     const info = await this.transporter.sendMail({
       from,
-      to: target,
+      to: targetList,
       subject: "✅ Prueba SMTP - Sistema (Insprotel)",
       html: `
         <div style="font-family: Arial, sans-serif; line-height:1.5">
@@ -103,8 +122,8 @@ export class MailService {
       `,
     });
 
-    this.logger.log(`Correo de prueba enviado a ${target}. messageId=${info.messageId}`);
-    return { ok: true, to: target, messageId: info.messageId };
+    this.logger.log(`Correo de prueba enviado a ${targetList.join(", ")}. messageId=${info.messageId}`);
+    return { ok: true, to: targetList, messageId: info.messageId };
   }
 }
 

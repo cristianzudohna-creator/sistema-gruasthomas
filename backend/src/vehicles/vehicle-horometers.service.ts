@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { HorometerAlertsService } from "../alerts/horometer-alerts.service";
 
 type CreateHorometerInput = {
   horas: number;
@@ -14,9 +15,12 @@ type CreateHorometerInput = {
 
 @Injectable()
 export class VehicleHorometersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private horometerAlerts: HorometerAlertsService
+  ) {}
 
-  // ✅ LIST (sin email)
+  // ✅ LIST (sin email) + ✅ agrega faltanHoras / faltanLabel para mantención (+500)
   async listByVehicle(vehicleId: string) {
     const vehicle = await this.prisma.vehicle.findUnique({
       where: { id: vehicleId },
@@ -24,6 +28,12 @@ export class VehicleHorometersService {
     });
 
     if (!vehicle) throw new NotFoundException("Vehículo no encontrado");
+
+    // ✅ Plan (meta fija)
+    const plan = await this.prisma.horometerMaintenancePlan.findUnique({
+      where: { vehicleId },
+      select: { intervalHours: true, nextDueHours: true },
+    });
 
     const rows = await this.prisma.horometerRecord.findMany({
       where: { vehicleId },
@@ -47,14 +57,42 @@ export class VehicleHorometersService {
       },
     });
 
+    const nextDue = plan?.nextDueHours ?? null;
+    const intervalHours = plan?.intervalHours ?? 500;
+
+    const records = rows.map((r) => {
+      const faltanHoras = nextDue == null ? null : nextDue - r.horas;
+
+      const faltanLabel =
+        faltanHoras == null
+          ? "—"
+          : faltanHoras > 0
+          ? `Faltan ${faltanHoras}h`
+          : `Vencido ${Math.abs(faltanHoras)}h`;
+
+      return {
+        ...r,
+
+        // ✅ nuevo para la UI
+        faltanHoras,
+        faltanLabel,
+
+        // ✅ opcional (por si quieres mostrarlo arriba)
+        nextDueHours: nextDue,
+        intervalHours,
+      };
+    });
+
     return {
       vehicle: {
         id: vehicle.id,
         patente: vehicle.patente,
         empresa: vehicle.empresa,
       },
-      total: rows.length,
-      records: rows,
+      // ✅ también lo enviamos a nivel raíz (útil para cabecera del modal)
+      plan: nextDue == null ? null : { nextDueHours: nextDue, intervalHours },
+      total: records.length,
+      records,
     };
   }
 
@@ -73,7 +111,9 @@ export class VehicleHorometersService {
     if (!actor) throw new NotFoundException("Usuario actor no encontrado");
 
     const horas = Number(input?.horas);
-    if (!Number.isFinite(horas) || horas < 0) throw new BadRequestException("Campo 'horas' inválido.");
+    if (!Number.isFinite(horas) || horas < 0) {
+      throw new BadRequestException("Campo 'horas' inválido.");
+    }
 
     const created = await this.prisma.horometerRecord.create({
       data: {
@@ -111,11 +151,21 @@ export class VehicleHorometersService {
       },
     });
 
+    // ✅ HOOK: si corresponde, genera alerta por horómetro (meta fija +500)
+    await this.horometerAlerts.onHorometerCreated({
+      vehicleId,
+      horas: created.horas,
+    });
+
     return created;
   }
 
   // ✅ UPDATE
-  async update(vehicleId: string, recordId: string, patch: Partial<CreateHorometerInput> & { comentario?: string }) {
+  async update(
+    vehicleId: string,
+    recordId: string,
+    patch: Partial<CreateHorometerInput> & { comentario?: string }
+  ) {
     const existing = await this.prisma.horometerRecord.findFirst({
       where: { id: recordId, vehicleId },
       select: { id: true },
@@ -126,7 +176,9 @@ export class VehicleHorometersService {
 
     if (patch?.horas !== undefined) {
       const horas = Number(patch.horas);
-      if (!Number.isFinite(horas) || horas < 0) throw new BadRequestException("Campo 'horas' inválido.");
+      if (!Number.isFinite(horas) || horas < 0) {
+        throw new BadRequestException("Campo 'horas' inválido.");
+      }
       data.horas = horas;
     }
 

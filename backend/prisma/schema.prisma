@@ -1,4 +1,8 @@
-// ✅ Archivo: prisma/schema.prisma (COMPLETO)
+// ✅ Archivo: prisma/schema.prisma (COMPLETO) ✅
+// Incluye:
+// - ✅ AlertKind: agrega HOROMETER
+// - ✅ Nuevo model HorometerMaintenancePlan
+// - ✅ Vehicle: agrega relación inversa horometerPlan
 
 datasource db {
   provider = "postgresql"
@@ -104,9 +108,9 @@ model User {
   rut      String? @unique
   role     Role    @default(TRABAJADOR)
   activo   Boolean @default(true)
-    mustChangePassword Boolean @default(false)
-  passwordResetAt    DateTime?
 
+  mustChangePassword Boolean   @default(false)
+  passwordResetAt    DateTime?
 
   // ✅ empresa del usuario (para filtrar vehículos al trabajador)
   empresa Empresa?
@@ -168,11 +172,9 @@ model AuditLog {
   @@index([actorId])
   @@index([actorEmail])
   @@index([createdAt])
-
   // ✅ recomendados para filtros + orden por fecha
   @@index([entity, createdAt])
   @@index([action, createdAt])
-
   // ✅ opcional: si filtras mucho por ambos
   @@index([entity, action, createdAt])
 }
@@ -202,6 +204,9 @@ model Vehicle {
   // ✅ INVERSA: registros de horómetro de este vehículo
   horometers HorometerRecord[]
 
+  // ✅ INVERSA: plan de mantención por horómetro (1 por vehículo)
+  horometerPlan HorometerMaintenancePlan?
+
   // ✅ INVERSA: órdenes asociadas a este vehículo
   workOrders WorkOrder[]
 
@@ -229,14 +234,14 @@ model VehicleDocument {
 
   vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
 
-  @@index([vehicleId])
-  @@index([type])
-  @@index([fechaVencimiento])
-
   // 🚫 OJO:
   // NO pongas @@unique([vehicleId, type]) aquí,
   // porque queremos permitir múltiples OTRO y además Prisma no soporta unique parcial en schema.
   // La restricción real la haremos con un índice UNIQUE parcial en una migración SQL.
+
+  @@index([vehicleId])
+  @@index([type])
+  @@index([fechaVencimiento])
 }
 
 model VehicleMaintenance {
@@ -411,9 +416,9 @@ model WorkOrder {
   sinJib    Boolean @default(false)
 
   // ✅ Días que va a trabajar (ej: ["LUN","MAR","MIE"])
-  diasTrabajo String[] @default([])
+  diasTrabajo     String[] @default([])
   // ✅ Fechas exactas marcadas en calendario (ej: ["2026-02-19","2026-02-20"])
-diasProgramados String[] @default([])
+  diasProgramados String[] @default([])
 
   nota String?
 
@@ -434,7 +439,7 @@ diasProgramados String[] @default([])
 
   // Trabajador asignado (opcional)
   assignedToId String?
-  assignedTo   User? @relation("WorkOrderAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedTo   User?   @relation("WorkOrderAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
 
   // Trabajo realizado (lo completa el trabajador)
   startedAt       DateTime?
@@ -446,12 +451,12 @@ diasProgramados String[] @default([])
   workerReport  Json?
   completedAt   DateTime?
   completedById String?
-  completedBy   User? @relation("WorkOrderCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+  completedBy   User?     @relation("WorkOrderCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
 
   // ✅ Visto bueno administradora / superadmin
   approvedAt      DateTime?
   approvedById    String?
-  approvedBy      User? @relation("WorkOrderApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedBy      User?     @relation("WorkOrderApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
   approvalComment String?
   rejectReason    String?
 
@@ -460,7 +465,7 @@ diasProgramados String[] @default([])
   evidences WorkOrderEvidence[]
 
   // ✅ SOFT DELETE (PAPELERA)
-  activo    Boolean  @default(true)
+  activo    Boolean   @default(true)
   deletedAt DateTime?
 
   @@index([empresa])
@@ -472,7 +477,6 @@ diasProgramados String[] @default([])
   @@index([approvedAt])
   @@index([approvedById])
   @@index([clientId])
-
   // ✅ índices extra para papelera / filtros
   @@index([activo])
   @@index([empresa, activo])
@@ -505,7 +509,7 @@ model WorkOrderEvidence {
 
   // quién subió
   uploadedById String
-  uploadedBy   User @relation(fields: [uploadedById], references: [id])
+  uploadedBy   User   @relation(fields: [uploadedById], references: [id])
 
   // Archivo
   fileUrl      String
@@ -521,24 +525,49 @@ model WorkOrderEvidence {
 enum AlertKind {
   DOCUMENT
   MAINTENANCE
+  HOROMETER
 }
 
 model AlertDispatchLog {
-  id            String    @id @default(uuid())
-  createdAt     DateTime  @default(now())
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
 
   kind          AlertKind
   entityId      String
   thresholdDays Int
 
-  recipient     String?
-  subject       String?
-  messageId     String?
+  recipient String?
+  subject   String?
+  messageId String?
 
   @@unique([kind, entityId, thresholdDays])
   @@index([createdAt])
   @@index([thresholdDays])
 }
 
+// =========================
+// ✅ PLAN DE MANTENCIÓN POR HORÓMETRO
+// - 1 plan por vehículo
+// =========================
 
+model HorometerMaintenancePlan {
+  id String @id @default(uuid())
 
+  vehicleId String  @unique
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  enabled       Boolean @default(true)
+  intervalHours Int     @default(500)
+
+  // ✅ meta fija: ej si hoy es 20280, nextDueHours = 20780
+  nextDueHours Int
+
+  // ✅ para no spamear el mismo aviso
+  lastNotifiedDueHours Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([enabled])
+  @@index([nextDueHours])
+}

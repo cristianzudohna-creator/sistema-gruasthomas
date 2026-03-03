@@ -10,11 +10,18 @@ import { AuditAction, AuditEntity, Empresa } from "@prisma/client";
 import { rename, mkdir } from "fs/promises";
 import { join, extname } from "path";
 
+// ✅ NUEVO: alertas horómetro
+import { HorometerAlertsService } from "../alerts/horometer-alerts.service";
+
 type Actor = { id: string; email: string; role?: string } | null;
 
 @Injectable()
 export class HorometerService {
-  constructor(private prisma: PrismaService, private audit: AuditService) {}
+  constructor(
+    private prisma: PrismaService,
+    private audit: AuditService,
+    private horometerAlerts: HorometerAlertsService // ✅ NUEVO
+  ) {}
 
   // =========================================================
   // HELPERS
@@ -162,6 +169,16 @@ export class HorometerService {
         },
       },
     });
+
+    // ✅ NUEVO: disparar alerta automática (NO rompe el flujo si falla)
+    try {
+      await this.horometerAlerts.onHorometerCreated({
+        vehicleId: vehicle.id,
+        horas,
+      });
+    } catch {
+      // silencioso: el registro de horómetro igual debe quedar creado
+    }
 
     return created;
   }
@@ -338,7 +355,6 @@ export class HorometerService {
     return { ok: true, archivedUrl };
   }
 }
-
 
 
 

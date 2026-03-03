@@ -1,22 +1,25 @@
-// ✅ Archivo: src/alerts/alerts.service.ts (COMPLETO)
 import { Injectable } from "@nestjs/common";
-import {
-  PrismaService,
-} from "../prisma/prisma.service";
-import {
-  VehicleOperationalStatus,
-  AlertKind, // ✅ IMPORTANTE: enum Prisma
-} from "@prisma/client";
+import { PrismaService } from "../prisma/prisma.service";
+import { VehicleOperationalStatus, AlertKind } from "@prisma/client";
 
 export type ExpirationItem = {
-  id: string; // ✅ id del doc/mantención para dedupe
-  kind: AlertKind; // ✅ enum (DOCUMENT | MAINTENANCE)
+  id: string; // ✅ id para dedupe (doc/mant) o "vehicleId:target" para horómetro
+  kind: AlertKind; // ✅ DOCUMENT | MAINTENANCE | HOROMETER
+
   empresa: string;
   patente: string;
-  type: string; // enum string (SOAP, REVISION_TECNICA, CAMBIO_ACEITE, etc.)
+
+  type: string;
   nombre?: string | null;
-  dueDate: Date;
-  daysLeft: number;
+
+  // ✅ Docs/Mants:
+  dueDate?: Date | null;
+  daysLeft?: number | null;
+
+  // ✅ Horómetro:
+  currentHours?: number | null;
+  targetHours?: number | null;
+  hoursLeft?: number | null;
 };
 
 function startOfDay(d: Date) {
@@ -55,8 +58,7 @@ function normalizeSubjectPrefix(v: string | null) {
   return looksTechnical ? null : s;
 }
 
-function urgencyMeta(daysLeft: number) {
-  // 0..7 crítico, 8..15 próximo, >15 normal
+function urgencyMetaDays(daysLeft: number) {
   if (daysLeft <= 7) {
     return {
       label: "Crítico",
@@ -84,6 +86,41 @@ function urgencyMeta(daysLeft: number) {
   };
 }
 
+function urgencyMetaHours(hoursLeft: number) {
+  if (hoursLeft <= 10) {
+    return {
+      label: "Crítico",
+      badgeBg: "#FEE2E2",
+      badgeBd: "#FCA5A5",
+      badgeTx: "#991B1B",
+      rowBg: "#FFF5F5",
+    };
+  }
+  if (hoursLeft <= 25) {
+    return {
+      label: "Próximo",
+      badgeBg: "#FFEDD5",
+      badgeBd: "#FDBA74",
+      badgeTx: "#9A3412",
+      rowBg: "#FFFBF5",
+    };
+  }
+  return {
+    label: "Normal",
+    badgeBg: "#E5E7EB",
+    badgeBd: "#D1D5DB",
+    badgeTx: "#111827",
+    rowBg: "#FFFFFF",
+  };
+}
+
+function nextMultiple(n: number, step: number) {
+  if (step <= 0) return n;
+  // si está exacto en múltiplo, el siguiente es step más
+  if (n % step === 0) return n + step;
+  return Math.ceil(n / step) * step;
+}
+
 @Injectable()
 export class AlertsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -105,46 +142,36 @@ export class AlertsService {
     return mode === "test" ? testTo : prodTo;
   }
 
-  /**
-   * ✅ Subject formal
-   * ✅ (próximos X días) en vez de <= X
-   */
   buildSubject(daysBefore: number) {
     const envPrefix = normalizeSubjectPrefix(process.env.ALERT_SUBJECT_PREFIX || null);
-
     const base = envPrefix || "Aviso de vencimientos próximos – Sistema Control de Flota";
-
     return `${base} (próximos ${daysBefore} días)`;
   }
 
-  // ======================================================
-  // ✅ SOLO VENCIMIENTOS EXACTOS A N DÍAS
-  // ======================================================
+  buildHorometerSubject(hoursBefore: number) {
+    const envPrefix = normalizeSubjectPrefix(process.env.ALERT_SUBJECT_PREFIX || null);
+    const base = envPrefix || "Aviso de horómetro – Sistema Control de Flota";
+    const step = Number(process.env.HOROMETER_STEP_HOURS || 500) || 500;
+    return `${base} (faltan ${hoursBefore} horas para ${step})`;
+  }
 
-  /**
-   * Devuelve items cuya fecha de vencimiento sea EXACTAMENTE hoy + thresholdDays.
-   * Ej: thresholdDays=30 => vencen el día (hoy+30).
-   */
+  // ======================================================
+  // ✅ VENCIMIENTOS EXACTOS A N DÍAS (Docs + Mantenciones)
+  // ======================================================
   async getExpirationsExact(
     thresholdDays: number
   ): Promise<{ from: Date; to: Date; items: ExpirationItem[] }> {
     const today = startOfDay(new Date());
 
-    // ventana exacta: [targetDay, targetDay + 1 día)
     const target = addDays(today, thresholdDays);
     const targetEndExclusive = addDays(today, thresholdDays + 1);
 
     const docs = await this.prisma.vehicleDocument.findMany({
       where: {
         fechaVencimiento: { not: null, gte: target, lt: targetEndExclusive },
-        vehicle: {
-          activo: true,
-          estadoOperativo: VehicleOperationalStatus.OPERATIVO,
-        },
+        vehicle: { activo: true, estadoOperativo: VehicleOperationalStatus.OPERATIVO },
       },
-      include: {
-        vehicle: { select: { patente: true, empresa: true } },
-      },
+      include: { vehicle: { select: { patente: true, empresa: true } } },
       orderBy: { fechaVencimiento: "asc" },
       take: 500,
     });
@@ -152,14 +179,9 @@ export class AlertsService {
     const maints = await this.prisma.vehicleMaintenance.findMany({
       where: {
         fechaProxima: { not: null, gte: target, lt: targetEndExclusive },
-        vehicle: {
-          activo: true,
-          estadoOperativo: VehicleOperationalStatus.OPERATIVO,
-        },
+        vehicle: { activo: true, estadoOperativo: VehicleOperationalStatus.OPERATIVO },
       },
-      include: {
-        vehicle: { select: { patente: true, empresa: true } },
-      },
+      include: { vehicle: { select: { patente: true, empresa: true } } },
       orderBy: { fechaProxima: "asc" },
       take: 500,
     });
@@ -168,7 +190,7 @@ export class AlertsService {
       .filter((d) => d.fechaVencimiento)
       .map((d) => ({
         id: d.id,
-        kind: AlertKind.DOCUMENT, // ✅ enum
+        kind: AlertKind.DOCUMENT,
         empresa: String(d.vehicle?.empresa || "—"),
         patente: String(d.vehicle?.patente || "—"),
         type: String(d.type),
@@ -181,7 +203,7 @@ export class AlertsService {
       .filter((m) => m.fechaProxima)
       .map((m) => ({
         id: m.id,
-        kind: AlertKind.MAINTENANCE, // ✅ enum
+        kind: AlertKind.MAINTENANCE,
         empresa: String(m.vehicle?.empresa || "—"),
         patente: String(m.vehicle?.patente || "—"),
         type: String(m.type),
@@ -191,8 +213,8 @@ export class AlertsService {
       }));
 
     const items = [...docItems, ...maintItems].sort((a, b) => {
-      const da = a.dueDate.getTime();
-      const db = b.dueDate.getTime();
+      const da = (a.dueDate ?? today).getTime();
+      const db = (b.dueDate ?? today).getTime();
       if (da !== db) return da - db;
       return a.patente.localeCompare(b.patente);
     });
@@ -200,39 +222,86 @@ export class AlertsService {
     return { from: target, to: addDays(target, 1), items };
   }
 
-  /**
-   * ✅ Filtra items que YA fueron enviados para thresholdDays
-   */
-  private async filterAlreadyDispatched(items: ExpirationItem[], thresholdDays: number) {
-    if (!items.length) return [];
+  // ======================================================
+  // ✅ HORÓMETRO: alertas por horas antes de múltiplo 500
+  // ======================================================
+  async getHorometerExact(
+    thresholdHours: number
+  ): Promise<{ items: ExpirationItem[] }> {
+    const step = Number(process.env.HOROMETER_STEP_HOURS || 500) || 500;
 
-    const docIds = items.filter((i) => i.kind === AlertKind.DOCUMENT).map((i) => i.id);
-    const maintIds = items.filter((i) => i.kind === AlertKind.MAINTENANCE).map((i) => i.id);
-
-    const logs = await this.prisma.alertDispatchLog.findMany({
+    // ✅ último registro por vehículo (distinct)
+    const last = await this.prisma.horometerRecord.findMany({
       where: {
-        thresholdDays,
-        OR: [
-          ...(docIds.length
-            ? [{ kind: AlertKind.DOCUMENT, entityId: { in: docIds } }]
-            : []),
-          ...(maintIds.length
-            ? [{ kind: AlertKind.MAINTENANCE, entityId: { in: maintIds } }]
-            : []),
-        ],
+        vehicle: { activo: true, estadoOperativo: VehicleOperationalStatus.OPERATIVO },
       },
-      select: { kind: true, entityId: true },
-      take: 5000,
+      orderBy: { createdAt: "desc" },
+      distinct: ["vehicleId"],
+      include: { vehicle: { select: { id: true, patente: true, empresa: true } } },
+      take: 2000,
     });
 
-    const sentSet = new Set(logs.map((l) => `${l.kind}:${l.entityId}`));
+    const items: ExpirationItem[] = [];
 
-    return items.filter((i) => !sentSet.has(`${i.kind}:${i.id}`));
+    for (const r of last) {
+      const h = Number((r as any).horas ?? 0);
+      const target = nextMultiple(h, step);
+      const left = target - h;
+
+      if (left === thresholdHours) {
+        const vehicleId = (r as any).vehicleId || (r as any)?.vehicle?.id;
+        const dedupeId = `${vehicleId}:${target}`;
+
+        items.push({
+          id: dedupeId,
+          kind: AlertKind.HOROMETER,
+          empresa: String((r as any)?.vehicle?.empresa || "—"),
+          patente: String((r as any)?.vehicle?.patente || "—"),
+          type: `HOROMETER_${step}`,
+          nombre: "Horómetro",
+          dueDate: null,
+          daysLeft: null,
+          currentHours: h,
+          targetHours: target,
+          hoursLeft: left,
+        });
+      }
+    }
+
+    items.sort((a, b) => a.patente.localeCompare(b.patente));
+    return { items };
   }
 
   /**
-   * ✅ Marca como enviados (skipDuplicates evita choques)
+   * ✅ Filtra items que YA fueron enviados para threshold (días u horas)
+   * Nota: reutilizamos thresholdDays para horas también
    */
+  private async filterAlreadyDispatched(items: ExpirationItem[], threshold: number) {
+    if (!items.length) return [];
+
+    const byKind = (k: AlertKind) => items.filter((i) => i.kind === k).map((i) => i.id);
+
+    const docIds = byKind(AlertKind.DOCUMENT);
+    const maintIds = byKind(AlertKind.MAINTENANCE);
+    const horIds = byKind(AlertKind.HOROMETER);
+
+    const logs = await this.prisma.alertDispatchLog.findMany({
+      where: {
+        thresholdDays: threshold,
+        OR: [
+          ...(docIds.length ? [{ kind: AlertKind.DOCUMENT, entityId: { in: docIds } }] : []),
+          ...(maintIds.length ? [{ kind: AlertKind.MAINTENANCE, entityId: { in: maintIds } }] : []),
+          ...(horIds.length ? [{ kind: AlertKind.HOROMETER, entityId: { in: horIds } }] : []),
+        ],
+      },
+      select: { kind: true, entityId: true },
+      take: 10000,
+    });
+
+    const sentSet = new Set(logs.map((l) => `${l.kind}:${l.entityId}`));
+    return items.filter((i) => !sentSet.has(`${i.kind}:${i.id}`));
+  }
+
   async markDispatched(params: {
     items: ExpirationItem[];
     thresholdDays: number;
@@ -244,7 +313,7 @@ export class AlertsService {
     if (!items.length) return { ok: true, created: 0 };
 
     const data = items.map((i) => ({
-      kind: i.kind, // ✅ enum directo
+      kind: i.kind,
       entityId: i.id,
       thresholdDays,
       recipient,
@@ -261,24 +330,26 @@ export class AlertsService {
   }
 
   // ======================================================
-  // ✅ HTML FORMAL
+  // ✅ HTML (Docs+Mants o Horómetro)
   // ======================================================
-
   buildEmailHtml(payload: {
-    from: Date;
-    to: Date;
-    daysBefore: number;
+    from?: Date;
+    to?: Date;
+    daysBefore?: number;
+    hoursBefore?: number;
     items: ExpirationItem[];
   }) {
-    const { from, to, daysBefore, items } = payload;
+    const { from, daysBefore, hoursBefore, items } = payload;
 
     const docs = items.filter((x) => x.kind === AlertKind.DOCUMENT);
     const maints = items.filter((x) => x.kind === AlertKind.MAINTENANCE);
+    const horos = items.filter((x) => x.kind === AlertKind.HOROMETER);
 
     const displayName = (i: ExpirationItem) => cleanStr(i.nombre) || cleanStr(i.type) || "—";
 
-    const row = (i: ExpirationItem) => {
-      const u = urgencyMeta(i.daysLeft);
+    const rowExp = (i: ExpirationItem) => {
+      const dl = Number(i.daysLeft ?? 0);
+      const u = urgencyMetaDays(dl);
       return `
         <tr style="background:${u.rowBg}">
           <td style="padding:10px 12px;border-bottom:1px solid #E5E7EB;font-weight:700;color:#111827;">
@@ -288,7 +359,7 @@ export class AlertsService {
             ${displayName(i)}
           </td>
           <td style="padding:10px 12px;border-bottom:1px solid #E5E7EB;color:#111827;white-space:nowrap;">
-            ${fmtDateCL(new Date(i.dueDate))}
+            ${i.dueDate ? fmtDateCL(new Date(i.dueDate)) : "—"}
           </td>
           <td style="padding:10px 12px;border-bottom:1px solid #E5E7EB;text-align:right;white-space:nowrap;">
             <span style="
@@ -303,14 +374,14 @@ export class AlertsService {
               margin-right:8px;
               vertical-align:middle;
             ">${u.label}</span>
-            <span style="font-weight:800;color:#111827;">${i.daysLeft}</span>
+            <span style="font-weight:800;color:#111827;">${dl}</span>
             <span style="color:#6B7280;font-weight:600;"> días</span>
           </td>
         </tr>
       `;
     };
 
-    const table = (title: string, list: ExpirationItem[]) => `
+    const tableExp = (title: string, list: ExpirationItem[]) => `
       <div style="margin-top:18px;">
         <div style="font-size:16px;font-weight:800;color:#111827;margin:0 0 10px;">
           ${title} (${list.length})
@@ -325,18 +396,83 @@ export class AlertsService {
               <tr style="background:#F9FAFB;">
                 <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E5E7EB;color:#374151;font-size:13px;">Patente</th>
                 <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E5E7EB;color:#374151;font-size:13px;">Documento / Mantención</th>
-                <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E5E7EB;color:#374151;font-size:13px;">Fecha de vencimiento</th>
+                <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E5E7EB;color:#374151;font-size:13px;">Fecha</th>
                 <th style="text-align:right;padding:10px 12px;border-bottom:1px solid #E5E7EB;color:#374151;font-size:13px;">Días restantes</th>
               </tr>
             </thead>
             <tbody>
-              ${list.map(row).join("")}
+              ${list.map(rowExp).join("")}
             </tbody>
           </table>
         `
         }
       </div>
     `;
+
+    const rowH = (i: ExpirationItem) => {
+      const left = Number(i.hoursLeft ?? 0);
+      const u = urgencyMetaHours(left);
+      return `
+        <tr style="background:${u.rowBg}">
+          <td style="padding:10px 12px;border-bottom:1px solid #E5E7EB;font-weight:700;color:#111827;">
+            ${i.patente}
+          </td>
+          <td style="padding:10px 12px;border-bottom:1px solid #E5E7EB;color:#111827;text-align:right;white-space:nowrap;">
+            <b>${Number(i.currentHours ?? 0)}</b> h
+          </td>
+          <td style="padding:10px 12px;border-bottom:1px solid #E5E7EB;color:#111827;text-align:right;white-space:nowrap;">
+            <b>${Number(i.targetHours ?? 0)}</b> h
+          </td>
+          <td style="padding:10px 12px;border-bottom:1px solid #E5E7EB;text-align:right;white-space:nowrap;">
+            <span style="
+              display:inline-block;
+              padding:2px 8px;
+              border-radius:999px;
+              background:${u.badgeBg};
+              border:1px solid ${u.badgeBd};
+              color:${u.badgeTx};
+              font-size:12px;
+              font-weight:700;
+              margin-right:8px;
+              vertical-align:middle;
+            ">${u.label}</span>
+            <span style="font-weight:900;color:#111827;">${left}</span>
+            <span style="color:#6B7280;font-weight:600;"> h</span>
+          </td>
+        </tr>
+      `;
+    };
+
+    const tableH = (title: string, list: ExpirationItem[]) => `
+      <div style="margin-top:18px;">
+        <div style="font-size:16px;font-weight:800;color:#111827;margin:0 0 10px;">
+          ${title} (${list.length})
+        </div>
+
+        ${
+          list.length === 0
+            ? `<div style="color:#6B7280;font-size:14px;">No hay camiones en el umbral indicado.</div>`
+            : `
+          <table style="width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:1px solid #E5E7EB;border-radius:12px;">
+            <thead>
+              <tr style="background:#F9FAFB;">
+                <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E5E7EB;color:#374151;font-size:13px;">Patente</th>
+                <th style="text-align:right;padding:10px 12px;border-bottom:1px solid #E5E7EB;color:#374151;font-size:13px;">Horómetro actual</th>
+                <th style="text-align:right;padding:10px 12px;border-bottom:1px solid #E5E7EB;color:#374151;font-size:13px;">Próximo objetivo</th>
+                <th style="text-align:right;padding:10px 12px;border-bottom:1px solid #E5E7EB;color:#374151;font-size:13px;">Horas restantes</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${list.map(rowH).join("")}
+            </tbody>
+          </table>
+        `
+        }
+      </div>
+    `;
+
+    const isHorometerMail = typeof hoursBefore === "number";
+    const step = Number(process.env.HOROMETER_STEP_HOURS || 500) || 500;
 
     return `
       <div style="background:#F3F4F6;padding:24px;">
@@ -353,23 +489,32 @@ export class AlertsService {
             <div style="display:flex;gap:10px;align-items:center;">
               <div style="font-size:20px;">⚠️</div>
               <div style="font-size:20px;font-weight:900;color:#111827;">
-                Aviso de vencimientos próximos
+                ${isHorometerMail ? "Aviso de horómetro" : "Aviso de vencimientos próximos"}
               </div>
             </div>
 
-            <div style="margin-top:10px;color:#374151;font-size:14px;line-height:1.5;">
-              Este informe muestra documentos y mantenciones que vencen en el día correspondiente a <b>${daysBefore}</b> días desde hoy.
-              <div style="margin-top:6px;color:#6B7280;">
-                <b>Fecha evaluada:</b> ${fmtDateCL(from)}
-              </div>
-            </div>
-
-            ${table("Documentos", docs)}
-            ${table("Mantenciones", maints)}
+            ${
+              isHorometerMail
+                ? `
+                  <div style="margin-top:10px;color:#374151;font-size:14px;line-height:1.5;">
+                    Este informe muestra vehículos a los que les faltan exactamente <b>${hoursBefore}</b> horas para completar <b>${step}</b> horas.
+                  </div>
+                  ${tableH("Horómetros", horos)}
+                `
+                : `
+                  <div style="margin-top:10px;color:#374151;font-size:14px;line-height:1.5;">
+                    Este informe muestra documentos y mantenciones que vencen en el día correspondiente a <b>${daysBefore}</b> días desde hoy.
+                    <div style="margin-top:6px;color:#6B7280;">
+                      <b>Fecha evaluada:</b> ${from ? fmtDateCL(from) : "—"}
+                    </div>
+                  </div>
+                  ${tableExp("Documentos", docs)}
+                  ${tableExp("Mantenciones", maints)}
+                `
+            }
 
             <div style="margin-top:18px;color:#6B7280;font-size:12px;line-height:1.4;">
-              * No se incluyen vehículos EN_PANA/PARADO ni inactivos.<br/>
-              * Prioridad: <b>Crítico</b> (0–7 días), <b>Próximo</b> (8–15 días), <b>Normal</b> (&gt; 15 días).
+              * No se incluyen vehículos EN_PANA/PARADO ni inactivos.
             </div>
           </div>
 
@@ -381,15 +526,15 @@ export class AlertsService {
     `;
   }
 
-  /**
-   * ✅ Método “listo para enviar”:
-   * - toma thresholdDays (30/15/7)
-   * - trae vencimientos EXACTOS
-   * - quita los ya enviados
-   */
   async getExactAndUnsent(thresholdDays: number) {
     const data = await this.getExpirationsExact(thresholdDays);
     const unsent = await this.filterAlreadyDispatched(data.items, thresholdDays);
+    return { ...data, items: unsent };
+  }
+
+  async getHorometerExactAndUnsent(thresholdHours: number) {
+    const data = await this.getHorometerExact(thresholdHours);
+    const unsent = await this.filterAlreadyDispatched(data.items, thresholdHours);
     return { ...data, items: unsent };
   }
 }

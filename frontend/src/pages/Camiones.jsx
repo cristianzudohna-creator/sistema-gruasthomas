@@ -534,12 +534,13 @@ export default function Camiones() {
     setHoroDeleteTarget(null);
   }
 
+  // ✅ normaliza respuesta del backend para horómetro (soporta {records, plan})
   function normalizeHorometerResponse(data) {
-    if (Array.isArray(data)) return data;
-    if (data && Array.isArray(data.records)) return data.records;
-    if (data && Array.isArray(data.items)) return data.items;
-    if (data && Array.isArray(data.data)) return data.data;
-    return [];
+    if (data && Array.isArray(data.records)) return { records: data.records, plan: data.plan || null };
+    if (Array.isArray(data)) return { records: data, plan: null };
+    if (data && Array.isArray(data.items)) return { records: data.items, plan: data.plan || null };
+    if (data && Array.isArray(data.data)) return { records: data.data, plan: data.plan || null };
+    return { records: [], plan: data?.plan || null };
   }
 
   async function fetchHorometers(vehicleId) {
@@ -557,7 +558,7 @@ export default function Camiones() {
     }
 
     const data = await res.json();
-    return normalizeHorometerResponse(data);
+    return normalizeHorometerResponse(data); // ✅ {records, plan}
   }
 
   async function createHorometerRequest(vehicleId, { horas, file }) {
@@ -595,6 +596,14 @@ export default function Camiones() {
     return res.json().catch(() => null);
   }
 
+  // ✅ helper: calcula label si backend no lo manda (compat)
+  function computeFaltanLabel(faltanHoras) {
+    const n = faltanHoras == null ? null : Number(faltanHoras);
+    if (n == null || !Number.isFinite(n)) return "—";
+    if (n > 0) return `Faltan ${n}h`;
+    return `Vencido ${Math.abs(n)}h`;
+  }
+
   useEffect(() => {
     if (!horoOpen || !horoVehicle?.id) return;
 
@@ -602,20 +611,33 @@ export default function Camiones() {
       try {
         setHoroLoading(true);
         setHoroError("");
-        const list = await fetchHorometers(horoVehicle.id);
 
-        const mapped = (list || []).map((r) => ({
-          id: r.id,
-          horas: r.horas,
-          fotoUrl: r.fotoUrl || r.fotoURL || r.archivoUrl || r.fileUrl || "",
-          createdAt: r.createdAt,
+        const { records } = await fetchHorometers(horoVehicle.id);
 
-          trabajadorNombre: fixText(r.trabajadorNombre || ""),
-          trabajadorApellido: fixText(r.trabajadorApellido || ""),
-          trabajadorRut: fixText(r.trabajadorRut || ""),
+        const mapped = (records || []).map((r) => {
+          // ✅ Opción A: backend nuevo -> faltanHoras / faltanLabel
+          const faltanHoras =
+            r.faltanHoras ?? r.faltan ?? null; // compat por si llega "faltan"
 
-          originalName: fixText(r.originalName || r.filename || ""),
-        }));
+          const faltanLabel = fixText(r.faltanLabel || computeFaltanLabel(faltanHoras));
+
+          return {
+            id: r.id,
+            horas: r.horas,
+            fotoUrl: r.fotoUrl || r.fotoURL || r.archivoUrl || r.fileUrl || "",
+            createdAt: r.createdAt,
+
+            trabajadorNombre: fixText(r.trabajadorNombre || ""),
+            trabajadorApellido: fixText(r.trabajadorApellido || ""),
+            trabajadorRut: fixText(r.trabajadorRut || ""),
+
+            originalName: fixText(r.originalName || r.filename || ""),
+
+            // ✅ NUEVO
+            faltanHoras,
+            faltanLabel,
+          };
+        });
 
         mapped.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setHoroItems(mapped);
@@ -1469,17 +1491,23 @@ export default function Camiones() {
                   await createHorometerRequest(horoVehicle.id, { horas, file: horoFormFile });
                   resetHoroForm();
 
-                  const list = await fetchHorometers(horoVehicle.id);
-                  const mapped = (list || []).map((r) => ({
-                    id: r.id,
-                    horas: r.horas,
-                    fotoUrl: r.fotoUrl || "",
-                    createdAt: r.createdAt,
-                    trabajadorNombre: fixText(r.trabajadorNombre || ""),
-                    trabajadorApellido: fixText(r.trabajadorApellido || ""),
-                    trabajadorRut: fixText(r.trabajadorRut || ""),
-                    originalName: fixText(r.originalName || ""),
-                  }));
+                  const { records } = await fetchHorometers(horoVehicle.id);
+                  const mapped = (records || []).map((r) => {
+                    const faltanHoras = r.faltanHoras ?? r.faltan ?? null;
+                    const faltanLabel = fixText(r.faltanLabel || computeFaltanLabel(faltanHoras));
+                    return {
+                      id: r.id,
+                      horas: r.horas,
+                      fotoUrl: r.fotoUrl || "",
+                      createdAt: r.createdAt,
+                      trabajadorNombre: fixText(r.trabajadorNombre || ""),
+                      trabajadorApellido: fixText(r.trabajadorApellido || ""),
+                      trabajadorRut: fixText(r.trabajadorRut || ""),
+                      originalName: fixText(r.originalName || ""),
+                      faltanHoras,
+                      faltanLabel,
+                    };
+                  });
                   mapped.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
                   setHoroItems(mapped);
                 } catch (e) {
@@ -1513,7 +1541,7 @@ export default function Camiones() {
                   <th style={{ width: 160 }}>Fecha</th>
                   <th style={{ width: 90 }}>Horas</th>
                   <th style={{ width: 260 }}>Registrado por</th>
-                  <th style={{ width: 170 }}>RUT</th>
+                  <th style={{ width: 170 }}>Faltan</th>
                   <th style={{ width: 170 }}>Evidencia</th>
                   <th style={{ width: 170, textAlign: "right" }}>Acciones</th>
                 </tr>
@@ -1536,6 +1564,9 @@ export default function Camiones() {
                   horoItems.map((r) => {
                     const fullName = fixText(`${r.trabajadorNombre || ""} ${r.trabajadorApellido || ""}`.trim()) || "—";
 
+                    const faltanNum = r.faltanHoras == null ? null : Number(r.faltanHoras);
+                    const faltanText = fixText(r.faltanLabel || computeFaltanLabel(faltanNum));
+
                     return (
                       <tr key={r.id}>
                         <td className="mono">{formatDateTime(r.createdAt)}</td>
@@ -1546,8 +1577,28 @@ export default function Camiones() {
 
                         <td>{fullName}</td>
 
-                        <td className="mono" style={{ fontWeight: 900 }}>
-                          {fixText(r.trabajadorRut || "—")}
+                        <td
+                          className="mono"
+                          style={{
+                            fontWeight: 900,
+                            color:
+                              faltanNum == null
+                                ? "rgba(0,0,0,0.55)"
+                                : faltanNum <= 0
+                                ? "#b00020"
+                                : faltanNum <= 100
+                                ? "#b26a00"
+                                : "rgba(0,0,0,0.85)",
+                          }}
+                          title={
+                            faltanNum == null
+                              ? "Sin plan de mantención cargado"
+                              : faltanNum <= 0
+                              ? "Mantención vencida"
+                              : "Horas restantes para la mantención"
+                          }
+                        >
+                          {faltanText}
                         </td>
 
                         <td>
@@ -1613,17 +1664,23 @@ export default function Camiones() {
               setHoroDeleteConfirmOpen(false);
               setHoroDeleteTarget(null);
 
-              const list = await fetchHorometers(horoVehicle.id);
-              const mapped = (list || []).map((x) => ({
-                id: x.id,
-                horas: x.horas,
-                fotoUrl: x.fotoUrl || "",
-                createdAt: x.createdAt,
-                trabajadorNombre: fixText(x.trabajadorNombre || ""),
-                trabajadorApellido: fixText(x.trabajadorApellido || ""),
-                trabajadorRut: fixText(x.trabajadorRut || ""),
-                originalName: fixText(x.originalName || ""),
-              }));
+              const { records } = await fetchHorometers(horoVehicle.id);
+              const mapped = (records || []).map((x) => {
+                const faltanHoras = x.faltanHoras ?? x.faltan ?? null;
+                const faltanLabel = fixText(x.faltanLabel || computeFaltanLabel(faltanHoras));
+                return {
+                  id: x.id,
+                  horas: x.horas,
+                  fotoUrl: x.fotoUrl || "",
+                  createdAt: x.createdAt,
+                  trabajadorNombre: fixText(x.trabajadorNombre || ""),
+                  trabajadorApellido: fixText(x.trabajadorApellido || ""),
+                  trabajadorRut: fixText(x.trabajadorRut || ""),
+                  originalName: fixText(x.originalName || ""),
+                  faltanHoras,
+                  faltanLabel,
+                };
+              });
               mapped.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
               setHoroItems(mapped);
             } catch (e) {
@@ -1667,7 +1724,7 @@ export default function Camiones() {
         )}
       </Modal>
 
-          {/* ✅ Modal: detalle de cards (vehículos con alertas) */}
+      {/* ✅ Modal: detalle de cards (vehículos con alertas) */}
       <Modal
         open={alertsOpen}
         onClose={closeAlerts}

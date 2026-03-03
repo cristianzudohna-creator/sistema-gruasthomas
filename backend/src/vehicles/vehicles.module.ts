@@ -15,10 +15,17 @@ import { HorometerModule } from "../horometer/horometer.module";
 import { VehicleHorometersController } from "./vehicle-horometers.controller";
 import { VehicleHorometersService } from "./vehicle-horometers.service";
 
+// ✅ NUEVO: alertas horómetro
+import { HorometerAlertsService } from "../alerts/horometer-alerts.service";
+
+// ✅ para inyectar MailService
+import { MailModule } from "../mail/mail.module";
+
 @Module({
   imports: [
     PrismaModule,
     AuditModule,
+    MailModule,
 
     // ✅ NECESARIO para inyectar HorometerService en VehiclesController
     HorometerModule,
@@ -33,6 +40,9 @@ import { VehicleHorometersService } from "./vehicle-horometers.service";
     VehicleDocumentsService,
     VehicleMaintenancesService,
     VehicleHorometersService,
+
+    // ✅ nuevo provider
+    HorometerAlertsService,
   ],
 })
 export class VehiclesModule {}

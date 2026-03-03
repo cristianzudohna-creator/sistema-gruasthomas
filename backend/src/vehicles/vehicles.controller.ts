@@ -297,34 +297,6 @@ export class VehiclesController {
   }
 
   // =====================
-  // ✅ HORÓMETRO (ADMIN / CONTROL_FLOTA)
-  // =====================
-  @Get(":id/horometers")
-  @Roles("SUPERADMIN", "CONTROL_FLOTA")
-  async listHorometersByVehicle(
-    @Req() req: Request,
-    @Param("id") id: string,
-    @Query("page") page?: string,
-    @Query("limit") limit?: string
-  ) {
-    const actor = this.getActor(req);
-
-    await this.vehicles.ensureVehicleAccessOrThrow(id, actor);
-
-    const pageNum = page ? Number(page) : 1;
-    const limitNum = limit ? Number(limit) : 50;
-
-    return this.horometer.listByVehicleAdmin({
-      vehicleId: id,
-      page: Number.isFinite(pageNum) && pageNum > 0 ? pageNum : 1,
-      limit:
-        Number.isFinite(limitNum) && limitNum > 0
-          ? Math.min(limitNum, 100)
-          : 50,
-    });
-  }
-
-  // =====================
   // EXPORTS (Excel)
   // =====================
   @Get("exports/vehicles")
@@ -410,10 +382,8 @@ export class VehiclesController {
     const actor = this.getActor(req);
     const normalized = this.normalizeVehicleBody(body);
 
-    if (String(actor?.role || "").toUpperCase() === "CONTROL_FLOTA") {
-      if (actor?.empresa) normalized.empresa = actor.empresa as any;
-    }
-
+    // ✅ CONTROL_FLOTA y SUPERADMIN pueden crear con la empresa que envía el frontend
+    // (no se fuerza empresa por actor)
     return this.vehicles.create(normalized as any, actor);
   }
 
@@ -437,14 +407,8 @@ export class VehiclesController {
     const actor = this.getActor(req);
     const normalized = this.normalizeVehicleBody(body);
 
-    if (String(actor?.role || "").toUpperCase() === "CONTROL_FLOTA") {
-      if (actor?.empresa) {
-        if (normalized.empresa !== undefined && normalized.empresa !== actor.empresa) {
-          throw new BadRequestException("CONTROL_FLOTA no puede cambiar empresa del vehículo.");
-        }
-      }
-    }
-
+    // ✅ FIX: permitir cambio de empresa para CONTROL_FLOTA y SUPERADMIN
+    // (se eliminó el bloqueo que tiraba 400)
     return this.vehicles.update(id, normalized as any, actor);
   }
 
