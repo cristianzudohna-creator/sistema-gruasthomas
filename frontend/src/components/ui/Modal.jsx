@@ -1,12 +1,11 @@
 // ✅ Archivo: src/components/ui/Modal.jsx
-// ✅ FIX definitivo:
-// - Cierra SOLO si el click fue en el backdrop (overlay) y NO viene desde dentro del modal
-// - Evita cierres al clickear scrollbar o elementos internos con scroll
+// ✅ FIX: NO cerrar al click fuera (backdrop) para no perder formularios
+// ✅ FIX: NO cerrar con Escape (opcional, pero recomendado para forms largos)
 // - Safe area iOS
 // - Lock scroll sin “saltos” (guarda/restaura scrollY)
 // - Text fix (mojibake)
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { fixText } from "../../utils/fixText";
 
@@ -53,9 +52,6 @@ export default function Modal({
   footer,
   width = 600,
 }) {
-  const overlayRef = useRef(null);
-  const modalRef = useRef(null);
-
   // ✅ TEXT FIX (solo string)
   const safeTitle = useMemo(() => {
     if (typeof title === "string") return fixText(title);
@@ -78,52 +74,39 @@ export default function Modal({
     lockBodyScroll();
 
     const onKeyDown = (e) => {
-      if (e.key === "Escape") onClose?.();
+      // ✅ NO cerrar con Escape (evita perder formularios)
+      // Si quieres habilitar Escape, cambia a: if (e.key === "Escape") onClose?.();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+      }
     };
 
-    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, true);
 
     return () => {
       unlockBodyScroll();
-      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keydown", onKeyDown, true);
     };
   }, [open, onClose]);
 
   if (!open) return null;
 
-  function isClickInsideModal(e) {
-    const modalEl = modalRef.current;
-    if (!modalEl) return false;
-
-    // ✅ super robusto (soporta portales / shadowdom)
-    const path = typeof e.composedPath === "function" ? e.composedPath() : null;
-    if (Array.isArray(path) && path.includes(modalEl)) return true;
-
-    // fallback normal
-    return modalEl.contains(e.target);
-  }
-
   function handleOverlayClick(e) {
-    // ✅ cerrar SOLO si:
-    // - el click fue en el overlay (backdrop)
-    // - y NO fue realmente dentro del modal (scrollbar / portales raros)
-    const clickedBackdrop = e.target === e.currentTarget;
-
-    if (!clickedBackdrop) return;
-    if (isClickInsideModal(e)) return;
-
-    onClose?.();
+    // ✅ NO CERRAR al click afuera (backdrop)
+    // (para no perder lo escrito en formularios)
+    // Solo dejamos que se cierre con ✕ o con el botón Cancelar del footer.
+    e.preventDefault();
+    e.stopPropagation();
   }
 
   const node = (
     <div
-      ref={overlayRef}
       style={styles.overlay}
       onClick={handleOverlayClick}
       role="presentation"
     >
       <div
-        ref={modalRef}
         style={{
           ...styles.modal,
           maxWidth: width,
