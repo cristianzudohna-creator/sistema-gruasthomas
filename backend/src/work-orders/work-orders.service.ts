@@ -1548,7 +1548,7 @@ export class WorkOrdersService {
         doc.font("Helvetica").fontSize(9).fillColor("#111");
         doc.text(r.hora, left + c1, cy + 4, { width: c2, align: "center" });
 
-        const kmText = r.showKm === false ? "" : r.km || "—";
+        const kmText = r.showKm === false ? "—" : (r.km || "—");
         doc.text(kmText, left + c1 + c2, cy + 4, { width: c3, align: "center" });
 
         cy += rowH;
@@ -1568,9 +1568,12 @@ export class WorkOrdersService {
     doc.text("info@gruasthomas.cl  •  www.gruasthomas.cl", left, y + 24, { width: w - 160 });
 
     const logoPath = getLogoPath();
-    if (logoPath) {
-      doc.image(logoPath, right - 150, y - 6, { fit: [150, 52] });
-    }
+if (logoPath) {
+  const logoW = 140;   // 👈 más grande
+  const logoH = 200;
+
+  doc.image(logoPath, right - logoW - 40, y - 50, { fit: [logoW, logoH] });
+}
 
     y += 54;
     fullLine(y);
@@ -1600,8 +1603,8 @@ export class WorkOrdersService {
     fullLine(y);
     y += 10;
 
-    y = twoColRow(y, "Operador", operador, "Equipo", equipo);
-    y = twoColRow(y, "Obra / Tramo", obraTramo, "Rigger Thomas", rigger);
+    y = twoColRow(y, "Operador", operador, "Patente", equipo);
+    y = twoColRow(y, "Dereccion Faena", obraTramo, "Rigger Thomas", rigger);
     y += 4;
 
     fullLine(y);
@@ -1616,7 +1619,7 @@ export class WorkOrdersService {
     doc.text("Detalle de Movimientos", left, y);
     y += 12;
 
-    const movH = 48;
+    const movH = 80;
     box(left, y, w, movH);
 
     const movPadX = 10;
@@ -1634,9 +1637,9 @@ export class WorkOrdersService {
     const desiredBottomGap = 18;
     const remaining = bottom - y;
     const spacer = Math.max(0, remaining - (neededForFooter + desiredBottomGap));
-    if (spacer > 0) y += spacer;
+    if (spacer > 0) y += Math.max(0, spacer - 38); // 👈 sube 12px aprox
 
-    doc.font("Helvetica").fontSize(8.7).fillColor("#111");
+    doc.font("Helvetica").fontSize(10).fillColor("#111");
 
     const condicionesT = "Condiciones de Arrendamiento:";
     const c1 = "1.- La presente orden se considerará recibida conforme.";
@@ -1652,7 +1655,7 @@ export class WorkOrdersService {
     doc.font("Helvetica-Bold").fontSize(9.5).fillColor("#111");
     doc.text(`Recibí Conforme : ${recNombre || "—"}`, left, y, { width: w });
 
-    y += 22;
+    y += 70;
 
     const rutX1 = left;
     const rutX2 = left + colW;

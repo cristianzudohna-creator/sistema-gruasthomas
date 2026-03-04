@@ -232,6 +232,28 @@ function shortOtId(id) {
   return `OT-${s.slice(0, 6).toUpperCase()}`;
 }
 
+// ✅ NUEVO: SIEMPRE 2 líneas + "..." + tooltip
+function TruncText2({ text, lines = 2, style }) {
+  const t = String(text ?? "").trim();
+  return (
+    <div
+      title={t || ""}
+      style={{
+        display: "-webkit-box",
+        WebkitBoxOrient: "vertical",
+        WebkitLineClamp: lines,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "normal",
+        lineHeight: "1.2",
+        ...style,
+      }}
+    >
+      {t || "-"}
+    </div>
+  );
+}
+
 export default function WorkOrdersAdmin() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
@@ -614,7 +636,7 @@ export default function WorkOrdersAdmin() {
                 <th style={{ width: 130 }}>OT ID</th>
                 <th>FECHA</th>
                 <th>ESTADO</th>
-                <th>CLIENTE</th>
+                <th style={{ width: 420 }}>CLIENTE</th>
                 <th>CREADO POR</th>
                 <th style={{ textAlign: "right" }}>ACCIONES</th>
               </tr>
@@ -679,9 +701,9 @@ export default function WorkOrdersAdmin() {
                       </div>
                     </td>
 
-                    {/* ✅ SOLO CLIENTE (sin línea gris) */}
-                    <td>
-                      <div style={{ fontWeight: 900 }}>{cliente || "-"}</div>
+                    {/* ✅ CLIENTE: SIEMPRE 2 líneas (clamp) + tooltip */}
+                    <td style={{ width: 420, maxWidth: 420 }}>
+                      <TruncText2 text={cliente || "-"} lines={2} style={{ fontWeight: 900 }} />
                     </td>
 
                     <td>{creadoPor}</td>
