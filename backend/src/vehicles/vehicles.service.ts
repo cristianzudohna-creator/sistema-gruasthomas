@@ -153,6 +153,12 @@ export class VehiclesService {
     return role === "SUPERADMIN" || role === "CONTROL_FLOTA";
   }
 
+  // ✅ NUEVO: roles que pueden VER vehículos (scoped por empresa)
+  private isScopedFleetViewer(actor?: ActorLike) {
+    const role = this.roleUpper(actor);
+    return role === "TRABAJADOR" || role === "ADMINISTRADORA" || role === "ADMIN";
+  }
+
   // (se mantiene por compat, aunque ya no lo usamos para permisos)
   private empresaFromActorOrThrow(actor?: ActorLike): Empresa {
     const emp = actor?.empresa as Empresa | undefined | null;
@@ -278,7 +284,6 @@ export class VehiclesService {
 
   // ==========================================================
   // ✅ SEARCH SIMPLE (para autocomplete de patentes)
-  // ✅ OJO: tu soft delete es activo=false (NO deletedAt)
   // ==========================================================
   async searchSimple(params: { empresa: string; query: string; limit: number }) {
     const empresa = String(params?.empresa || "").toUpperCase();
@@ -312,17 +317,47 @@ export class VehiclesService {
   }
 
   // ==========================================================
-  // ✅ LISTAR (solo activos)
-  // ✅ SOLO SUPERADMIN / CONTROL_FLOTA
+  // ✅ LISTAR
+  // - SUPERADMIN/CONTROL_FLOTA: ve todo
+  // - TRABAJADOR/ADMINISTRADORA/ADMIN: ve SOLO su empresa (activos)
   // ==========================================================
   async list(actor: ActorLike = null) {
-    if (!this.isGlobalFleetRole(actor)) throw new ForbiddenException("No tienes permisos.");
-    return this.listInternalAll();
+    if (this.isGlobalFleetRole(actor)) {
+      return this.listInternalAll();
+    }
+
+    if (this.isScopedFleetViewer(actor)) {
+      const emp = this.empresaFromActorOrThrow(actor);
+      return this.listInternalByEmpresa(emp);
+    }
+
+    throw new ForbiddenException("No tienes permisos.");
   }
 
   private async listInternalAll() {
     const vehicles = await this.prisma.vehicle.findMany({
       where: { ...this.whereActivosOnly() } as any,
+      orderBy: { createdAt: "desc" },
+      include: {
+        maintenances: {
+          where: { fechaProxima: { not: null } },
+          orderBy: { fechaProxima: "asc" },
+          select: { id: true, fechaProxima: true },
+        },
+        documents: {
+          orderBy: { fechaVencimiento: "asc" },
+          select: { id: true, fechaVencimiento: true },
+        },
+      },
+    });
+
+    return this.mapVehiclesWithEstados(vehicles);
+  }
+
+  // ✅ NUEVO: listar por empresa (activos) para roles no globales
+  private async listInternalByEmpresa(empresa: Empresa) {
+    const vehicles = await this.prisma.vehicle.findMany({
+      where: { empresa: empresa as any, ...this.whereActivosOnly() } as any,
       orderBy: { createdAt: "desc" },
       include: {
         maintenances: {

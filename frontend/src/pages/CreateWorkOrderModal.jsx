@@ -10,14 +10,12 @@
 // ✅ FIX UI: dropdown de WorkerAutocomplete (Operador/Rigger) se renderiza FIXED
 //    para que NO se vea “muy abajo” dentro del modal con scroll.
 //
-// ✅ FIX PATENTES: VehicleAutocomplete usa frontend/src/api/vehicles.js (searchVehicles)
-//    y manda empresa para que INSPROTEL vea INSPROTEL y GRUAS_THOMAS vea GRUAS_THOMAS.
+// ✅ FIX PATENTES: VehicleAutocomplete ahora usa apiGet (/vehicles) con Authorization
+//    (evita 403 "No tienes permisos" por llamadas sin token).
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
 import ConfirmModal from "../components/ui/ConfirmModal";
-
-import { searchVehicles } from "../api/vehicles";
 
 const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
 
@@ -952,7 +950,7 @@ function WorkerAutocomplete({
 }
 
 /* =========================
-   Autocomplete (vehículos / patentes) ✅ FIX empresa + api unificada
+   Autocomplete (vehículos / patentes) ✅ FIX: usa apiGet con token
 ========================= */
 function VehicleAutocomplete({
   label,
@@ -983,7 +981,16 @@ function VehicleAutocomplete({
     setLoading(true);
     setTip("");
     try {
-      const data = await searchVehicles({ q: query, limit: 8, empresa });
+      const qs = new URLSearchParams();
+      // ✅ mandamos ambos nombres por si tu backend usa "q" o "search"
+      qs.set("q", query);
+      qs.set("search", query);
+      qs.set("limit", "8");
+
+      const emp = normalizeText(empresa).toUpperCase();
+      if (emp) qs.set("empresa", emp);
+
+      const data = await apiGet(`/vehicles?${qs.toString()}`);
       const list = Array.isArray(data) ? data : data?.items || [];
 
       setItems(list);

@@ -1,4 +1,4 @@
-// ✅ Archivo: frontend/src/api/vehicles.js (COMPLETO - PROD SAFE + SEARCH)
+// ✅ Archivo: frontend/src/api/vehicles.js (COMPLETO - FIX SEARCH QUERY)
 import { getToken } from "../auth/auth";
 import { getApiUrl } from "./apiUrl";
 
@@ -32,6 +32,7 @@ async function apiFetch(path, options = {}) {
 
   const text = await res.text();
   let data = null;
+
   try {
     data = text ? JSON.parse(text) : null;
   } catch {
@@ -40,24 +41,33 @@ async function apiFetch(path, options = {}) {
 
   if (!res.ok) {
     if ((res.status === 401 || res.status === 403) && !token) {
-      throw new Error("Sesión expirada o no estás logueado. Vuelve a iniciar sesión.");
+      throw new Error("Sesión expirada o no estás logueado.");
     }
+
     if (res.status === 403 && token) {
-      throw new Error(normalizeMsg(data, "Tu rol no tiene permiso para ver vehículos/patentes."));
+      throw new Error(
+        normalizeMsg(data, "Tu rol no tiene permiso para ver vehículos/patentes.")
+      );
     }
+
     throw new Error(normalizeMsg(data, `Error ${res.status}`));
   }
 
   return data;
 }
 
+// ✅ FIX IMPORTANTE
+// backend espera: query
 export async function searchVehicles({ q, limit = 8, empresa } = {}) {
   const qs = new URLSearchParams();
-  if (q) qs.set("q", String(q).toUpperCase());
+
+  if (q) qs.set("query", String(q).toUpperCase()); // 🔥 FIX
   if (limit) qs.set("limit", String(limit));
   if (empresa) qs.set("empresa", String(empresa).toUpperCase());
 
-  return apiFetch(`/vehicles/search?${qs.toString()}`, { method: "GET" });
+  return apiFetch(`/vehicles/search?${qs.toString()}`, {
+    method: "GET",
+  });
 }
 
 export async function getDeletedVehicles() {
@@ -66,6 +76,9 @@ export async function getDeletedVehicles() {
 
 export async function restoreVehicle(vehicleId) {
   if (!vehicleId) throw new Error("vehicleId requerido");
-  return apiFetch(`/vehicles/${vehicleId}/restore`, { method: "PATCH" });
+
+  return apiFetch(`/vehicles/${vehicleId}/restore`, {
+    method: "PATCH",
+  });
 }
 
