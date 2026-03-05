@@ -1,4 +1,4 @@
-// ✅ Archivo: src/vehicles/vehicles.controller.ts (COMPLETO)
+// ✅ Archivo: src/vehicles/vehicles.controller.ts (COMPLETO)  ✅ FIX AUTOCOMPLETE EN /vehicles
 
 import {
   BadRequestException,
@@ -184,12 +184,67 @@ export class VehiclesController {
 
   // =========================================================
   // ✅ LISTAR
+  // ✅ FIX: si viene q/search => modo AUTOCOMPLETE y filtramos patentes aquí
+  // GET /vehicles?q=AB&limit=8&empresa=GRUAS_THOMAS
   // =========================================================
   @Get()
   @Roles("SUPERADMIN", "CONTROL_FLOTA", "ADMINISTRADORA", "TRABAJADOR")
-  async list(@Req() req: Request) {
+  async list(
+    @Req() req: Request,
+    @Query("q") q?: string,
+    @Query("search") search?: string,
+    @Query("limit") limit?: string,
+    @Query("empresa") empresa?: string
+  ) {
     const actor = this.getActor(req);
-    return this.vehicles.list(actor);
+
+    // ✅ Si no viene búsqueda, NO tocamos nada (backward compatible)
+    const rawQuery = String(q || search || "").trim();
+    if (!rawQuery) {
+      return this.vehicles.list(actor);
+    }
+
+    // ✅ Autocomplete mode
+    const query = rawQuery.toUpperCase();
+    const lim = Math.min(Math.max(Number(limit || 8) || 8, 1), 30);
+
+    // Traemos lo que el service permita (ya respeta permisos/empresa del actor)
+    const data: any = await this.vehicles.list(actor);
+
+    const list: any[] = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.records)
+      ? data.records
+      : Array.isArray(data?.items)
+      ? data.items
+      : [];
+
+    // ✅ empresa opcional (si viene en querystring)
+    const empFilter = String(empresa || "").trim().toUpperCase();
+    const useEmpFilter = empFilter === "GRUAS_THOMAS" || empFilter === "INSPROTEL";
+
+    const items = list
+      .filter((v) => {
+        if (!useEmpFilter) return true;
+        return String(v?.empresa || "").toUpperCase() === empFilter;
+      })
+      .filter((v) => {
+        const patente = String(v?.patente || "").toUpperCase();
+        return patente.includes(query);
+      })
+      .slice(0, lim)
+      .map((v) => ({
+        id: v?.id,
+        patente: v?.patente,
+        empresa: v?.empresa,
+        marcaModelo: v?.marcaModelo,
+        type: v?.type,
+        tipoVehiculo: v?.tipoVehiculo,
+        year: v?.year,
+        estadoOperativo: v?.estadoOperativo,
+      }));
+
+    return { items };
   }
 
   // =========================================================
