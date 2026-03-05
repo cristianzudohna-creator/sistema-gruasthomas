@@ -1,11 +1,17 @@
 // ✅ Archivo: src/components/ui/Modal.jsx
-// ✅ FIX: NO cerrar al click fuera (backdrop) para no perder formularios
-// ✅ FIX: NO cerrar con Escape (opcional, pero recomendado para forms largos)
+// ✅ Mobile PRO:
+// - En celular: modal full-screen (100dvh), sin bordes redondeados
+// - Header y Footer sticky (siempre visibles)
+// - Body scrollea suave
+// - Botones del footer en mobile: 100% ancho
+//
+// ✅ FIX: NO cerrar al click fuera (backdrop)
+// ✅ FIX: NO cerrar con Escape (evita perder formularios)
 // - Safe area iOS
 // - Lock scroll sin “saltos” (guarda/restaura scrollY)
 // - Text fix (mojibake)
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { fixText } from "../../utils/fixText";
 
@@ -43,25 +49,30 @@ function unlockBodyScroll() {
   window.scrollTo(0, Number.isFinite(y) ? y : savedScrollY);
 }
 
-export default function Modal({
-  open,
-  onClose,
-  title,
-  subtitle,
-  children,
-  footer,
-  width = 600,
-}) {
-  // ✅ TEXT FIX (solo string)
-  const safeTitle = useMemo(() => {
-    if (typeof title === "string") return fixText(title);
-    return title;
-  }, [title]);
+export default function Modal({ open, onClose, title, subtitle, children, footer, width = 600 }) {
+  // ✅ detecta mobile (<= 640px)
+  const [isMobile, setIsMobile] = useState(false);
 
-  const safeSubtitle = useMemo(() => {
-    if (typeof subtitle === "string") return fixText(subtitle);
-    return subtitle;
-  }, [subtitle]);
+  useEffect(() => {
+    if (!open) return;
+
+    const mq = window.matchMedia("(max-width: 640px)");
+    const apply = () => setIsMobile(!!mq.matches);
+
+    apply();
+    // compat
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+    else mq.addListener(apply);
+
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", apply);
+      else mq.removeListener(apply);
+    };
+  }, [open]);
+
+  // ✅ TEXT FIX (solo string)
+  const safeTitle = useMemo(() => (typeof title === "string" ? fixText(title) : title), [title]);
+  const safeSubtitle = useMemo(() => (typeof subtitle === "string" ? fixText(subtitle) : subtitle), [subtitle]);
 
   const ariaLabel = useMemo(() => {
     if (typeof title === "string") return fixText(title);
@@ -74,8 +85,7 @@ export default function Modal({
     lockBodyScroll();
 
     const onKeyDown = (e) => {
-      // ✅ NO cerrar con Escape (evita perder formularios)
-      // Si quieres habilitar Escape, cambia a: if (e.key === "Escape") onClose?.();
+      // ✅ NO cerrar con Escape
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
@@ -93,50 +103,90 @@ export default function Modal({
   if (!open) return null;
 
   function handleOverlayClick(e) {
-    // ✅ NO CERRAR al click afuera (backdrop)
-    // (para no perder lo escrito en formularios)
-    // Solo dejamos que se cierre con ✕ o con el botón Cancelar del footer.
+    // ✅ NO CERRAR al click afuera
     e.preventDefault();
     e.stopPropagation();
   }
 
+  // ✅ estilos responsive
+  const overlayStyle = {
+    ...styles.overlay,
+    padding: isMobile
+      ? "0"
+      : "max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))",
+    alignItems: isMobile ? "stretch" : "center",
+    justifyContent: isMobile ? "stretch" : "center",
+  };
+
+  const modalStyle = {
+    ...styles.modal,
+    maxWidth: isMobile ? "100vw" : width,
+    width: "100%",
+    height: isMobile ? "100dvh" : undefined,
+    maxHeight: isMobile ? "100dvh" : "calc(100vh - 24px)",
+    borderRadius: isMobile ? 0 : 16,
+    marginTop: isMobile ? 0 : "clamp(0px, 6vh, 32px)",
+  };
+
+  const headerStyle = {
+    ...styles.header,
+    position: isMobile ? "sticky" : "static",
+    top: isMobile ? 0 : undefined,
+    zIndex: isMobile ? 2 : undefined,
+    background: "#fff",
+    paddingTop: isMobile ? "calc(14px + env(safe-area-inset-top))" : "14px",
+  };
+
+  const bodyStyle = {
+    ...styles.body,
+    paddingBottom: isMobile ? 18 : 14,
+  };
+
+  const footerStyle = {
+    ...styles.footer,
+    position: isMobile ? "sticky" : "static",
+    bottom: isMobile ? 0 : undefined,
+    zIndex: isMobile ? 2 : undefined,
+    background: "#fff",
+    paddingBottom: isMobile ? "calc(12px + env(safe-area-inset-bottom))" : "12px",
+  };
+
   const node = (
     <div
-      style={styles.overlay}
+      className={`gt-modal-overlay ${isMobile ? "is-mobile" : ""}`}
+      style={overlayStyle}
       onClick={handleOverlayClick}
       role="presentation"
     >
       <div
-        style={{
-          ...styles.modal,
-          maxWidth: width,
-        }}
+        className={`gt-modal ${isMobile ? "is-mobile" : ""}`}
+        style={modalStyle}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
-        onClick={(e) => e.stopPropagation()} // ✅ evita burbujeo
-        onMouseDown={(e) => e.stopPropagation()} // ✅ extra defensa
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
       >
-        <div style={styles.header}>
+        <div className="gt-modal__head" style={headerStyle}>
           <div style={{ minWidth: 0 }}>
             <h2 style={styles.title}>{safeTitle}</h2>
             {safeSubtitle ? <p style={styles.subtitle}>{safeSubtitle}</p> : null}
           </div>
 
-          <button
-            type="button"
-            style={styles.closeBtn}
-            onClick={onClose}
-            aria-label="Cerrar"
-            title="Cerrar"
-          >
+          <button type="button" style={styles.closeBtn} onClick={onClose} aria-label="Cerrar" title="Cerrar">
             ✕
           </button>
         </div>
 
-        <div style={styles.body}>{children}</div>
+        <div className="gt-modal__body" style={bodyStyle}>
+          {children}
+        </div>
 
-        {footer ? <div style={styles.footer}>{footer}</div> : null}
+        {footer ? (
+          <div className="gt-modal__foot" style={footerStyle}>
+            {footer}
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -150,26 +200,17 @@ const styles = {
     inset: 0,
     background: "rgba(0,0,0,0.45)",
     display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
     zIndex: 999999,
-
-    padding:
-      "max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))",
-
     overflowY: "auto",
   },
 
   modal: {
-    width: "100%",
     background: "#ffffff",
-    borderRadius: 16,
     boxShadow: "0 20px 50px rgba(0,0,0,0.25)",
     overflow: "hidden",
     display: "flex",
     flexDirection: "column",
-    maxHeight: "calc(100vh - 24px)",
-    marginTop: "clamp(0px, 6vh, 32px)",
+    borderRadius: 16,
   },
 
   header: {

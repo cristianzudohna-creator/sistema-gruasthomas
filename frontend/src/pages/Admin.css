@@ -1259,9 +1259,9 @@ details.gt-actions summary::-webkit-details-marker {
 
 /* ==================================================
    ✅ FIX DEFINITIVO: Tabla DocumentosModal (gt-docs-table)
-   - Evita que "Vence" (texto largo) pise "Estado"
-   - Mantiene "Tipo" con ellipsis
-   - Tabla estable en PROD
+   - Evita que "Vence" pise "Estado"
+   - Mantiene "Tipo" con ellipsis en desktop
+   - En MOBILE: aparece scroll horizontal y NO desaparece "Tipo"
    ================================================== */
 
 .gt-docs-wrap {
@@ -1281,7 +1281,7 @@ details.gt-actions summary::-webkit-details-marker {
   padding: 12px 14px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   vertical-align: middle;
-  white-space: normal; /* ✅ por defecto SÍ permite wrap */
+  white-space: normal; /* ✅ permite wrap */
 }
 
 /* Encabezado */
@@ -1293,12 +1293,12 @@ details.gt-actions summary::-webkit-details-marker {
   background: rgba(0, 0, 0, 0.02);
 }
 
-/* Columnas: anchos */
+/* Columnas: anchos (desktop) */
 .gt-docs-table th.col-estado,
 .gt-docs-table td.col-estado {
   width: 140px;
   text-align: center;
-  white-space: nowrap; /* pill siempre en 1 línea */
+  white-space: nowrap;
 }
 
 .gt-docs-table th.col-actions,
@@ -1310,18 +1310,18 @@ details.gt-actions summary::-webkit-details-marker {
 
 .gt-docs-table th.col-vence,
 .gt-docs-table td.col-vence {
-  width: 230px;                 /* ✅ más espacio para texto largo */
+  width: 230px;
   text-align: center;
-  white-space: normal;          /* ✅ permite 2+ líneas */
-  overflow-wrap: anywhere;      /* 🔥 CLAVE: corta texto largo */
+  white-space: normal;
+  overflow-wrap: anywhere;
   word-break: break-word;
 }
 
-/* "Tipo" con ellipsis (no rompe layout) */
+/* "Tipo" con ellipsis (desktop) */
 .gt-docs-table th.col-tipo,
 .gt-docs-table td.col-tipo {
   text-align: left;
-  white-space: nowrap;          /* ✅ solo tipo en una línea */
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -1331,22 +1331,38 @@ details.gt-actions summary::-webkit-details-marker {
   margin-inline: auto;
 }
 
-/* Asegura que tu menú ⋮ (ActionsMenu fixed) se vea siempre arriba */
+/* Menú ⋮ arriba siempre */
 .gt-docs-table .gt-actions,
 .gt-docs-table .gt-actions-menu {
   z-index: 9999999;
 }
 
-/* Responsive: en pantallas chicas, reduce ancho de columnas fijas */
+/* ✅ MOBILE: NO forzar columnas fijas que sumen más que el modal
+   -> hacemos la tabla más ancha y scroll horizontal */
 @media (max-width: 640px) {
+  .gt-docs-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 🔥 CLAVE: que la tabla sea más ancha que el modal */
+  .gt-docs-table {
+    min-width: 720px;
+  }
+
   .gt-docs-table th,
   .gt-docs-table td {
     padding: 10px 10px;
   }
 
+  .gt-docs-table th.col-tipo,
+  .gt-docs-table td.col-tipo {
+    width: 280px; /* ✅ ahora "Tipo" siempre se ve */
+  }
+
   .gt-docs-table th.col-vence,
   .gt-docs-table td.col-vence {
-    width: 200px;
+    width: 170px;
   }
 
   .gt-docs-table th.col-estado,
@@ -1568,7 +1584,7 @@ details.gt-actions summary::-webkit-details-marker {
   background: rgba(245, 184, 0, 0.12);
 }
 
-/* Tabla Worker: menos rígida, más bonita */
+/* Tabla Worker */
 .tw-table .table {
   min-width: 980px;
 }
@@ -1706,6 +1722,7 @@ details.gt-actions summary::-webkit-details-marker {
   border-radius: 14px !important;
   padding: 0 14px !important;
 }
+
 /* =========================
    Camiones: Cards 5 columnas (RESPONSIVE)
    ========================= */
@@ -1726,82 +1743,227 @@ details.gt-actions summary::-webkit-details-marker {
     grid-template-columns: 1fr;
   }
 }
+
 /* ✅ DocumentsModal: acciones responsive */
-.docs-form-actions{
+.docs-form-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin-top: 6px;
 }
 
-@media (max-width: 640px){
-  .docs-form-actions{
+@media (max-width: 640px) {
+  .docs-form-actions {
     grid-template-columns: 1fr;
   }
-  .docs-form-actions .gt-btn{
+  .docs-form-actions .gt-btn {
     width: 100%;
   }
 }
+
 /* ✅ MaintenancesModal responsive */
-.maint-form-actions{
+.maint-form-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin-top: 6px;
 }
 
-.gt-maint-wrap{
+.gt-maint-wrap {
   width: 100%;
   overflow: hidden;
 }
 
-.gt-maint-table{
+.gt-maint-table {
   width: 100%;
   table-layout: fixed;
 }
 
-.gt-maint-table .col-tipo{ width: 260px; }
-.gt-maint-table .col-realizada{ width: 150px; }
-.gt-maint-table .col-actions{ width: 120px; text-align: right; }
-.gt-maint-table .col-obs{ width: auto; }
+.gt-maint-table .col-tipo {
+  width: 260px;
+}
+.gt-maint-table .col-realizada {
+  width: 150px;
+}
+.gt-maint-table .col-actions {
+  width: 120px;
+  text-align: right;
+}
+.gt-maint-table .col-obs {
+  width: auto;
+}
 
-.maint-obs-mobile{
+.maint-obs-mobile {
   display: none;
   margin-top: 8px;
   font-size: 13px;
   opacity: 0.85;
 }
 
-@media (max-width: 640px){
-  .maint-form-actions{ grid-template-columns: 1fr; }
-  .maint-form-actions .gt-btn{ width: 100%; }
+@media (max-width: 640px) {
+  .maint-form-actions {
+    grid-template-columns: 1fr;
+  }
+  .maint-form-actions .gt-btn {
+    width: 100%;
+  }
 
   /* tabla -> vista “compacta” */
-  .gt-maint-table .col-obs{ display: none; }
-  .gt-maint-table .col-tipo{ width: auto; }
-  .gt-maint-table .col-realizada{ width: 120px; }
-  .gt-maint-table .col-actions{ width: 86px; }
+  .gt-maint-table .col-obs {
+    display: none;
+  }
+  .gt-maint-table .col-tipo {
+    width: auto;
+  }
+  .gt-maint-table .col-realizada {
+    width: 120px;
+  }
+  .gt-maint-table .col-actions {
+    width: 86px;
+  }
 
-  .maint-obs-mobile{ display: block; }
-}
-@media (max-width: 640px){
-  .gt-btn{ height: 44px; }
-}
-/* SOLO para la tabla del modal documentos */
-.gt-docs-table td.col-vence {
-  width: 230px;
-  text-align: center;
+  .maint-obs-mobile {
+    display: block;
+  }
 }
 
+@media (max-width: 640px) {
+  .gt-btn {
+    height: 44px;
+  }
+}
+
+/* ✅ (opcional) ellipsis SOLO para el texto de Vence dentro de su celda */
 .gt-docs-table td.col-vence .vence-text {
-  display: inline-block;   /* 🔥 clave */
-  max-width: 200px;        /* 🔥 clave */
+  display: inline-block;
+  max-width: 200px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   vertical-align: middle;
 }
+/* =========================================
+   ✅ MODAL PRO MOBILE (full-screen)
+   ========================================= */
 
+/* asumimos que tu Modal tiene overlay y un "dialog" adentro.
+   Vamos a soportar ambas variantes: .modal-overlay/.modal-dialog
+   y también .gt-modal-overlay/.gt-modal */
+.modal-overlay,
+.gt-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  z-index: 999999;
+}
+
+/* Caja modal */
+.modal-dialog,
+.gt-modal {
+  width: min(920px, 96vw);
+  background: #fff;
+  border-radius: 18px;
+  border: 1px solid rgba(0,0,0,0.10);
+  box-shadow: 0 24px 60px rgba(0,0,0,0.25);
+  overflow: hidden;
+
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 36px);
+}
+
+/* Header / Footer sticky (si tu Modal ya los separa por divs) */
+.modal-header,
+.gt-modal__head {
+  flex: 0 0 auto;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+  background: #fff;
+}
+
+.modal-body,
+.gt-modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 14px 16px;
+}
+
+.modal-footer,
+.gt-modal__foot {
+  flex: 0 0 auto;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(0,0,0,0.08);
+  background: #fff;
+
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+/* ✅ MOBILE: modal pantalla completa */
+@media (max-width: 640px) {
+  .modal-overlay,
+  .gt-modal-overlay {
+    padding: 0;
+  }
+
+  .modal-dialog,
+  .gt-modal {
+    width: 100vw !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+    border-left: 0;
+    border-right: 0;
+    border-top: 0;
+  }
+
+  .modal-header,
+  .gt-modal__head {
+    padding: 14px 14px;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+
+  .modal-footer,
+  .gt-modal__foot {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+
+  /* Botones de footer: full width */
+  .modal-footer > button,
+  .gt-modal__foot > button {
+    width: 100%;
+    min-width: 0 !important;
+  }
+}
+/* =========================================
+   ✅ Modal: botones footer full-width en mobile
+   ========================================= */
+@media (max-width: 640px) {
+  .gt-modal__foot {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  .gt-modal__foot > button,
+  .gt-modal__foot > .gt-btn,
+  .gt-modal__foot > .btn {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+}
 
 
 

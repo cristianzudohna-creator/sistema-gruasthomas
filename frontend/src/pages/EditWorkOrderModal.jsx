@@ -1,10 +1,13 @@
 // ✅ Archivo: src/pages/EditWorkOrderModal.jsx (COMPLETO)
 // ✅ Cambio: reemplaza "días texto" por calendario multi-select (fechas ISO)
-// ✅ Resumen: muestra "Días programado" con fechas
+// ✅ Resumen: muestra "Días programados" con fechas
 // ✅ Payload:
 //    - diasProgramados: ["YYYY-MM-DD", ...] (nuevo)
 //    - diasTrabajo: ["LUN","MAR"...] (compat)
-// ✅ Mantiene teléfono cliente legacy (nota) + campo real telefonoCliente
+// ✅ Cambios UI solicitados:
+//    - ❌ Se elimina teléfono del cliente
+//    - ✅ Rigger pasa a input normal (como operador)
+//    - ✅ Se agregan títulos (labels) arriba de cada campo
 
 import { useEffect, useMemo, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -81,24 +84,6 @@ function Row({ label, value }) {
   );
 }
 
-// 🔎 intenta extraer "Teléfono cliente: xxxx" desde nota
-function extractTelefonoFromNota(nota) {
-  const s = normalizeText(nota);
-  if (!s) return "";
-  const m = s.match(/Tel[eé]fono\s*cliente\s*:\s*(.+)$/im);
-  return m?.[1]?.trim() || "";
-}
-
-// 🧹 elimina la línea "Teléfono cliente: ..."
-function removeTelefonoLine(nota) {
-  const s = String(nota || "");
-  return s
-    .split("\n")
-    .filter((line) => !/Tel[eé]fono\s*cliente\s*:/i.test(line))
-    .join("\n")
-    .trim();
-}
-
 /* =========================
    Mini Calendar (multi-select)
 ========================= */
@@ -139,7 +124,7 @@ function buildCalendarMatrix(year, month0) {
   return rows;
 }
 
-function MiniCalendarMulti({ label = "Días programado", valueISO, onChangeISO, disabled, error }) {
+function MiniCalendarMulti({ label = "Días programados", valueISO, onChangeISO, disabled, error }) {
   const selected = useMemo(() => new Set(uniqueSortedISO(valueISO)), [valueISO]);
 
   const initial = useMemo(() => {
@@ -350,11 +335,10 @@ function Resumen({ f }) {
         <Row label="Ciudad" value={v(f.ciudad)} />
         <Row label="Maps" value={v(f.mapsLink)} />
         <Row label="Horario" value={v(f.horario)} />
-        <Row label="Días programado" value={prog} />
+        <Row label="Días programados" value={prog} />
         <Row label="Patente" value={v(f.camion)} />
         <Row label="Operador" value={v(f.conductor)} />
         <Row label="Rigger" value={v(f.rigger)} />
-        <Row label="Teléfono" value={v(f.telefonoCliente)} />
         <Row label="Descripción" value={v(f.nota)} />
       </div>
     </div>
@@ -376,12 +360,10 @@ export default function EditWorkOrderModal({ open, onClose, data, loading, error
     ciudad: "",
     mapsLink: "",
     horario: "",
-    // ✅ NUEVO: calendario
     diasProgramados: [],
     camion: "",
     conductor: "",
     rigger: "",
-    telefonoCliente: "",
     nota: "",
   });
 
@@ -390,13 +372,7 @@ export default function EditWorkOrderModal({ open, onClose, data, loading, error
     if (!data) return;
 
     const rawNota = data.descripcion || data.nota || "";
-    const telDb = normalizeText(data.telefonoCliente);
-    const telLegacy = extractTelefonoFromNota(rawNota);
-    const tel = telDb || telLegacy;
 
-    const notaSinTel = removeTelefonoLine(rawNota);
-
-    // ✅ si el backend ya guarda diasProgramados, los usamos; si no, fallback vacío
     const diasProg =
       Array.isArray(data.diasProgramados) ? data.diasProgramados :
       Array.isArray(data.programacion) ? data.programacion :
@@ -416,8 +392,7 @@ export default function EditWorkOrderModal({ open, onClose, data, loading, error
       camion: data.camion || "",
       conductor: data.conductor || "",
       rigger: data.rigger || "",
-      telefonoCliente: tel || "",
-      nota: notaSinTel || "",
+      nota: rawNota || "",
     });
 
     setFormErr("");
@@ -493,12 +468,8 @@ export default function EditWorkOrderModal({ open, onClose, data, loading, error
       addIf(payload, "conductor", f.conductor);
       addIf(payload, "rigger", f.rigger);
 
-      addIf(payload, "telefonoCliente", f.telefonoCliente);
-
-      // ✅ NUEVO
       payload.diasProgramados = diasProgramadosSorted;
 
-      // ✅ COMPAT
       if (diasTrabajoDerivados.length > 0) payload.diasTrabajo = diasTrabajoDerivados;
 
       const notaBase = normalizeText(f.nota);
@@ -549,118 +520,155 @@ export default function EditWorkOrderModal({ open, onClose, data, loading, error
 
             <div className="ot-box">
               <div className="ot-box-title">Datos del cliente</div>
+
               <div className="ot-grid-2">
-                <input
-                  className="gt-input"
-                  placeholder="Cliente (Señor(es))"
-                  value={f.cliente}
-                  onChange={(e) => setField("cliente", e.target.value)}
-                  disabled={saving}
-                />
-                <input
-                  className="gt-input"
-                  placeholder="RUT"
-                  value={f.rut}
-                  onChange={(e) => setField("rut", e.target.value)}
-                  disabled={saving}
-                />
+                <div className="gt-field">
+                  <label>Cliente</label>
+                  <input
+                    className="gt-input"
+                    value={f.cliente}
+                    onChange={(e) => setField("cliente", e.target.value)}
+                    disabled={saving}
+                    placeholder="Cliente (Señor(es))"
+                  />
+                </div>
 
-                <input
-                  className="gt-input"
-                  placeholder="Giro"
-                  value={f.giro}
-                  onChange={(e) => setField("giro", e.target.value)}
-                  disabled={saving}
-                />
+                <div className="gt-field">
+                  <label>RUT</label>
+                  <input
+                    className="gt-input"
+                    value={f.rut}
+                    onChange={(e) => setField("rut", e.target.value)}
+                    disabled={saving}
+                    placeholder="RUT"
+                  />
+                </div>
 
-                <input
-                  className="gt-input"
-                  placeholder="Solicitado por (Sr.)"
-                  value={f.solicitadoPor}
-                  onChange={(e) => setField("solicitadoPor", e.target.value)}
-                  disabled={saving}
-                />
+                <div className="gt-field">
+                  <label>Giro</label>
+                  <input
+                    className="gt-input"
+                    value={f.giro}
+                    onChange={(e) => setField("giro", e.target.value)}
+                    disabled={saving}
+                    placeholder="Giro"
+                  />
+                </div>
 
-                <input
-                  className="gt-input"
-                  placeholder="Teléfono del cliente (ej: +569...)"
-                  value={f.telefonoCliente}
-                  onChange={(e) => setField("telefonoCliente", e.target.value)}
-                  disabled={saving}
-                />
+                <div className="gt-field">
+                  <label>Solicitado por</label>
+                  <input
+                    className="gt-input"
+                    value={f.solicitadoPor}
+                    onChange={(e) => setField("solicitadoPor", e.target.value)}
+                    disabled={saving}
+                    placeholder="Solicitado por (Sr.)"
+                  />
+                </div>
 
-                <input
-                  className="gt-input ot-span"
-                  placeholder="Dirección"
-                  value={f.direccion}
-                  onChange={(e) => setField("direccion", e.target.value)}
-                  disabled={saving}
-                />
-                <input
-                  className="gt-input"
-                  placeholder="Comuna"
-                  value={f.comuna}
-                  onChange={(e) => setField("comuna", e.target.value)}
-                  disabled={saving}
-                />
-                <input
-                  className="gt-input"
-                  placeholder="Ciudad"
-                  value={f.ciudad}
-                  onChange={(e) => setField("ciudad", e.target.value)}
-                  disabled={saving}
-                />
+                <div className="gt-field" style={{ gridColumn: "1 / -1" }}>
+                  <label>Dirección</label>
+                  <input
+                    className="gt-input"
+                    value={f.direccion}
+                    onChange={(e) => setField("direccion", e.target.value)}
+                    disabled={saving}
+                    placeholder="Dirección"
+                  />
+                </div>
+
+                <div className="gt-field">
+                  <label>Comuna</label>
+                  <input
+                    className="gt-input"
+                    value={f.comuna}
+                    onChange={(e) => setField("comuna", e.target.value)}
+                    disabled={saving}
+                    placeholder="Comuna"
+                  />
+                </div>
+
+                <div className="gt-field">
+                  <label>Ciudad</label>
+                  <input
+                    className="gt-input"
+                    value={f.ciudad}
+                    onChange={(e) => setField("ciudad", e.target.value)}
+                    disabled={saving}
+                    placeholder="Ciudad"
+                  />
+                </div>
               </div>
             </div>
 
             <div className="ot-box">
               <div className="ot-box-title">Ubicación</div>
+
               <div className="ot-grid-2">
-                <input
-                  className="gt-input ot-span"
-                  placeholder="Link Google Maps"
-                  value={f.mapsLink}
-                  onChange={(e) => setField("mapsLink", e.target.value)}
-                  disabled={saving}
-                />
-                <input
-                  className="gt-input"
-                  placeholder="Horario de llegada (ej: 08:00)"
-                  value={f.horario}
-                  onChange={(e) => setField("horario", e.target.value)}
-                  disabled={saving}
-                />
+                <div className="gt-field" style={{ gridColumn: "1 / -1" }}>
+                  <label>Link Google Maps</label>
+                  <input
+                    className="gt-input"
+                    value={f.mapsLink}
+                    onChange={(e) => setField("mapsLink", e.target.value)}
+                    disabled={saving}
+                    placeholder="https://maps.app.goo.gl/..."
+                  />
+                </div>
+
+                <div className="gt-field">
+                  <label>Horario de llegada</label>
+                  <input
+                    className="gt-input"
+                    value={f.horario}
+                    onChange={(e) => setField("horario", e.target.value)}
+                    disabled={saving}
+                    placeholder="Ej: 08:00"
+                  />
+                </div>
               </div>
             </div>
 
             <div className="ot-box">
               <div className="ot-box-title">Equipo</div>
+
               <div className="ot-grid-2">
-                <input
-                  className="gt-input"
-                  placeholder="Patente — ej: AB1234"
-                  value={f.camion}
-                  onChange={(e) => setField("camion", e.target.value)}
-                  disabled={saving}
-                />
-                <input
-                  className="gt-input"
-                  placeholder="Operador — ej: Juan Pérez"
-                  value={f.conductor}
-                  onChange={(e) => setField("conductor", e.target.value)}
-                  disabled={saving}
-                />
+                <div className="gt-field">
+                  <label>Patente</label>
+                  <input
+                    className="gt-input"
+                    value={f.camion}
+                    onChange={(e) => setField("camion", e.target.value)}
+                    disabled={saving}
+                    placeholder="Ej: AB1234"
+                  />
+                </div>
 
-                <input
-                  className="gt-input"
-                  placeholder="Rigger — ej: Augusto"
-                  value={f.rigger}
-                  onChange={(e) => setField("rigger", e.target.value)}
-                  disabled={saving}
-                />
+                <div className="gt-field">
+                  <label>Operador</label>
+                  <input
+                    className="gt-input"
+                    value={f.conductor}
+                    onChange={(e) => setField("conductor", e.target.value)}
+                    disabled={saving}
+                    placeholder="Ej: Juan Pérez"
+                  />
+                </div>
 
-                <div className="ot-span" style={{ marginTop: 2 }}>
+                <div className="gt-field">
+                  <label>Rigger</label>
+                  <input
+                    className="gt-input"
+                    value={f.rigger}
+                    onChange={(e) => setField("rigger", e.target.value)}
+                    disabled={saving}
+                    placeholder="Ej: Augusto"
+                  />
+                </div>
+
+                <div className="gt-field" style={{ gridColumn: "1 / -1" }}>
                   <MiniCalendarMulti
+                    label="Días programados"
                     valueISO={f.diasProgramados}
                     onChangeISO={(arr) => setField("diasProgramados", arr)}
                     disabled={saving}

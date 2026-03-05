@@ -329,6 +329,25 @@ export default function WorkOrdersTrabajador() {
 
   return (
     <div style={{ paddingBottom: 24 }}>
+      {/* ✅ FIX CSS local: Cliente en 2 líneas */}
+      <style>
+        {`
+          td.col-cliente{
+            white-space: normal !important;
+          }
+          .cliente-2l{
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.25;
+            max-height: calc(1.25em * 2);
+            word-break: break-word;
+          }
+        `}
+      </style>
+
       {/* ✅ Header */}
       <div
         style={{
@@ -523,7 +542,13 @@ export default function WorkOrdersTrabajador() {
                     {/* ✅ NUEVA COLUMNA OT */}
                     <td style={{ fontWeight: 900, whiteSpace: "nowrap" }}>{otCode(x.id)}</td>
 
-                    <td style={{ fontWeight: 900 }}>{x.cliente || "—"}</td>
+                    {/* ✅ CLIENTE en 2 líneas */}
+                    <td className="col-cliente" style={{ fontWeight: 900 }}>
+                      <div className="cliente-2l" title={x.cliente || ""}>
+                        {x.cliente || "—"}
+                      </div>
+                    </td>
+
                     <td style={{ fontWeight: 900 }}>{formatSolicitadoPor(x)}</td>
                     <td>{x.direccionFaena || x.lugar || x.direccion || "—"}</td>
                     <td>{timeAgo(x.createdAt)}</td>
