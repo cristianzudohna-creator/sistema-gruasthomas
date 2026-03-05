@@ -1,33 +1,10 @@
-// ✅ Archivo: src/pages/WorkOrderCompleteModal.jsx (COMPLETO + TEXT FIX GLOBAL)
-// ✅ Incluye:
-// 1) Detalle OT (solo lectura, visible para el trabajador)
-// 2) Firma cliente (canvas) -> workerReport.signature.dataUrl (solo en modo trabajador)
-// 3) Horas + movimientos editable
-// ✅ Ahora: KMs por tramo para que se vean en el PDF
-//
-// ✅ FIX ADMIN:
-// - Modo admin: NO se edita firma, NO se muestra "Empresa", NO dice "Enviar a administración"
-// - Admin guarda en /admin-report y NO cambia estado
-// - Admin preserva firma existente
-//
-// ✅ CAMBIO NUEVO (para PDF):
-// - Se quita "Teléfono cliente" del detalle (solo lectura)
-// - Se agrega "Recibí Conforme": Nombre + RUT (obligatorios en modo trabajador)
-// - Se guarda en workerReport.recibiConforme { nombre, rut }
-//
-// ✅ NUEVO (OBRA):
-// - Trabajador debe ingresar Hora inicio servicio en obra + Hora término servicio en obra
-// - Se guarda en workerReport.detalleHoras: { inicioServicioObra, terminoServicioObra }
-//
-// ✅ FIX NUEVO:
-// - Se muestra "Solicitado por" en Detalle OT (solo lectura)
-//
-// ✅ ESTÁNDAR GLOBAL (este commit):
-// - API_URL dinámico
-// - credentials: "include" en fetch
-//
-// ✅ TEXT FIX GLOBAL:
-// - fixText() en strings que vienen del backend para evitar mojibake
+// ✅ Archivo: src/pages/WorkOrderCompleteModal.jsx (COMPLETO + FIRMA BLOQUEABLE)
+// ✅ Cambio nuevo:
+// - Firma NO se puede dibujar por accidente mientras haces scroll.
+// - Firma viene BLOQUEADA por defecto.
+// - Botón "✍️ Habilitar firma" para que recién ahí el cliente firme.
+// - Overlay encima del canvas cuando está bloqueado (evita “rayas” accidentales).
+// - touchAction: "none" para que el canvas NO haga scroll/zoom mientras firmas.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -259,9 +236,16 @@ function LabeledTextarea({ label, placeholder, value, onChange, disabled, error,
 }
 
 /* =========================
-   ✅ Firma en Canvas (touch + mouse)
+   ✅ Firma en Canvas (BLOQUEABLE)
 ========================= */
-function SignaturePad({ value, onChange, disabled, helperText }) {
+function SignaturePad({
+  value,
+  onChange,
+  disabled,
+  helperText,
+  enabled,
+  onEnableChange,
+}) {
   const canvasRef = useRef(null);
   const drawingRef = useRef(false);
   const lastRef = useRef({ x: 0, y: 0 });
@@ -293,13 +277,14 @@ function SignaturePad({ value, onChange, disabled, helperText }) {
     ctx.lineJoin = "round";
     ctx.strokeStyle = "#111";
 
-    if (value || (old && old.length > 50)) {
+    const src = value || old;
+    if (src && src.length > 50) {
       const img = new Image();
       img.onload = () => {
         ctx.clearRect(0, 0, rect.width, rect.height);
         ctx.drawImage(img, 0, 0, rect.width, rect.height);
       };
-      img.src = value || old;
+      img.src = src;
     }
   }
 
@@ -312,6 +297,7 @@ function SignaturePad({ value, onChange, disabled, helperText }) {
   }, []);
 
   useEffect(() => {
+    // Si llega una firma existente, la dibujamos
     if (!value) return;
     const c = canvasRef.current;
     const ctx = getCtx();
@@ -339,14 +325,16 @@ function SignaturePad({ value, onChange, disabled, helperText }) {
   }
 
   function start(e) {
-    if (disabled) return;
+    // 🔒 si no está habilitada, no dibujamos
+    if (disabled || !enabled) return;
     drawingRef.current = true;
     const p = getPos(e);
     lastRef.current = p;
+    e.preventDefault?.();
   }
 
   function move(e) {
-    if (disabled) return;
+    if (disabled || !enabled) return;
     if (!drawingRef.current) return;
 
     const ctx = getCtx();
@@ -365,8 +353,8 @@ function SignaturePad({ value, onChange, disabled, helperText }) {
     e.preventDefault?.();
   }
 
-  function end() {
-    if (disabled) return;
+  function end(e) {
+    if (disabled || !enabled) return;
     if (!drawingRef.current) return;
     drawingRef.current = false;
 
@@ -374,6 +362,7 @@ function SignaturePad({ value, onChange, disabled, helperText }) {
     if (!c) return;
     const dataUrl = hasInkRef.current ? c.toDataURL("image/png") : "";
     onChange?.(dataUrl);
+    e?.preventDefault?.();
   }
 
   function clear() {
@@ -390,17 +379,32 @@ function SignaturePad({ value, onChange, disabled, helperText }) {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <div style={{ fontWeight: 900, opacity: 0.85 }}>
           Firma del cliente <span style={{ opacity: 0.65, fontWeight: 800 }}>(en tu celular)</span>
+          <div style={{ marginTop: 4, fontSize: 12, fontWeight: 900, opacity: 0.7 }}>
+            {enabled ? "✅ Firma habilitada" : "🔒 Firma bloqueada (habilita antes de firmar)"}
+          </div>
         </div>
 
-        <button className="gt-btn ghost" type="button" onClick={clear} disabled={disabled}>
-          Limpiar
-        </button>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button
+            className="gt-btn gt-btn-primary"
+            type="button"
+            onClick={() => onEnableChange?.(!enabled)}
+            disabled={disabled}
+            style={{ height: 40 }}
+          >
+            {enabled ? "Bloquear firma" : "✍️ Habilitar firma"}
+          </button>
+
+          <button className="gt-btn ghost" type="button" onClick={clear} disabled={disabled || !value}>
+            Limpiar
+          </button>
+        </div>
       </div>
 
-      <div style={{ height: 8 }} />
+      <div style={{ height: 10 }} />
 
       <div
         style={{
@@ -408,11 +412,44 @@ function SignaturePad({ value, onChange, disabled, helperText }) {
           borderRadius: 14,
           overflow: "hidden",
           background: "#fff",
+          position: "relative",
         }}
       >
+        {/* ✅ Overlay cuando está BLOQUEADA: evita rayas accidentales */}
+        {!enabled ? (
+          <div
+            onClick={() => !disabled && onEnableChange?.(true)}
+            role="button"
+            style={{
+              position: "absolute",
+              inset: 0,
+              zIndex: 5,
+              background: "rgba(255,255,255,0.72)",
+              display: "grid",
+              placeItems: "center",
+              padding: 12,
+              textAlign: "center",
+              cursor: disabled ? "not-allowed" : "pointer",
+            }}
+          >
+            <div style={{ fontWeight: 1000 }}>
+              🔒 Firma deshabilitada
+              <div style={{ marginTop: 6, fontWeight: 900, fontSize: 12, opacity: 0.75 }}>
+                Toca aquí para habilitar y que el cliente firme
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <canvas
           ref={canvasRef}
-          style={{ width: "100%", height: 180, display: "block", touchAction: "none" }}
+          style={{
+            width: "100%",
+            height: 180,
+            display: "block",
+            // 🔥 CLAVE móvil: evita scroll/zoom dentro del canvas mientras firmas
+            touchAction: "none",
+          }}
           onMouseDown={start}
           onMouseMove={move}
           onMouseUp={end}
@@ -424,7 +461,8 @@ function SignaturePad({ value, onChange, disabled, helperText }) {
       </div>
 
       <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75, fontWeight: 800 }}>
-        {helperText || "Pídele al cliente que firme dentro del recuadro. Luego presiona “Enviar a administración”."}
+        {helperText ||
+          "Habilita la firma, pídele al cliente que firme dentro del recuadro. Luego presiona “Enviar a administración”."}
       </div>
     </div>
   );
@@ -452,11 +490,13 @@ export default function WorkOrderCompleteModal({
   // firma (solo se edita en worker)
   const [signature, setSignature] = useState("");
 
+  // ✅ NUEVO: control de habilitación de firma
+  const [signatureEnabled, setSignatureEnabled] = useState(false);
+
   // ✅ NUEVO: Recibí Conforme (solo worker)
   const [recibi, setRecibi] = useState({ nombre: "", rut: "" });
   function setRecibiField(k, v) {
     setRecibi((p) => ({ ...p, [k]: v }));
-    // ✅ FIX: limpia las keys correctas del error
     if (k === "nombre") setErrors((prev) => ({ ...prev, recibiNombre: undefined }));
     if (k === "rut") setErrors((prev) => ({ ...prev, recibiRut: undefined }));
   }
@@ -465,7 +505,6 @@ export default function WorkOrderCompleteModal({
   const [f, setF] = useState({
     salidaPlanta: "",
     llegadaFaena: "",
-    // ✅ NUEVO OBRA
     inicioServicioObra: "",
     terminoServicioObra: "",
     salidaFaena: "",
@@ -492,6 +531,9 @@ export default function WorkOrderCompleteModal({
     setFormErr("");
     setErrors({});
 
+    // ✅ por defecto: firma bloqueada cada vez que abres
+    setSignatureEnabled(false);
+
     const rep = safeParseWorkerReport(workOrder?.workerReport);
     const dh = rep?.detalleHoras || {};
 
@@ -501,9 +543,10 @@ export default function WorkOrderCompleteModal({
     setF({
       salidaPlanta: normalizeText(dh?.salidaPlanta),
       llegadaFaena: normalizeText(dh?.llegadaFaena),
-      // ✅ NUEVO OBRA
+
       inicioServicioObra: normalizeText(dh?.inicioServicioObra),
       terminoServicioObra: normalizeText(dh?.terminoServicioObra),
+
       salidaFaena: normalizeText(dh?.salidaFaena),
       llegadaPlanta: normalizeText(dh?.llegadaPlanta),
       colacion: normalizeText(dh?.colacion),
@@ -517,7 +560,12 @@ export default function WorkOrderCompleteModal({
     });
 
     // firma existente
-    setSignature(normalizeText(rep?.signature?.dataUrl));
+    const sig = normalizeText(rep?.signature?.dataUrl);
+    setSignature(sig);
+
+    // ✅ si ya hay firma guardada, seguimos bloqueados igual (para evitar accidentes)
+    // (si quieres, podrías habilitar automáticamente, pero NO lo recomiendo)
+    // setSignatureEnabled(false);
 
     // ✅ recibí conforme existente
     const rc = rep?.recibiConforme || rep?.recibeConforme || {};
@@ -536,7 +584,6 @@ export default function WorkOrderCompleteModal({
     if (!normalizeText(f.llegadaFaena)) e.llegadaFaena = "Obligatorio";
     else if (!isValidHora(f.llegadaFaena)) e.llegadaFaena = "HH:MM";
 
-    // ✅ NUEVO OBRA (obligatorios)
     if (!normalizeText(f.inicioServicioObra)) e.inicioServicioObra = "Obligatorio";
     else if (!isValidHora(f.inicioServicioObra)) e.inicioServicioObra = "HH:MM";
 
@@ -554,11 +601,9 @@ export default function WorkOrderCompleteModal({
     if (!normalizeText(f.movimientos)) e.movimientos = "Obligatorio";
 
     if (!isAdmin) {
-      // ✅ recibí conforme obligatorio
       if (!normalizeText(recibi.nombre)) e.recibiNombre = "Obligatorio";
       if (!normalizeText(recibi.rut)) e.recibiRut = "Obligatorio";
 
-      // ✅ firma obligatoria
       const firmaOkLocal = !!normalizeText(signature) && String(signature).startsWith("data:image/");
       if (!firmaOkLocal) e.signature = "Falta firma";
     }
@@ -599,7 +644,6 @@ export default function WorkOrderCompleteModal({
           salidaPlanta: normalizeText(f.salidaPlanta),
           llegadaFaena: normalizeText(f.llegadaFaena),
 
-          // ✅ NUEVO OBRA
           inicioServicioObra: normalizeText(f.inicioServicioObra),
           terminoServicioObra: normalizeText(f.terminoServicioObra),
 
@@ -614,7 +658,6 @@ export default function WorkOrderCompleteModal({
           kmLlegadaPlanta: normalizeText(f.kmLlegadaPlanta) || null,
         },
 
-        // ✅ NUEVO: Recibí Conforme (solo worker)
         recibiConforme: isAdmin
           ? prev?.recibiConforme || prev?.recibeConforme || undefined
           : {
@@ -657,14 +700,10 @@ export default function WorkOrderCompleteModal({
     const lugar = normalizeText(workOrder?.direccionFaena || workOrder?.lugar || workOrder?.direccion);
 
     if (isAdmin) {
-      return fixText(
-        cliente ? `Corregir reporte • ${cliente}` : lugar ? `Corregir reporte • ${lugar}` : "Corregir reporte"
-      );
+      return fixText(cliente ? `Corregir reporte • ${cliente}` : lugar ? `Corregir reporte • ${lugar}` : "Corregir reporte");
     }
 
-    return fixText(
-      cliente ? `Completar OT • ${cliente}` : lugar ? `Completar OT • ${lugar}` : "Completar OT"
-    );
+    return fixText(cliente ? `Completar OT • ${cliente}` : lugar ? `Completar OT • ${lugar}` : "Completar OT");
   }, [workOrder, isAdmin]);
 
   const subtitle = isAdmin
@@ -678,7 +717,6 @@ export default function WorkOrderCompleteModal({
       rut: normalizeText(pick(d?.rut, d?.clienteRut)),
       giro: normalizeText(pick(d?.giro)),
 
-      // ✅ FIX: traer "Solicitado por" (con fallbacks típicos)
       solicitadoPor: normalizeText(
         pick(d?.solicitadoPor, d?.requestedBy, d?.requestedByName, d?.contactoSolicitante, d?.nombreSolicitante)
       ),
@@ -729,18 +767,11 @@ export default function WorkOrderCompleteModal({
             {formErr ? <div className="gt-error">{fixText(formErr)}</div> : null}
 
             <Box title="Detalle OT (solo lectura)">
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                  gap: 10,
-                }}
-              >
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
                 <FieldRO label="Cliente" value={ro.cliente} />
                 <FieldRO label="RUT" value={ro.rut} />
                 <FieldRO label="Giro" value={ro.giro} />
 
-                {/* ✅ NUEVO: solicitado por */}
                 <FieldRO label="Solicitado por" value={ro.solicitadoPor} />
 
                 <FieldRO label="Días de trabajo" value={ro.diasTrabajo} />
@@ -769,7 +800,16 @@ export default function WorkOrderCompleteModal({
                   >
                     <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 900 }}>Link Maps</div>
                     <div style={{ marginTop: 6, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                      <div style={{ minWidth: 0, fontWeight: 900, opacity: 0.85, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <div
+                        style={{
+                          minWidth: 0,
+                          fontWeight: 900,
+                          opacity: 0.85,
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
                         {ro.mapsLink ? "Google Maps" : "—"}
                       </div>
                       {ro.mapsLink ? (
@@ -819,7 +859,6 @@ export default function WorkOrderCompleteModal({
                   error={errors.llegadaFaena}
                 />
 
-                {/* ✅ NUEVO OBRA */}
                 <LabeledInput
                   label="Hora inicio servicio en obra"
                   placeholder="Ej: 21:10"
@@ -949,9 +988,15 @@ export default function WorkOrderCompleteModal({
 
                   <SignaturePad
                     value={signature}
-                    onChange={setSignature}
+                    onChange={(v) => {
+                      setSignature(v);
+                      // si ya se dibujó algo, limpiamos el error
+                      setErrors((prev) => ({ ...prev, signature: undefined }));
+                    }}
                     disabled={saving}
-                    helperText='Pídele al cliente que firme dentro del recuadro. Luego presiona “Enviar a administración”.'
+                    enabled={signatureEnabled}
+                    onEnableChange={setSignatureEnabled}
+                    helperText='Habilita la firma, pide al cliente que firme dentro del recuadro. Luego presiona “Enviar a administración”.'
                   />
 
                   <div style={{ marginTop: 10, fontSize: 12, fontWeight: 900, opacity: 0.75 }}>
