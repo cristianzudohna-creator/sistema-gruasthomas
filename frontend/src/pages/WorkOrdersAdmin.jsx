@@ -1,5 +1,6 @@
-// ✅ Archivo: src/pages/WorkOrdersAdmin.jsx
-import { useEffect, useMemo, useState } from "react";
+// ✅ Archivo: src/pages/WorkOrdersAdmin.jsx (COMPLETO)
+// ✅ NUEVO: Auto-refresh (polling) + refresh al volver a la pestaña
+import { useCallback, useEffect, useMemo, useState } from "react";
 import "./Admin.css";
 
 import CreateWorkOrderModal from "./CreateWorkOrderModal";
@@ -232,7 +233,7 @@ function shortOtId(id) {
   return `OT-${s.slice(0, 6).toUpperCase()}`;
 }
 
-// ✅ NUEVO: SIEMPRE 2 líneas + "..." + tooltip
+// ✅ CLIENTE: SIEMPRE 2 líneas + "..." + tooltip
 function TruncText2({ text, lines = 2, style }) {
   const t = String(text ?? "").trim();
   return (
@@ -265,12 +266,16 @@ export default function WorkOrdersAdmin() {
   const [status, setStatus] = useState("ALL");
   const [q, setQ] = useState("");
 
+  // ✅ NUEVO: auto refresh
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [refreshEvery, setRefreshEvery] = useState(15000); // 15s
+
   const statusOptions = useMemo(
     () => ["ALL", "ABIERTA", "EN_PROCESO", "COMPLETADA", "APROBADA", "RECHAZADA", "CERRADA"],
     []
   );
 
-  async function loadAll() {
+  const loadAll = useCallback(async () => {
     setLoading(true);
     setErr("");
     try {
@@ -287,12 +292,44 @@ export default function WorkOrdersAdmin() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [status, q]);
 
+  // ✅ carga inicial + cuando cambia el status (como lo tenías)
   useEffect(() => {
     loadAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]);
+  }, [status, loadAll]);
+
+  // ✅ NUEVO: Auto-refresh + refresh al volver a la pestaña
+  useEffect(() => {
+    if (!autoRefresh) return;
+
+    let timerId = null;
+
+    const tick = async () => {
+      // no gastamos recursos si no está visible
+      if (document.hidden) return;
+      // evita solapar llamadas
+      if (loading) return;
+      try {
+        await loadAll();
+      } catch {}
+    };
+
+    timerId = setInterval(tick, refreshEvery);
+
+    const onVis = () => {
+      if (!document.hidden) tick();
+    };
+
+    window.addEventListener("focus", onVis);
+    document.addEventListener("visibilitychange", onVis);
+
+    return () => {
+      if (timerId) clearInterval(timerId);
+      window.removeEventListener("focus", onVis);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [autoRefresh, refreshEvery, loadAll, loading]);
 
   async function downloadPdfById(id) {
     if (!id) return;
@@ -616,6 +653,46 @@ export default function WorkOrdersAdmin() {
               }}
             />
 
+            {/* ✅ NUEVO: Auto-refresh */}
+            <label
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                fontWeight: 900,
+                fontSize: 13,
+                opacity: 0.9,
+                padding: "0 10px",
+                height: 40,
+                borderRadius: 12,
+                border: "1px solid rgba(0,0,0,0.10)",
+                background: "#fff",
+              }}
+              title="Actualiza automáticamente (sin recargar la página)"
+            >
+              <input
+                type="checkbox"
+                checked={autoRefresh}
+                onChange={(e) => setAutoRefresh(e.target.checked)}
+              />
+              Auto
+            </label>
+
+            <select
+              className="gt-select"
+              value={refreshEvery}
+              onChange={(e) => setRefreshEvery(Number(e.target.value))}
+              style={{ height: 40, minWidth: 120 }}
+              disabled={!autoRefresh}
+              title="Cada cuánto refrescar"
+            >
+              <option value={5000}>5s</option>
+              <option value={10000}>10s</option>
+              <option value={15000}>15s</option>
+              <option value={30000}>30s</option>
+              <option value={60000}>60s</option>
+            </select>
+
             <button className="btn" type="button" onClick={loadAll} disabled={loading} style={{ height: 40, minWidth: 170 }}>
               {loading ? "Cargando..." : "Refrescar"}
             </button>
@@ -701,7 +778,6 @@ export default function WorkOrdersAdmin() {
                       </div>
                     </td>
 
-                    {/* ✅ CLIENTE: SIEMPRE 2 líneas (clamp) + tooltip */}
                     <td style={{ width: 420, maxWidth: 420 }}>
                       <TruncText2 text={cliente || "-"} lines={2} style={{ fontWeight: 900 }} />
                     </td>
@@ -784,7 +860,7 @@ export default function WorkOrdersAdmin() {
         </div>
 
         <div className="panel-foot">
-          <div className="muted">{loading ? "Cargando..." : "Listo"}</div>
+          <div className="muted">{loading ? "Cargando..." : autoRefresh ? "Auto ON" : "Listo"}</div>
           <div />
         </div>
       </div>
