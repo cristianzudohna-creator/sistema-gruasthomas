@@ -1,11 +1,18 @@
 // ✅ Archivo: src/clients/clients.service.ts (COMPLETO)
+// ✅ FIX:
+// - Roles robustos: role / rol / userRole / roles[]
+// - Empresa robusta: actor.empresa o DB
+// - list() ahora soporta filtro opcional por empresa
+// - SUPERADMIN / CONTROL_FLOTA pueden ver ambas o filtrar una
+// - ADMINISTRADORA solo su empresa
+//
 // ✅ Incluye Auditoría:
 // - CREATE cliente
 // - UPDATE cliente
 // - DELETE cliente
 //
 // ✅ Seguridad por empresa:
-// - SUPERADMIN / CONTROL_FLOTA => pueden ver/escribir ambas (elige empresa en body al crear)
+// - SUPERADMIN / CONTROL_FLOTA => pueden ver/escribir ambas
 // - ADMINISTRADORA => solo su empresa
 //
 // ✅ Validaciones:
@@ -23,8 +30,6 @@ import { PrismaService } from "../prisma/prisma.service";
 import { Empresa, AuditAction, AuditEntity } from "@prisma/client";
 import { CreateClientDto, EMPRESAS_VALIDAS } from "./dto/create-client.dto";
 import { UpdateClientDto } from "./dto/update-client.dto";
-
-// ✅ AUDIT
 import { AuditService } from "../audit/audit.service";
 
 function cleanStr(v: any): string | null {
@@ -32,12 +37,6 @@ function cleanStr(v: any): string | null {
   return s.length ? s : null;
 }
 
-/**
- * ✅ Normaliza RUT:
- * - quita puntos/espacios
- * - DV en mayúscula
- * - asegura guion: 12345678-K
- */
 function normalizeRut(rutRaw: any): string | null {
   const r = cleanStr(rutRaw);
   if (!r) return null;
@@ -45,6 +44,7 @@ function normalizeRut(rutRaw: any): string | null {
   const v = r.replace(/\./g, "").replace(/\s/g, "");
   const m = v.match(/^(\d{7,8})-?([\dkK])$/);
   if (!m) return cleanStr(rutRaw);
+
   const num = m[1];
   const dv = String(m[2]).toUpperCase();
   return `${num}-${dv}`;
@@ -65,10 +65,25 @@ export class ClientsService {
   ) {}
 
   // =========================
-  // ✅ ROLES / EMPRESA
+  // ✅ ROLES / EMPRESA ROBUSTOS
   // =========================
-  private roleUpper(actor: any) {
-    return String(actor?.role || "").toUpperCase();
+  private roleUpper(actor: any): string {
+    const direct =
+      actor?.role ||
+      actor?.rol ||
+      actor?.userRole ||
+      "";
+
+    if (typeof direct === "string" && direct.trim()) {
+      return direct.trim().toUpperCase();
+    }
+
+    const roles = actor?.roles || actor?.authorities || actor?.permissions;
+    if (Array.isArray(roles) && roles.length > 0) {
+      return String(roles[0]).trim().toUpperCase();
+    }
+
+    return "";
   }
 
   private isGlobalRole(actor: any) {
@@ -78,19 +93,37 @@ export class ClientsService {
 
   private isAdminRole(actor: any) {
     const r = this.roleUpper(actor);
-    return r === "SUPERADMIN" || r === "CONTROL_FLOTA" || r === "ADMINISTRADORA";
+    return (
+      r === "SUPERADMIN" ||
+      r === "CONTROL_FLOTA" ||
+      r === "ADMINISTRADORA"
+    );
+  }
+
+  private normalizeEmpresa(v: any): Empresa | null {
+    const s = cleanStr(v);
+    if (!s) return null;
+    const up = s.toUpperCase();
+    if (up === "GRUAS_THOMAS" || up === "INSPROTEL") return up as Empresa;
+    return null;
   }
 
   private async getEmpresaForActorOrThrow(actor: any): Promise<Empresa> {
-    const emp = actor?.empresa as Empresa | undefined | null;
-    if (emp) return emp;
+    const actorEmp =
+      this.normalizeEmpresa(actor?.empresa) ||
+      this.normalizeEmpresa(actor?.company) ||
+      this.normalizeEmpresa(actor?.companyName);
+
+    if (actorEmp) return actorEmp;
 
     if (actor?.id) {
       const user = await this.prisma.user.findUnique({
         where: { id: actor.id },
         select: { empresa: true },
       });
-      if (user?.empresa) return user.empresa as any;
+
+      const dbEmp = this.normalizeEmpresa(user?.empresa);
+      if (dbEmp) return dbEmp;
     }
 
     throw new ForbiddenException("No se pudo determinar la empresa del usuario.");
@@ -100,19 +133,16 @@ export class ClientsService {
     dtoEmpresaRaw: any,
     actor: any
   ): Promise<Empresa> {
-    // GLOBAL: puede elegir empresa en body
     if (this.isGlobalRole(actor)) {
-      const dtoEmp = cleanStr(dtoEmpresaRaw);
-      if (!dtoEmp)
+      const dtoEmp = this.normalizeEmpresa(dtoEmpresaRaw);
+      if (!dtoEmp) {
         throw new BadRequestException(
           "Falta empresa (GRUAS_THOMAS / INSPROTEL)."
         );
-      if (!EMPRESAS_VALIDAS.includes(dtoEmp as any))
-        throw new BadRequestException("Empresa inválida.");
-      return dtoEmp as any;
+      }
+      return dtoEmp;
     }
 
-    // ADMINISTRADORA: siempre su empresa
     return this.getEmpresaForActorOrThrow(actor);
   }
 
@@ -131,11 +161,14 @@ export class ClientsService {
         ciudad: true,
       },
     });
+
     if (!c) throw new NotFoundException("Cliente no encontrado");
 
     if (!this.isGlobalRole(actor)) {
       const emp = await this.getEmpresaForActorOrThrow(actor);
-      if (c.empresa !== emp) throw new NotFoundException("Cliente no encontrado");
+      if (c.empresa !== emp) {
+        throw new NotFoundException("Cliente no encontrado");
+      }
     }
 
     return c;
@@ -143,17 +176,30 @@ export class ClientsService {
 
   // =========================
   // ✅ LISTAR / BUSCAR
-  // GET /clients?search=fer&take=20
+  // GET /clients?search=fer&take=20&empresa=GRUAS_THOMAS
   // =========================
-  async list(actor: any, search?: string, take?: any) {
-    if (!this.isAdminRole(actor)) throw new ForbiddenException("No autorizado.");
+  async list(actor: any, search?: string, take?: any, empresa?: any) {
+    if (!this.isAdminRole(actor)) {
+      throw new ForbiddenException("No autorizado.");
+    }
 
     const q = cleanStr(search);
     const t = Math.min(Math.max(Number(take || 50), 1), 200);
+    const empresaQuery = this.normalizeEmpresa(empresa);
 
-    const whereEmpresa = this.isGlobalRole(actor)
-      ? {}
-      : { empresa: await this.getEmpresaForActorOrThrow(actor) };
+    let whereEmpresa: any = {};
+
+    if (this.isGlobalRole(actor)) {
+      // ✅ SUPERADMIN / CONTROL_FLOTA:
+      // pueden ver todas o filtrar una empresa específica
+      if (empresaQuery) {
+        whereEmpresa = { empresa: empresaQuery };
+      }
+    } else {
+      // ✅ ADMINISTRADORA: siempre solo su empresa
+      const emp = await this.getEmpresaForActorOrThrow(actor);
+      whereEmpresa = { empresa: emp };
+    }
 
     const items = await this.prisma.client.findMany({
       where: {
@@ -163,6 +209,10 @@ export class ClientsService {
               OR: [
                 { nombre: { contains: q, mode: "insensitive" } },
                 { rut: { contains: q } },
+                { giro: { contains: q, mode: "insensitive" } },
+                { direccion: { contains: q, mode: "insensitive" } },
+                { comuna: { contains: q, mode: "insensitive" } },
+                { ciudad: { contains: q, mode: "insensitive" } },
               ],
             }
           : {}),
@@ -192,7 +242,9 @@ export class ClientsService {
   // GET /clients/:id
   // =========================
   async getById(id: string, actor: any) {
-    if (!this.isAdminRole(actor)) throw new ForbiddenException("No autorizado.");
+    if (!this.isAdminRole(actor)) {
+      throw new ForbiddenException("No autorizado.");
+    }
     if (!id) throw new BadRequestException("Falta id");
 
     await this.ensureAccessOrThrow(id, actor);
@@ -220,10 +272,11 @@ export class ClientsService {
 
   // =========================
   // ✅ CREAR
-  // POST /clients
   // =========================
   async create(dto: CreateClientDto, actor: any) {
-    if (!this.isAdminRole(actor)) throw new ForbiddenException("No autorizado.");
+    if (!this.isAdminRole(actor)) {
+      throw new ForbiddenException("No autorizado.");
+    }
 
     const nombre = cleanStr(dto.nombre);
     if (!nombre) throw new BadRequestException("Nombre es obligatorio.");
@@ -231,27 +284,27 @@ export class ClientsService {
     const empresa = await this.resolveEmpresaForWrite((dto as any).empresa, actor);
     const rutNorm = normalizeRut((dto as any).rut);
 
-    // ✅ Evitar duplicado por RUT (si viene) dentro de la empresa
     if (rutNorm) {
       const existsRut = await this.prisma.client.findFirst({
         where: { empresa, rut: rutNorm },
         select: { id: true },
       });
-      if (existsRut)
+      if (existsRut) {
         throw new BadRequestException(
           "Ya existe un cliente con ese RUT en la empresa."
         );
+      }
     }
 
-    // ✅ Evitar duplicado exacto por nombre en empresa
     const existsName = await this.prisma.client.findFirst({
       where: { empresa, nombre: { equals: nombre, mode: "insensitive" } },
       select: { id: true },
     });
-    if (existsName)
+    if (existsName) {
       throw new BadRequestException(
         "Ya existe un cliente con ese nombre en la empresa."
       );
+    }
 
     const created = await this.prisma.client.create({
       data: {
@@ -279,10 +332,9 @@ export class ClientsService {
       },
     });
 
-    // ✅ AUDIT CREATE
     try {
       await this.audit.log({
-        entity: AuditEntity.CLIENT, // ⚠️ requiere agregar CLIENT en enum Prisma
+        entity: AuditEntity.CLIENT,
         entityId: created.id,
         action: AuditAction.CREATE,
         actor: safeActor(actor),
@@ -299,46 +351,44 @@ export class ClientsService {
 
   // =========================
   // ✅ EDITAR
-  // PATCH /clients/:id
   // =========================
   async update(id: string, dto: UpdateClientDto, actor: any) {
-    if (!this.isAdminRole(actor)) throw new ForbiddenException("No autorizado.");
+    if (!this.isAdminRole(actor)) {
+      throw new ForbiddenException("No autorizado.");
+    }
     if (!id) throw new BadRequestException("Falta id");
 
     const before = await this.ensureAccessOrThrow(id, actor);
 
     const nombre = dto.nombre !== undefined ? cleanStr(dto.nombre) : undefined;
-    if (dto.nombre !== undefined && !nombre)
+    if (dto.nombre !== undefined && !nombre) {
       throw new BadRequestException("Nombre no puede venir vacío.");
+    }
 
-    // ✅ empresa solo si es global
     let empresaToSet: Empresa | undefined = undefined;
     if (this.isGlobalRole(actor) && (dto as any).empresa !== undefined) {
-      const empRaw = cleanStr((dto as any).empresa);
-      if (!empRaw) throw new BadRequestException("Empresa no puede venir vacía.");
-      if (!EMPRESAS_VALIDAS.includes(empRaw as any))
-        throw new BadRequestException("Empresa inválida.");
-      empresaToSet = empRaw as any;
+      const emp = this.normalizeEmpresa((dto as any).empresa);
+      if (!emp) throw new BadRequestException("Empresa inválida.");
+      empresaToSet = emp;
     }
 
     const rutNorm =
       dto.rut !== undefined ? normalizeRut((dto as any).rut) : undefined;
 
-    const empresaFinal = empresaToSet || (before.empresa as any);
+    const empresaFinal = empresaToSet || (before.empresa as Empresa);
 
-    // ✅ Si cambia RUT: validar duplicado
     if (dto.rut !== undefined && rutNorm) {
       const existsRut = await this.prisma.client.findFirst({
         where: { empresa: empresaFinal, rut: rutNorm, NOT: { id } },
         select: { id: true },
       });
-      if (existsRut)
+      if (existsRut) {
         throw new BadRequestException(
           "Ya existe otro cliente con ese RUT en la empresa."
         );
+      }
     }
 
-    // ✅ Si cambia nombre: validar duplicado
     if (dto.nombre !== undefined && nombre) {
       const existsName = await this.prisma.client.findFirst({
         where: {
@@ -348,10 +398,11 @@ export class ClientsService {
         },
         select: { id: true },
       });
-      if (existsName)
+      if (existsName) {
         throw new BadRequestException(
           "Ya existe otro cliente con ese nombre en la empresa."
         );
+      }
     }
 
     const after = await this.prisma.client.update({
@@ -391,10 +442,9 @@ export class ClientsService {
       },
     });
 
-    // ✅ AUDIT UPDATE
     try {
       await this.audit.log({
-        entity: AuditEntity.CLIENT, // ⚠️ requiere agregar CLIENT en enum Prisma
+        entity: AuditEntity.CLIENT,
         entityId: after.id,
         action: AuditAction.UPDATE,
         actor: safeActor(actor),
@@ -411,23 +461,21 @@ export class ClientsService {
   }
 
   // =========================
-  // ✅ ELIMINAR (DELETE REAL)
-  // DELETE /clients/:id
+  // ✅ ELIMINAR
   // =========================
   async remove(id: string, actor: any) {
-    if (!this.isAdminRole(actor)) throw new ForbiddenException("No autorizado.");
+    if (!this.isAdminRole(actor)) {
+      throw new ForbiddenException("No autorizado.");
+    }
     if (!id) throw new BadRequestException("Falta id");
 
     const before = await this.ensureAccessOrThrow(id, actor);
 
-    // ✅ OJO: si WorkOrder referencia clientId, esto puede fallar por FK.
-    // Si te pasa, lo cambiamos a soft delete (agregando "activo" en Client).
     await this.prisma.client.delete({ where: { id } });
 
-    // ✅ AUDIT DELETE
     try {
       await this.audit.log({
-        entity: AuditEntity.CLIENT, // ⚠️ requiere agregar CLIENT en enum Prisma
+        entity: AuditEntity.CLIENT,
         entityId: id,
         action: AuditAction.DELETE,
         actor: safeActor(actor),

@@ -59,7 +59,8 @@ export class ClientsController {
     @Req() req: any,
     @Query("search") search?: string,
     @Query("take") take?: string,
-    @Query("limit") limit?: string
+    @Query("limit") limit?: string,
+    @Query("empresa") empresa?: string
   ) {
     const role = this.getRole(req);
     if (!this.isAdmin(role)) {
@@ -69,7 +70,8 @@ export class ClientsController {
     // ✅ compat: frontend puede mandar take o limit
     const finalTake = take ?? limit;
 
-    return this.service.list(req.user, search, finalTake);
+    // ✅ FIX: pasar empresa al service
+    return this.service.list(req.user, search, finalTake, empresa);
   }
 
   @Get(":id")
@@ -119,4 +121,3 @@ export class ClientsController {
     return this.service.remove(id, req.user);
   }
 }
-
