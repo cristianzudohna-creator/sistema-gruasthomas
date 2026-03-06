@@ -1,34 +1,31 @@
-// ✅ Archivo: src/pages/WorkOrderDetailModal.jsx (COMPLETO + TEXT FIX GLOBAL)
+// ✅ Archivo: src/pages/WorkOrderDetailModal.jsx (COMPLETO + REORDEN CLIENTE/FAENA)
 // ✅ FIX:
 // 1) Texto de banner COMpletada más correcto para admin/superadmin
 // 2) Quita “Empresa” del subtitle y chips (no es dato del cliente en este modal)
 // 3) Muestra KMs por tramo (kmSalidaPlanta, kmLlegadaFaena, kmSalidaFaena, kmLlegadaPlanta, kmColacion)
 //    + compatibilidad legacy (kmSalida/kmLlegada)
 // ✅ CAMBIO:
-// - “Creada por” -> “Solicitado por” (CONTACTO DEL CLIENTE / quien solicitó)
-// - Se agregan fallbacks extra por si el backend lo manda como solicitadoPor / requestedBy
+// - “Creada por” -> “Solicitado por”
 // ✅ NUEVO (fechas):
-// - Si viene data.diasProgramados (["2026-02-19", ...]) se muestra como fechas (Jue 19-02-2026 | ...)
-// - Si NO viene, se mantiene como antes (LUN, MAR, ...)
+// - Si viene data.diasProgramados se muestra como fechas
 // ✅ NUEVO (OBRA):
-// - Muestra inicioServicioObra + terminoServicioObra desde workerReport.detalleHoras
+// - Muestra inicioServicioObra + terminoServicioObra
 // ✅ TEXT FIX:
-// - fixText() en strings que vienen del backend para evitar mojibake
+// - fixText() en strings del backend
+// ✅ REORDEN:
+// - Información del cliente: Cliente, RUT, Giro, Solicitado por, Dirección cliente, Comuna, Ciudad
+// - Información de la faena: Días programados, Horario llegada, Dirección de la faena, Link Maps
 
 import { useEffect, useState } from "react";
 import Modal from "../components/ui/Modal";
 import { fixText } from "../utils/fixText";
 
-// ✅ API dinámico (igual al estándar que estamos dejando)
 const baseFromEnv = (import.meta?.env?.VITE_API_URL || "").trim();
 const baseFromHost =
   typeof window !== "undefined"
     ? `${window.location.protocol}//${window.location.host}/api`
     : "";
 const API_URL = (baseFromEnv || "/api").replace(/\/+$/, "");
-
-// ⚠️ Si tu backend NO usa /api en prod, cambia a:
-// const baseFromHost = `${window.location.protocol}//${window.location.host}`;
 
 function getToken() {
   return localStorage.getItem("access_token") || "";
@@ -61,7 +58,7 @@ async function apiPatch(path, body) {
       "Content-Type": "application/json",
       Authorization: `Bearer ${getToken()}`,
     },
-    credentials: "include", // ✅ ESTÁNDAR
+    credentials: "include",
     body: JSON.stringify(body || {}),
   });
 
@@ -93,17 +90,12 @@ function pick(...vals) {
 }
 
 function normalizeText(s) {
-  // ✅ TEXT FIX global
   return fixText(String(s || "")).trim();
 }
 
 function Field({ label, value, right, valueContainerStyle }) {
-  // ✅ label también puede venir desde backend en algunos casos
   const cleanLabel = fixText(String(label ?? ""));
-
-  // ✅ si value es string, lo arreglamos
-  const cleanValue =
-    typeof value === "string" ? fixText(value) : value;
+  const cleanValue = typeof value === "string" ? fixText(value) : value;
 
   const isEmpty =
     cleanValue === null ||
@@ -263,9 +255,6 @@ function mapsPrettyLabel(url) {
   }
 }
 
-/* =========================
-   ✅ Helpers fechas (diasProgramados)
-========================= */
 function isValidISODate(s) {
   const v = String(s || "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
@@ -287,8 +276,8 @@ const WEEKDAYS_SHORT = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 function dowLabelFromISO(iso) {
   if (!isValidISODate(iso)) return "";
   const d = new Date(iso + "T00:00:00");
-  const jsDow = d.getDay(); // 0..6
-  const idx = jsDow === 0 ? 6 : jsDow - 1; // Lun..Dom
+  const jsDow = d.getDay();
+  const idx = jsDow === 0 ? 6 : jsDow - 1;
   return WEEKDAYS_SHORT[idx] || "";
 }
 
@@ -379,7 +368,6 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
   const conductor = normalizeText(pick(data?.conductor));
   const rigger = normalizeText(pick(data?.rigger));
 
-  // ✅ días: prioriza fechas si existen
   const diasProgramadosArr = Array.isArray(data?.diasProgramados) ? data.diasProgramados : [];
   const diasProgramadosTxt = diasProgramadosPretty(diasProgramadosArr);
 
@@ -389,7 +377,6 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
   const diasLabel = diasProgramadosTxt ? "Días programados" : "Días de trabajo";
   const diasValue = diasProgramadosTxt || diasTrabajoTxt;
 
-  // ✅ “Solicitado por”
   const solicitadoPor =
     normalizeText(
       pick(
@@ -425,7 +412,6 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
         )
       : "";
 
-  // ✅ SUBTITLE sin “Empresa”
   const subtitle = data
     ? fixText(`Creada: ${fmtDate(data?.createdAt)} • Estado: ${statusLabel(status)}`)
     : "Detalle de orden";
@@ -448,14 +434,12 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
       : "";
 
   const comentarioFinal = normalizeText(pick(data?.comentarioFinal));
-
   const stUp = String(status || "").toUpperCase();
   const isCompletedLike = ["COMPLETADA", "APROBADA", "CERRADA", "RECHAZADA"].includes(stUp);
 
   const photos = Array.isArray(data?.photos) ? data.photos : [];
 
   const [photoViewer, setPhotoViewer] = useState({ open: false, src: "" });
-
   const [signatureViewer, setSignatureViewer] = useState({ open: false, src: "" });
   const signatureDataUrl = normalizeText(workerReport?.signature?.dataUrl);
 
@@ -478,7 +462,6 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
   const [adminF, setAdminF] = useState({
     salidaPlanta: "",
     llegadaFaena: "",
-    // ✅ NUEVO OBRA
     inicioServicioObra: "",
     terminoServicioObra: "",
     salidaFaena: "",
@@ -513,20 +496,15 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
     setAdminF({
       salidaPlanta: normalizeText(dh?.salidaPlanta),
       llegadaFaena: normalizeText(dh?.llegadaFaena),
-
-      // ✅ NUEVO OBRA
       inicioServicioObra: normalizeText(dh?.inicioServicioObra),
       terminoServicioObra: normalizeText(dh?.terminoServicioObra),
-
       salidaFaena: normalizeText(dh?.salidaFaena),
       llegadaPlanta: normalizeText(dh?.llegadaPlanta),
       colacion: normalizeText(dh?.colacion),
-
       kmSalidaPlanta: normalizeText(dh?.kmSalidaPlanta) || legacyKmSalida,
       kmLlegadaFaena: normalizeText(dh?.kmLlegadaFaena),
       kmSalidaFaena: normalizeText(dh?.kmSalidaFaena),
       kmLlegadaPlanta: normalizeText(dh?.kmLlegadaPlanta) || legacyKmLlegada,
-
       movimientos: normalizeText(rep?.movimientos),
       comentarioFinal: normalizeText(data?.comentarioFinal),
     });
@@ -573,24 +551,18 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
         detalleHoras: {
           salidaPlanta: normalizeText(adminF.salidaPlanta) || null,
           llegadaFaena: normalizeText(adminF.llegadaFaena) || null,
-
-          // ✅ NUEVO OBRA
           inicioServicioObra: normalizeText(adminF.inicioServicioObra) || null,
           terminoServicioObra: normalizeText(adminF.terminoServicioObra) || null,
-
           salidaFaena: normalizeText(adminF.salidaFaena) || null,
           llegadaPlanta: normalizeText(adminF.llegadaPlanta) || null,
           colacion: normalizeText(adminF.colacion) || null,
-
           kmSalidaPlanta: normalizeText(adminF.kmSalidaPlanta) || null,
           kmLlegadaFaena: normalizeText(adminF.kmLlegadaFaena) || null,
           kmSalidaFaena: normalizeText(adminF.kmSalidaFaena) || null,
           kmLlegadaPlanta: normalizeText(adminF.kmLlegadaPlanta) || null,
         },
         movimientos: normalizeText(adminF.movimientos),
-        // ✅ mantener firma si existía
         signature: workerReport?.signature || undefined,
-        // ✅ mantener recibí conforme si existía
         recibiConforme: workerReport?.recibiConforme || workerReport?.recibeConforme || undefined,
       };
 
@@ -649,13 +621,10 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
     "—"
   );
 
-  // ✅ KMs (nuevo + legacy)
   const kmSalidaPlanta = normalizeText(pick(detalleHoras?.kmSalidaPlanta, detalleHoras?.kmSalida));
   const kmLlegadaFaena = normalizeText(pick(detalleHoras?.kmLlegadaFaena));
   const kmSalidaFaena = normalizeText(pick(detalleHoras?.kmSalidaFaena));
   const kmLlegadaPlanta = normalizeText(pick(detalleHoras?.kmLlegadaPlanta, detalleHoras?.kmLlegada));
-
-  // ✅ NUEVO OBRA
   const inicioServicioObra = normalizeText(pick(detalleHoras?.inicioServicioObra));
   const terminoServicioObra = normalizeText(pick(detalleHoras?.terminoServicioObra));
 
@@ -682,13 +651,11 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
         <div style={{ padding: 14, opacity: 0.75 }}>Sin datos.</div>
       ) : (
         <>
-          {/* ✅ chips sin Empresa */}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
             <Badge tone={statusTone(status)}>{statusLabel(status)}</Badge>
             <Badge>{`Creada: ${fmtDate(data?.createdAt)}`}</Badge>
           </div>
 
-          {/* ✅ banner COMpletada: texto correcto para admin */}
           {stUp === "COMPLETADA" ? (
             <div
               style={{
@@ -745,60 +712,63 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
             </div>
           ) : null}
 
-          {/* ===== TOP ===== */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-              gap: 10,
-              marginBottom: 12,
-            }}
-          >
-            <Field label="Cliente" value={cliente} />
-            <Field label="RUT" value={rut} />
-            <Field label="Giro" value={giro} />
+          {/* ===== INFORMACIÓN DEL CLIENTE ===== */}
+          <Section title="Información del cliente">
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                gap: 10,
+              }}
+            >
+              <Field label="Cliente" value={cliente} />
+              <Field label="RUT" value={rut} />
+              <Field label="Giro" value={giro} />
 
-            <Field label="Solicitado por" value={solicitadoPor} />
-            <Field label={diasLabel} value={diasValue} />
+              <Field label="Solicitado por" value={solicitadoPor} />
+              <Field label="Dirección (cliente)" value={direccionCliente} />
+              <Field label="Comuna" value={comuna} />
 
-            <Field
-              label="Horario llegada"
-              value={horario}
-              right={
-                isCompletedLike ? (
-                  <span
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 900,
-                      padding: "3px 10px",
-                      borderRadius: 999,
-                      border: "1px solid rgba(34,197,94,.35)",
-                      background: "rgba(34,197,94,.12)",
-                    }}
-                  >
-                    ✅ Reporte existe
-                  </span>
-                ) : null
-              }
-            />
-          </div>
+              <Field label="Ciudad" value={ciudad} />
+            </div>
+          </Section>
 
-          {/* ===== UBICACIÓN ===== */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-              gap: 10,
-              marginBottom: 12,
-            }}
-          >
-            <Field label="Dirección de la faena" value={pick(direccionFaena, lugar)} />
-            <Field label="Link Maps" value={mapsValue} valueContainerStyle={{ marginTop: 8 }} />
+          {/* ===== INFORMACIÓN DE LA FAENA ===== */}
+          <Section title="Información de la faena">
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: 10,
+              }}
+            >
+              <Field label={diasLabel} value={diasValue} />
 
-            <Field label="Dirección (cliente)" value={direccionCliente} />
-            <Field label="Comuna" value={comuna} />
-            <Field label="Ciudad" value={ciudad} />
-          </div>
+              <Field
+                label="Horario llegada"
+                value={horario}
+                right={
+                  isCompletedLike ? (
+                    <span
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 900,
+                        padding: "3px 10px",
+                        borderRadius: 999,
+                        border: "1px solid rgba(34,197,94,.35)",
+                        background: "rgba(34,197,94,.12)",
+                      }}
+                    >
+                      ✅ Reporte existe
+                    </span>
+                  ) : null
+                }
+              />
+
+              <Field label="Dirección de la faena" value={pick(direccionFaena, lugar)} />
+              <Field label="Link Maps" value={mapsValue} valueContainerStyle={{ marginTop: 8 }} />
+            </div>
+          </Section>
 
           {/* ===== EQUIPO ===== */}
           <div
@@ -806,6 +776,7 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
               display: "grid",
               gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
               gap: 10,
+              marginTop: 12,
               marginBottom: 12,
             }}
           >
@@ -814,7 +785,6 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
             <Field label="Rigger" value={rigger} />
           </div>
 
-          {/* ✅ FOTOS */}
           <Section title={`Fotos${photos.length ? ` (${photos.length})` : ""}`}>
             {photos.length > 0 ? (
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -853,7 +823,6 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
             )}
           </Section>
 
-          {/* ===== NOTA ===== */}
           <Section title="Descripción / Nota">
             <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
               {nota ? nota : "—"}
@@ -865,7 +834,6 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
             ) : null}
           </Section>
 
-          {/* ===== REPORTE ===== */}
           {workerReport ? (
             <Section
               title="Reporte del trabajador (completado)"
@@ -1004,14 +972,11 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
                 <Field label="Salida planta" value={normalizeText(pick(detalleHoras?.salidaPlanta))} />
                 <Field label="Llegada faena" value={normalizeText(pick(detalleHoras?.llegadaFaena))} />
-
                 <Field label="Inicio servicio en obra" value={inicioServicioObra} />
                 <Field label="Término servicio en obra" value={terminoServicioObra} />
-
                 <Field label="Salida faena" value={normalizeText(pick(detalleHoras?.salidaFaena))} />
                 <Field label="Llegada planta" value={normalizeText(pick(detalleHoras?.llegadaPlanta))} />
                 <Field label="Colación" value={normalizeText(pick(detalleHoras?.colacion))} />
-
                 <Field label="Km salida planta" value={kmSalidaPlanta} />
                 <Field label="Km llegada faena" value={kmLlegadaFaena} />
                 <Field label="Km salida faena" value={kmSalidaFaena} />
@@ -1105,7 +1070,6 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
             </Section>
           )}
 
-          {/* ✅ VISOR FOTO */}
           {photoViewer.open ? (
             <div
               onClick={() => setPhotoViewer({ open: false, src: "" })}
@@ -1166,7 +1130,6 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
             </div>
           ) : null}
 
-          {/* ✅ VISOR FIRMA */}
           {signatureViewer.open ? (
             <div
               onClick={() => setSignatureViewer({ open: false, src: "" })}
@@ -1232,7 +1195,6 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
     </Modal>
   );
 }
-
 
 
 

@@ -1856,16 +1856,16 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
         description={<Resumen f={f} photosCount={photos.length} />}
       />
 
-      <Modal open={successOpen} onClose={handleClose} title="✅ OT creada">
-        <div style={{ padding: 6 }}>
-          <div style={{ fontWeight: 900, marginBottom: 12 }}>
-            Se creó correctamente{photos.length ? " (con fotos)." : "."}
-          </div>
-          <button className="gt-btn gt-btn-primary" type="button" onClick={handleClose}>
-            Cerrar
-          </button>
-        </div>
-      </Modal>
+      <Modal open={successOpen} onClose={handleClose} title="✅ Onder de trabajo creada">
+  <div style={{ padding: 6 }}>
+    <div style={{ fontWeight: 900, marginBottom: 12 }}>
+      Se creó correctamente la programación de orden de trabajo.
+    </div>
+    <button className="gt-btn gt-btn-primary" type="button" onClick={handleClose}>
+      Cerrar
+    </button>
+  </div>
+</Modal>
     </>
   );
 }
