@@ -1,5 +1,5 @@
 // ✅ Archivo: frontend/src/pages/CreateWorkOrderModal.jsx (COMPLETO)
-// ✅ SUPERADMIN FIX (NUEVO):
+// ✅ SUPERADMIN FIX:
 // - Superadmin ve operadores/riggers de INSPROTEL + GRUAS_THOMAS SIN elegir empresa
 // - Se detecta SUPERADMIN desde el JWT (access_token) para NO depender de /company/me
 // - Para roles normales (ADMINISTRADORA / CONTROL_FLOTA / etc.) sigue filtrando por empresa como antes
@@ -15,13 +15,16 @@
 // ✅ FIX UI: dropdown de WorkerAutocomplete (Operador/Rigger) se renderiza FIXED
 //    para que NO se vea “muy abajo” dentro del modal con scroll.
 //
-// ✅ FIX PATENTES: VehicleAutocomplete ahora usa apiGet (/vehicles) con Authorization
-//    (evita 403 "No tienes permisos" por llamadas sin token).
+// ✅ FIX PATENTES: VehicleAutocomplete usa apiGet (/vehicles) con Authorization
 //
-// ✅ FIX GRAVE (NUEVO): NO se cierra el dropdown al usar la barra de scroll
-// - Se elimina cierre por onBlur (causa cierre al clickear scrollbar)
+// ✅ FIX GRAVE:
+// - NO se cierra el dropdown al usar la barra de scroll
+// - Se elimina cierre por onBlur
 // - Se usa pointerdown CAPTURE + composedPath para detectar click “afuera” real
-// - Se evita cerrar al scrollear DENTRO del dropdown
+//
+// ✅ FIX NUEVO:
+// - Cliente y Patente YA NO se cierran al escribir
+// - Se eliminó el auto-cierre por scroll en esos dos autocompletes
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -185,15 +188,15 @@ function fmtDDMMYYYYFromISO(iso) {
 function dowLabelFromISO(iso) {
   if (!isValidISODate(iso)) return "";
   const d = new Date(iso + "T00:00:00");
-  const jsDow = d.getDay(); // 0..6
-  const idx = jsDow === 0 ? 6 : jsDow - 1; // Lun..Dom
+  const jsDow = d.getDay();
+  const idx = jsDow === 0 ? 6 : jsDow - 1;
   return WEEKDAYS_SHORT[idx] || "";
 }
 
 function codeFromISO(iso) {
   if (!isValidISODate(iso)) return null;
   const d = new Date(iso + "T00:00:00");
-  return DOW_CODE[d.getDay()] || null; // DOM/LUN/...
+  return DOW_CODE[d.getDay()] || null;
 }
 
 function uniqueSortedISO(arr) {
@@ -373,7 +376,6 @@ function monthNameEs(year, month0) {
   return `${names[month0] || "Mes"} ${year}`;
 }
 
-// Convierte JS getDay (0 dom..6 sab) a index lun..dom (0..6)
 function jsDowToMonIndex(jsDow) {
   return jsDow === 0 ? 6 : jsDow - 1;
 }
@@ -581,7 +583,6 @@ function MiniCalendarMulti({ valueISO, onChangeISO, disabled, error }) {
 
 /* =========================
    Autocomplete (clientes)
-   ✅ FIX scroll: no se cierra al usar la barra de scroll del dropdown
 ========================= */
 function ClientAutocomplete({
   label,
@@ -593,7 +594,6 @@ function ClientAutocomplete({
   error,
   empresa,
 }) {
-  const wrapRef = useRef(null);
   const inputRef = useRef(null);
   const dropdownRef = useRef(null);
 
@@ -616,15 +616,15 @@ function ClientAutocomplete({
     try {
       const qs = new URLSearchParams();
       qs.set("search", query);
+      qs.set("limit", "8");
 
       const emp = normalizeText(empresa).toUpperCase();
       if (emp) qs.set("empresa", emp);
 
       const data = await apiGet(`/clients?${qs.toString()}`);
-
       const arr = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
-      setItems(arr);
 
+      setItems(arr);
       if (arr.length === 0) setTip("No se encontró ningún cliente.");
     } catch (e) {
       setItems([]);
@@ -655,7 +655,6 @@ function ClientAutocomplete({
     if (e.key === "Escape") setOpen(false);
   }
 
-  // ✅ FIX DEFINITIVO: cerrar solo por pointerdown REAL afuera (scrollbar safe)
   useEffect(() => {
     function onDocPointerDown(ev) {
       if (!open) return;
@@ -672,21 +671,8 @@ function ClientAutocomplete({
       setOpen(false);
     }
 
-    document.addEventListener("pointerdown", onDocPointerDown, true); // capture
+    document.addEventListener("pointerdown", onDocPointerDown, true);
     return () => document.removeEventListener("pointerdown", onDocPointerDown, true);
-  }, [open]);
-
-  // ✅ opcional: si scrolleas el modal, cerrar (pero NO si el scroll fue dentro del dropdown)
-  useEffect(() => {
-    if (!open) return;
-    const onScroll = (ev) => {
-      const t = ev?.target;
-      if (dropdownRef.current && t && dropdownRef.current.contains(t)) return;
-      if (inputRef.current && t && inputRef.current.contains(t)) return;
-      setOpen(false);
-    };
-    window.addEventListener("scroll", onScroll, true);
-    return () => window.removeEventListener("scroll", onScroll, true);
   }, [open]);
 
   useEffect(() => {
@@ -700,7 +686,7 @@ function ClientAutocomplete({
   }, [open, empresa]);
 
   return (
-    <div ref={wrapRef} style={{ position: "relative" }}>
+    <div style={{ position: "relative" }}>
       <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.75, marginBottom: 6 }}>
         {label}
         {error ? <span style={{ color: "#dc2626" }}> • {error}</span> : null}
@@ -715,7 +701,6 @@ function ClientAutocomplete({
         disabled={disabled}
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
-        // ✅ NO cerrar por blur (bug scrollbar)
         onBlur={() => {}}
         style={error ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220, 38, 38, .15)" } : undefined}
       />
@@ -790,9 +775,7 @@ function ClientAutocomplete({
 }
 
 /* =========================
-   Autocomplete (trabajadores) ✅ FIX dropdown no queda abajo
-   ✅ SUPERADMIN: puede ver INSPROTEL + GRUAS_THOMAS (sin empresa en query)
-   ✅ FIX scroll: no se cierra al usar scrollbar del dropdown
+   Autocomplete (trabajadores)
 ========================= */
 function WorkerAutocomplete({
   label,
@@ -806,7 +789,6 @@ function WorkerAutocomplete({
   workerType,
   allowSuperadminBoth = false,
 }) {
-  const wrapRef = useRef(null);
   const inputRef = useRef(null);
   const dropdownRef = useRef(null);
 
@@ -816,7 +798,6 @@ function WorkerAutocomplete({
   const [tip, setTip] = useState("");
   const debounceRef = useRef(null);
 
-  // ✅ posición FIXED para que no se “vaya abajo” con el scroll del modal
   const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
 
   function updatePos() {
@@ -859,7 +840,6 @@ function WorkerAutocomplete({
     try {
       const qs = new URLSearchParams();
 
-      // ✅ SOLO SI NO es superadmin, mandamos empresa
       if (empresa && !allowSuperadminBoth) qs.set("empresa", String(empresa).toUpperCase());
 
       qs.set("activo", "true");
@@ -871,7 +851,6 @@ function WorkerAutocomplete({
       const data = await apiGet(`/users?${qs.toString()}`);
       let list = data?.items || [];
 
-      // ✅ SUPERADMIN: filtrar en frontend SOLO a estas 2 empresas
       if (allowSuperadminBoth) {
         list = list.filter((u) => {
           const emp = String(u?.empresa || "").toUpperCase();
@@ -911,7 +890,6 @@ function WorkerAutocomplete({
   }
 
   function pick(u) {
-    // ✅ solo bloquea cross-empresa cuando NO es superadmin
     if (!allowSuperadminBoth) {
       const uEmp = String(u?.empresa || "").toUpperCase();
       const fEmp = String(empresa || "").toUpperCase();
@@ -933,7 +911,6 @@ function WorkerAutocomplete({
     if (e.key === "Escape") setOpen(false);
   }
 
-  // ✅ FIX DEFINITIVO: cerrar solo por pointerdown REAL afuera (scrollbar safe)
   useEffect(() => {
     function onDocPointerDown(ev) {
       if (!open) return;
@@ -966,7 +943,7 @@ function WorkerAutocomplete({
   }, [open, empresa, allowSuperadminBoth]);
 
   return (
-    <div ref={wrapRef} style={{ position: "relative" }}>
+    <div style={{ position: "relative" }}>
       <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.75, marginBottom: 6 }}>
         {label}
         {error ? <span style={{ color: "#dc2626" }}> • {error}</span> : null}
@@ -984,12 +961,10 @@ function WorkerAutocomplete({
           setTimeout(updatePos, 0);
         }}
         onKeyDown={onKeyDown}
-        // ✅ NO cerrar por blur (bug scrollbar)
         onBlur={() => {}}
         style={error ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220, 38, 38, .15)" } : undefined}
       />
 
-      {/* ✅ Dropdown FIXED */}
       {open ? (
         <div
           ref={dropdownRef}
@@ -1059,8 +1034,7 @@ function WorkerAutocomplete({
 }
 
 /* =========================
-   Autocomplete (vehículos / patentes) ✅ FIX: usa apiGet con token
-   ✅ FIX scroll: no se cierra al usar scrollbar del dropdown
+   Autocomplete (vehículos / patentes)
 ========================= */
 function VehicleAutocomplete({
   label,
@@ -1072,7 +1046,6 @@ function VehicleAutocomplete({
   error,
   empresa,
 }) {
-  const wrapRef = useRef(null);
   const inputRef = useRef(null);
   const dropdownRef = useRef(null);
 
@@ -1094,7 +1067,6 @@ function VehicleAutocomplete({
     setTip("");
     try {
       const qs = new URLSearchParams();
-      // ✅ mandamos ambos nombres por si tu backend usa "q" o "search"
       qs.set("q", query);
       qs.set("search", query);
       qs.set("limit", "8");
@@ -1137,7 +1109,6 @@ function VehicleAutocomplete({
     if (e.key === "Escape") setOpen(false);
   }
 
-  // ✅ FIX DEFINITIVO: cerrar solo por pointerdown REAL afuera (scrollbar safe)
   useEffect(() => {
     function onDocPointerDown(ev) {
       if (!open) return;
@@ -1158,19 +1129,6 @@ function VehicleAutocomplete({
     return () => document.removeEventListener("pointerdown", onDocPointerDown, true);
   }, [open]);
 
-  // ✅ opcional: cerrar al scrollear el modal, pero NO si el scroll fue dentro del dropdown
-  useEffect(() => {
-    if (!open) return;
-    const onScroll = (ev) => {
-      const t = ev?.target;
-      if (dropdownRef.current && t && dropdownRef.current.contains(t)) return;
-      if (inputRef.current && t && inputRef.current.contains(t)) return;
-      setOpen(false);
-    };
-    window.addEventListener("scroll", onScroll, true);
-    return () => window.removeEventListener("scroll", onScroll, true);
-  }, [open]);
-
   useEffect(() => {
     if (!open) return;
     if (normalizeText(value)) doSearch(value);
@@ -1182,7 +1140,7 @@ function VehicleAutocomplete({
   }, [open, empresa]);
 
   return (
-    <div ref={wrapRef} style={{ position: "relative" }}>
+    <div style={{ position: "relative" }}>
       <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.75, marginBottom: 6 }}>
         {label}
         {error ? <span style={{ color: "#dc2626" }}> • {error}</span> : null}
@@ -1197,7 +1155,6 @@ function VehicleAutocomplete({
         disabled={disabled}
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
-        // ✅ NO cerrar por blur (bug scrollbar)
         onBlur={() => {}}
         style={error ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220, 38, 38, .15)" } : undefined}
       />
@@ -1277,16 +1234,14 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
   const [successOpen, setSuccessOpen] = useState(false);
   const [errors, setErrors] = useState({});
 
-  // ✅ SUPERADMIN (desde JWT)
   const [myRole, setMyRole] = useState("");
   const isSuperadmin = isSuperadminRole(myRole);
 
-  // ✅ Fotos opcionales (SOLO PEGADAS)
-  const [photos, setPhotos] = useState([]); // File[]
+  const [photos, setPhotos] = useState([]);
   const [photoErr, setPhotoErr] = useState("");
   const pasteRef = useRef(null);
 
-  const [photoPreviews, setPhotoPreviews] = useState([]); // { url, name }[]
+  const [photoPreviews, setPhotoPreviews] = useState([]);
   useEffect(() => {
     const urls = photos.map((p) => ({ name: p.name, url: URL.createObjectURL(p) }));
     setPhotoPreviews(urls);
@@ -1325,12 +1280,10 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
     setErrors((prev) => ({ ...prev, [k]: undefined }));
   }
 
-  // ✅ al abrir: rol desde JWT + empresa desde /company/me (fallback)
   const empresaInitRef = useRef(false);
   useEffect(() => {
     if (!open) return;
 
-    // ✅ rol desde token (no depende del backend)
     const roleFromToken = extractRoleFromToken();
     if (roleFromToken) setMyRole(roleFromToken);
 
@@ -1416,7 +1369,6 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
     setSaving(false);
     setPhotos([]);
     setPhotoErr("");
-    // rol lo dejamos (no molesta)
   }
 
   function handleClose() {
@@ -1554,10 +1506,8 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
       addIf(payload, "mapsLink", f.mapsLink);
 
       addIf(payload, "camion", f.camion);
-
       addIf(payload, "conductor", f.conductor);
       addIf(payload, "conductorId", f.conductorId);
-
       addIf(payload, "rigger", f.rigger);
 
       payload.diasProgramados = diasProgramadosSorted;
@@ -1753,7 +1703,6 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
                   const name = `${u?.nombre || ""}${u?.apellido ? " " + u.apellido : ""}`.trim();
                   const uEmp = String(u?.empresa || "").toUpperCase();
 
-                  // ✅ NO forzar empresa si es superadmin
                   if (!isSuperadmin && uEmp && uEmp !== String(f.empresa || "").toUpperCase()) {
                     setField("empresa", uEmp);
                     setField("rigger", "");
@@ -1778,7 +1727,6 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
                   const name = `${u?.nombre || ""}${u?.apellido ? " " + u.apellido : ""}`.trim();
                   const uEmp = String(u?.empresa || "").toUpperCase();
 
-                  // ✅ NO forzar empresa si es superadmin
                   if (!isSuperadmin && uEmp && uEmp !== String(f.empresa || "").toUpperCase()) {
                     setField("empresa", uEmp);
                     setField("conductor", "");
@@ -1794,7 +1742,6 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
                 allowSuperadminBoth={isSuperadmin}
               />
 
-              {/* ✅ CALENDARIO DÍAS PROGRAMADOS */}
               <div className="ot-span" style={{ marginTop: 2 }}>
                 <MiniCalendarMulti
                   valueISO={f.diasProgramados}
@@ -1806,7 +1753,7 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
             </div>
           </div>
 
-          {/* ✅ FOTOS (OPCIONAL) - SOLO PEGAR */}
+          {/* ✅ FOTOS */}
           <div className="ot-box">
             <div className="ot-box-title">Fotos (opcional)</div>
 

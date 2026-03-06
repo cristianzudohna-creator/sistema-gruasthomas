@@ -1,5 +1,6 @@
 // ✅ Archivo: src/pages/WorkOrdersAdmin.jsx (COMPLETO)
 // ✅ NUEVO: Auto-refresh (polling) + refresh al volver a la pestaña
+// ✅ FIX: se elimina columna "CREADO POR" del listado
 import { useCallback, useEffect, useMemo, useState } from "react";
 import "./Admin.css";
 
@@ -294,21 +295,17 @@ export default function WorkOrdersAdmin() {
     }
   }, [status, q]);
 
-  // ✅ carga inicial + cuando cambia el status (como lo tenías)
   useEffect(() => {
     loadAll();
   }, [status, loadAll]);
 
-  // ✅ NUEVO: Auto-refresh + refresh al volver a la pestaña
   useEffect(() => {
     if (!autoRefresh) return;
 
     let timerId = null;
 
     const tick = async () => {
-      // no gastamos recursos si no está visible
       if (document.hidden) return;
-      // evita solapar llamadas
       if (loading) return;
       try {
         await loadAll();
@@ -653,7 +650,6 @@ export default function WorkOrdersAdmin() {
               }}
             />
 
-            {/* ✅ NUEVO: Auto-refresh */}
             <label
               style={{
                 display: "inline-flex",
@@ -714,7 +710,6 @@ export default function WorkOrdersAdmin() {
                 <th>FECHA</th>
                 <th>ESTADO</th>
                 <th style={{ width: 420 }}>CLIENTE</th>
-                <th>CREADO POR</th>
                 <th style={{ textAlign: "right" }}>ACCIONES</th>
               </tr>
             </thead>
@@ -722,20 +717,13 @@ export default function WorkOrdersAdmin() {
             <tbody>
               {!loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: 14, opacity: 0.75 }}>
+                  <td colSpan={5} style={{ padding: 14, opacity: 0.75 }}>
                     No hay órdenes.
                   </td>
                 </tr>
               ) : null}
 
               {filtered.map((x) => {
-                const creadoPor =
-                  x?.createdBy?.nombre ||
-                  x?.createdBy?.email ||
-                  x?.createdByName ||
-                  x?.creadoPor ||
-                  "-";
-
                 const cliente = pick(x?.cliente, x?.razonSocial, x?.clienteNombre);
 
                 const st = String(x?.status || "").toUpperCase();
@@ -781,8 +769,6 @@ export default function WorkOrdersAdmin() {
                     <td style={{ width: 420, maxWidth: 420 }}>
                       <TruncText2 text={cliente || "-"} lines={2} style={{ fontWeight: 900 }} />
                     </td>
-
-                    <td>{creadoPor}</td>
 
                     <td style={{ textAlign: "right" }}>
                       <div style={{ display: "inline-flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>

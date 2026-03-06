@@ -1,4 +1,8 @@
 // ✅ Archivo: src/users/users.controller.ts (COMPLETO)
+// ✅ FIX CONTROL_FLOTA:
+// - CONTROL_FLOTA ahora puede usar GET /users para autocomplete de Operador/Rigger
+// - También puede usar GET /users/:id por compatibilidad futura
+//
 // ✅ Nuevo: endpoint SOLO SUPERADMIN para resetear contraseña de un usuario
 // - PATCH /users/:id/reset-password
 // - Puede: setear una contraseña temporal (si no se manda, el backend la genera)
@@ -93,8 +97,9 @@ export class UsersController {
     return this.usersService.create(dto, actor);
   }
 
+  // ✅ FIX: agregar CONTROL_FLOTA para autocomplete de operadores/riggers
   @Get()
-  @Roles("ADMINISTRADORA", "SUPERADMIN")
+  @Roles("CONTROL_FLOTA", "ADMINISTRADORA", "SUPERADMIN")
   findAll(
     @Query("q") q?: string,
     @Query("activo") activo?: string,
@@ -115,8 +120,9 @@ export class UsersController {
     } as any);
   }
 
+  // ✅ FIX: también permitir CONTROL_FLOTA en lectura puntual
   @Get(":id")
-  @Roles("ADMINISTRADORA", "SUPERADMIN")
+  @Roles("CONTROL_FLOTA", "ADMINISTRADORA", "SUPERADMIN")
   findOne(@Param("id") id: string) {
     return this.usersService.findOne(id);
   }
@@ -160,10 +166,3 @@ export class UsersController {
     return this.usersService.remove(id, actor);
   }
 }
-
-
-
-
-
-
-
