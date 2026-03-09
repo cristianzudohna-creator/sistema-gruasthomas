@@ -23,6 +23,7 @@ import type { Response } from "express";
 import { WorkOrdersService } from "./work-orders.service";
 import { CreateWorkOrderDto } from "./dto/create-work-order.dto";
 import { CompleteWorkOrderDto } from "./dto/complete-work-order.dto";
+import { SaveWorkOrderDraftDto } from "./dto/save-work-order-draft.dto";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { Role } from "@prisma/client";
 
@@ -97,7 +98,6 @@ export class WorkOrdersController {
     const role = req.user?.role as Role | undefined;
     if (!this.isOtAdmin(role)) throw new ForbiddenException("No autorizado.");
 
-    // from/to opcionales (el service puede defaultear)
     return (this.service as any).listCalendar(req.user, { from, to });
   }
 
@@ -125,8 +125,6 @@ export class WorkOrdersController {
 
   // =========================================================
   // ✅ CREAR OT (ADMIN)
-  // dto ya incluye diasProgramados en tu CreateWorkOrderDto,
-  // el service es el que debe guardarlo.
   // =========================================================
   @Post()
   async create(@Body() dto: CreateWorkOrderDto, @Req() req: any) {
@@ -144,12 +142,10 @@ export class WorkOrdersController {
     const role = req.user?.role as Role | undefined;
     if (!this.isOtAdmin(role)) throw new ForbiddenException("No autorizado.");
 
-    // ✅ CLAVE: pasar actor para scoping por empresa
     return this.service.list(req.user);
   }
 
   // ✅ IMPORTANTE: "worker" debe ir ANTES que ":id"
-  // ✅ NUEVO: soporta includeFinalizadas=1 para incluir APROBADA/CERRADA (solo lectura)
   @Get("worker")
   async listForWorker(
     @Req() req: any,
@@ -162,10 +158,6 @@ export class WorkOrdersController {
 
     const include = this.parseBool(includeFinalizadas);
 
-    // ✅ Opción A (recomendada): service.listForWorker(user, { includeFinalizadas: boolean })
-    // ✅ Opción B (fallback): service.listForWorker(user, includeFinalizadasBoolean)
-    //
-    // Para no romper tu proyecto si aún no cambiaste el service, dejamos try/catch.
     try {
       return await (this.service as any).listForWorker(req.user, {
         includeFinalizadas: include,
@@ -186,7 +178,6 @@ export class WorkOrdersController {
 
     if (!String(search || "").trim()) return { items: [] };
 
-    // ✅ CLAVE: pasar actor para filtrar por empresa
     return this.service.searchClients(search, req.user);
   }
 
@@ -239,7 +230,11 @@ export class WorkOrdersController {
     @Req() req: any
   ) {
     const role = req.user?.role as Role | undefined;
-    if (!this.isOtAdmin(role)) throw new ForbiddenException("No autorizado.");
+
+    // ✅ admin o trabajador asignado pueden subir
+    if (![Role.TRABAJADOR, Role.CONTROL_FLOTA, Role.ADMINISTRADORA, Role.SUPERADMIN].includes(role as any)) {
+      throw new ForbiddenException("No autorizado.");
+    }
     if (!id) throw new BadRequestException("Falta id");
 
     if (!files || files.length === 0) return { ok: true, photos: [] };
@@ -270,7 +265,6 @@ export class WorkOrdersController {
     }
     if (!id) throw new BadRequestException("Falta id");
 
-    // ✅ generatePdf acepta actor y valida empresa + activo
     const { buffer, filename } = await this.service.generatePdf(id, req.user);
 
     res.setHeader("Content-Type", "application/pdf");
@@ -298,6 +292,24 @@ export class WorkOrdersController {
     return this.service.getById(id, req.user);
   }
 
+  // =========================
+  // ✅ GUARDAR BORRADOR (TRABAJADOR)
+  // PATCH /work-orders/:id/draft
+  // =========================
+  @Patch(":id/draft")
+  async saveDraft(
+    @Param("id") id: string,
+    @Body() dto: SaveWorkOrderDraftDto,
+    @Req() req: any
+  ) {
+    if (req.user?.role !== Role.TRABAJADOR) {
+      throw new ForbiddenException("Solo TRABAJADOR puede guardar borrador de una OT.");
+    }
+    if (!id) throw new BadRequestException("Falta id");
+
+    return this.service.saveDraft(id, dto, req.user.id);
+  }
+
   @Patch(":id/complete")
   async complete(
     @Param("id") id: string,
@@ -307,6 +319,8 @@ export class WorkOrdersController {
     if (req.user?.role !== Role.TRABAJADOR) {
       throw new ForbiddenException("Solo TRABAJADOR puede completar una OT.");
     }
+    if (!id) throw new BadRequestException("Falta id");
+
     return this.service.complete(id, dto, req.user.id);
   }
 

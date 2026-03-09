@@ -1,10 +1,17 @@
-// ✅ Archivo: src/pages/WorkOrderCompleteModal.jsx (COMPLETO + FIRMA BLOQUEABLE)
+// ✅ Archivo: src/pages/WorkOrderCompleteModal.jsx (COMPLETO + BORRADOR + FIRMA BLOQUEABLE)
 // ✅ Cambio nuevo:
 // - Firma NO se puede dibujar por accidente mientras haces scroll.
 // - Firma viene BLOQUEADA por defecto.
 // - Botón "✍️ Habilitar firma" para que recién ahí el cliente firme.
 // - Overlay encima del canvas cuando está bloqueado (evita “rayas” accidentales).
 // - touchAction: "none" para que el canvas NO haga scroll/zoom mientras firmas.
+//
+// ✅ NUEVO (BORRADOR):
+// - Botón "Guardar borrador" solo para trabajador
+// - Guarda workerReport parcial en /work-orders/:id/draft
+// - NO exige validación completa para guardar borrador
+// - Al reabrir el modal, carga lo ya guardado
+// - "Enviar a administración" sigue siendo la acción final
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -150,11 +157,8 @@ function Resumen({ f, firmaOk, mode, recibi }) {
       <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 14, padding: 12 }}>
         <Row label="Hora salida planta" value={normalizeText(f.salidaPlanta) || "—"} />
         <Row label="Hora llegada faena" value={normalizeText(f.llegadaFaena) || "—"} />
-
-        {/* ✅ NUEVO OBRA */}
         <Row label="Hora inicio servicio en obra" value={normalizeText(f.inicioServicioObra) || "—"} />
         <Row label="Hora término servicio en obra" value={normalizeText(f.terminoServicioObra) || "—"} />
-
         <Row label="Hora salida faena" value={normalizeText(f.salidaFaena) || "—"} />
         <Row label="Hora llegada planta" value={normalizeText(f.llegadaPlanta) || "—"} />
         <Row label="Horas colación (opcional)" value={normalizeText(f.colacion) || "—"} />
@@ -297,7 +301,6 @@ function SignaturePad({
   }, []);
 
   useEffect(() => {
-    // Si llega una firma existente, la dibujamos
     if (!value) return;
     const c = canvasRef.current;
     const ctx = getCtx();
@@ -325,7 +328,6 @@ function SignaturePad({
   }
 
   function start(e) {
-    // 🔒 si no está habilitada, no dibujamos
     if (disabled || !enabled) return;
     drawingRef.current = true;
     const p = getPos(e);
@@ -415,7 +417,6 @@ function SignaturePad({
           position: "relative",
         }}
       >
-        {/* ✅ Overlay cuando está BLOQUEADA: evita rayas accidentales */}
         {!enabled ? (
           <div
             onClick={() => !disabled && onEnableChange?.(true)}
@@ -447,7 +448,6 @@ function SignaturePad({
             width: "100%",
             height: 180,
             display: "block",
-            // 🔥 CLAVE móvil: evita scroll/zoom dentro del canvas mientras firmas
             touchAction: "none",
           }}
           onMouseDown={start}
@@ -483,25 +483,17 @@ export default function WorkOrderCompleteModal({
   const isAdmin = mode === "admin";
 
   const [saving, setSaving] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [formErr, setFormErr] = useState("");
+  const [draftMsg, setDraftMsg] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [errors, setErrors] = useState({});
 
-  // firma (solo se edita en worker)
   const [signature, setSignature] = useState("");
-
-  // ✅ NUEVO: control de habilitación de firma
   const [signatureEnabled, setSignatureEnabled] = useState(false);
 
-  // ✅ NUEVO: Recibí Conforme (solo worker)
   const [recibi, setRecibi] = useState({ nombre: "", rut: "" });
-  function setRecibiField(k, v) {
-    setRecibi((p) => ({ ...p, [k]: v }));
-    if (k === "nombre") setErrors((prev) => ({ ...prev, recibiNombre: undefined }));
-    if (k === "rut") setErrors((prev) => ({ ...prev, recibiRut: undefined }));
-  }
 
-  // ✅ kms por tramo + ✅ NUEVO OBRA
   const [f, setF] = useState({
     salidaPlanta: "",
     llegadaFaena: "",
@@ -517,21 +509,28 @@ export default function WorkOrderCompleteModal({
     movimientos: "",
   });
 
+  function setRecibiField(k, v) {
+    setRecibi((p) => ({ ...p, [k]: v }));
+    if (k === "nombre") setErrors((prev) => ({ ...prev, recibiNombre: undefined }));
+    if (k === "rut") setErrors((prev) => ({ ...prev, recibiRut: undefined }));
+    setDraftMsg("");
+  }
+
   function setField(k, v) {
     setF((p) => ({ ...p, [k]: v }));
     setErrors((prev) => ({ ...prev, [k]: undefined }));
+    setDraftMsg("");
   }
 
-  // ✅ precarga si ya había reporte
   useEffect(() => {
     if (!open) return;
 
     setSaving(false);
+    setSavingDraft(false);
     setConfirmOpen(false);
     setFormErr("");
+    setDraftMsg("");
     setErrors({});
-
-    // ✅ por defecto: firma bloqueada cada vez que abres
     setSignatureEnabled(false);
 
     const rep = safeParseWorkerReport(workOrder?.workerReport);
@@ -543,37 +542,70 @@ export default function WorkOrderCompleteModal({
     setF({
       salidaPlanta: normalizeText(dh?.salidaPlanta),
       llegadaFaena: normalizeText(dh?.llegadaFaena),
-
       inicioServicioObra: normalizeText(dh?.inicioServicioObra),
       terminoServicioObra: normalizeText(dh?.terminoServicioObra),
-
       salidaFaena: normalizeText(dh?.salidaFaena),
       llegadaPlanta: normalizeText(dh?.llegadaPlanta),
       colacion: normalizeText(dh?.colacion),
-
       kmSalidaPlanta: normalizeText(dh?.kmSalidaPlanta) || legacyKmSalida,
       kmLlegadaFaena: normalizeText(dh?.kmLlegadaFaena),
       kmSalidaFaena: normalizeText(dh?.kmSalidaFaena),
       kmLlegadaPlanta: normalizeText(dh?.kmLlegadaPlanta) || legacyKmLlegada,
-
       movimientos: normalizeText(rep?.movimientos),
     });
 
-    // firma existente
     const sig = normalizeText(rep?.signature?.dataUrl);
     setSignature(sig);
 
-    // ✅ si ya hay firma guardada, seguimos bloqueados igual (para evitar accidentes)
-    // (si quieres, podrías habilitar automáticamente, pero NO lo recomiendo)
-    // setSignatureEnabled(false);
-
-    // ✅ recibí conforme existente
     const rc = rep?.recibiConforme || rep?.recibeConforme || {};
     setRecibi({
       nombre: normalizeText(rc?.nombre),
       rut: normalizeText(rc?.rut),
     });
   }, [open, workOrder?.id]);
+
+  function buildWorkerReportPayload({ includeSignature = true, includeRecibi = true } = {}) {
+    const prev = safeParseWorkerReport(workOrder?.workerReport);
+
+    return {
+      movimientos: normalizeText(f.movimientos) || undefined,
+
+      detalleHoras: {
+        salidaPlanta: normalizeText(f.salidaPlanta) || undefined,
+        llegadaFaena: normalizeText(f.llegadaFaena) || undefined,
+        inicioServicioObra: normalizeText(f.inicioServicioObra) || undefined,
+        terminoServicioObra: normalizeText(f.terminoServicioObra) || undefined,
+        salidaFaena: normalizeText(f.salidaFaena) || undefined,
+        llegadaPlanta: normalizeText(f.llegadaPlanta) || undefined,
+        colacion: normalizeText(f.colacion) || null,
+
+        kmSalidaPlanta: normalizeText(f.kmSalidaPlanta) || null,
+        kmLlegadaFaena: normalizeText(f.kmLlegadaFaena) || null,
+        kmSalidaFaena: normalizeText(f.kmSalidaFaena) || null,
+        kmLlegadaPlanta: normalizeText(f.kmLlegadaPlanta) || null,
+      },
+
+      recibiConforme: includeRecibi
+        ? {
+            nombre: normalizeText(recibi.nombre) || undefined,
+            rut: normalizeText(recibi.rut) || undefined,
+            at:
+              normalizeText(recibi.nombre) || normalizeText(recibi.rut)
+                ? new Date().toISOString()
+                : prev?.recibiConforme?.at || prev?.recibeConforme?.at || undefined,
+          }
+        : prev?.recibiConforme || prev?.recibeConforme || undefined,
+
+      signature: includeSignature
+        ? {
+            dataUrl: normalizeText(signature) || undefined,
+            signedAt: normalizeText(signature)
+              ? new Date().toISOString()
+              : prev?.signature?.signedAt || undefined,
+          }
+        : prev?.signature || undefined,
+    };
+  }
 
   function validateAll() {
     const e = {};
@@ -623,8 +655,36 @@ export default function WorkOrderCompleteModal({
   function handleSubmit(ev) {
     ev.preventDefault();
     setFormErr("");
+    setDraftMsg("");
     if (!validateAll()) return;
     setConfirmOpen(true);
+  }
+
+  async function handleSaveDraft() {
+    try {
+      if (isAdmin) return;
+      if (!workOrder?.id) throw new Error("Falta id de OT");
+
+      setSavingDraft(true);
+      setFormErr("");
+      setDraftMsg("");
+
+      const workerReportPayload = buildWorkerReportPayload({
+        includeSignature: true,
+        includeRecibi: true,
+      });
+
+      await apiPatch(`/work-orders/${workOrder.id}/draft`, {
+        workerReport: workerReportPayload,
+      });
+
+      setDraftMsg("✅ Borrador guardado correctamente.");
+      await Promise.resolve(onSaved?.());
+    } catch (e) {
+      setFormErr(fixText(e?.message || "Error guardando borrador"));
+    } finally {
+      setSavingDraft(false);
+    }
   }
 
   async function handleConfirm() {
@@ -633,46 +693,12 @@ export default function WorkOrderCompleteModal({
 
       setSaving(true);
       setFormErr("");
+      setDraftMsg("");
 
-      const prev = safeParseWorkerReport(workOrder?.workerReport);
-      const prevSignature = prev?.signature;
-
-      const workerReportPayload = {
-        movimientos: normalizeText(f.movimientos),
-
-        detalleHoras: {
-          salidaPlanta: normalizeText(f.salidaPlanta),
-          llegadaFaena: normalizeText(f.llegadaFaena),
-
-          inicioServicioObra: normalizeText(f.inicioServicioObra),
-          terminoServicioObra: normalizeText(f.terminoServicioObra),
-
-          salidaFaena: normalizeText(f.salidaFaena),
-          llegadaPlanta: normalizeText(f.llegadaPlanta),
-
-          colacion: normalizeText(f.colacion) || null,
-
-          kmSalidaPlanta: normalizeText(f.kmSalidaPlanta) || null,
-          kmLlegadaFaena: normalizeText(f.kmLlegadaFaena) || null,
-          kmSalidaFaena: normalizeText(f.kmSalidaFaena) || null,
-          kmLlegadaPlanta: normalizeText(f.kmLlegadaPlanta) || null,
-        },
-
-        recibiConforme: isAdmin
-          ? prev?.recibiConforme || prev?.recibeConforme || undefined
-          : {
-              nombre: normalizeText(recibi.nombre),
-              rut: normalizeText(recibi.rut),
-              at: new Date().toISOString(),
-            },
-
-        signature: isAdmin
-          ? prevSignature || undefined
-          : {
-              dataUrl: normalizeText(signature),
-              signedAt: new Date().toISOString(),
-            },
-      };
+      const workerReportPayload = buildWorkerReportPayload({
+        includeSignature: !isAdmin,
+        includeRecibi: !isAdmin,
+      });
 
       if (isAdmin) {
         await apiPatch(`/work-orders/${workOrder.id}/admin-report`, {
@@ -708,7 +734,7 @@ export default function WorkOrderCompleteModal({
 
   const subtitle = isAdmin
     ? "Corrige el reporte del trabajador (horas/movimientos). La firma del cliente es solo lectura."
-    : "Completa el reporte y pide al cliente firmar para enviar a administración";
+    : "Puedes guardar borrador y seguir después, o enviar a administración cuando esté completo.";
 
   const ro = useMemo(() => {
     const d = workOrder || {};
@@ -740,18 +766,45 @@ export default function WorkOrderCompleteModal({
     <>
       <Modal
         open={open}
-        onClose={() => !saving && onClose?.()}
+        onClose={() => !saving && !savingDraft && onClose?.()}
         title={title}
         subtitle={subtitle}
         width={980}
         footer={
           <>
-            <button className="gt-btn" type="button" onClick={() => !saving && onClose?.()} disabled={saving}>
+            <button
+              className="gt-btn"
+              type="button"
+              onClick={() => !saving && !savingDraft && onClose?.()}
+              disabled={saving || savingDraft}
+            >
               Cancelar
             </button>
 
-            <button className="gt-btn gt-btn-primary" form="ot-complete-form" type="submit" disabled={saving || loading}>
-              {saving ? (isAdmin ? "Guardando..." : "Enviando...") : isAdmin ? "Guardar corrección" : "Enviar a administración"}
+            {!isAdmin ? (
+              <button
+                className="gt-btn ghost"
+                type="button"
+                onClick={handleSaveDraft}
+                disabled={saving || savingDraft || loading}
+              >
+                {savingDraft ? "Guardando borrador..." : "Guardar borrador"}
+              </button>
+            ) : null}
+
+            <button
+              className="gt-btn gt-btn-primary"
+              form="ot-complete-form"
+              type="submit"
+              disabled={saving || savingDraft || loading}
+            >
+              {saving
+                ? isAdmin
+                  ? "Guardando..."
+                  : "Enviando..."
+                : isAdmin
+                ? "Guardar corrección"
+                : "Enviar a administración"}
             </button>
           </>
         }
@@ -765,6 +818,20 @@ export default function WorkOrderCompleteModal({
         ) : (
           <form id="ot-complete-form" onSubmit={handleSubmit} className="gt-form-grid">
             {formErr ? <div className="gt-error">{fixText(formErr)}</div> : null}
+
+            {draftMsg ? (
+              <div
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  background: "rgba(16,185,129,.12)",
+                  border: "1px solid rgba(16,185,129,.25)",
+                  fontWeight: 900,
+                }}
+              >
+                {fixText(draftMsg)}
+              </div>
+            ) : null}
 
             <Box title="Detalle OT (solo lectura)">
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
@@ -846,7 +913,7 @@ export default function WorkOrderCompleteModal({
                   placeholder="Ej: 20:30"
                   value={f.salidaPlanta}
                   onChange={(e) => setField("salidaPlanta", e.target.value)}
-                  disabled={saving}
+                  disabled={saving || savingDraft}
                   error={errors.salidaPlanta}
                 />
 
@@ -855,7 +922,7 @@ export default function WorkOrderCompleteModal({
                   placeholder="Ej: 21:00"
                   value={f.llegadaFaena}
                   onChange={(e) => setField("llegadaFaena", e.target.value)}
-                  disabled={saving}
+                  disabled={saving || savingDraft}
                   error={errors.llegadaFaena}
                 />
 
@@ -864,7 +931,7 @@ export default function WorkOrderCompleteModal({
                   placeholder="Ej: 21:10"
                   value={f.inicioServicioObra}
                   onChange={(e) => setField("inicioServicioObra", e.target.value)}
-                  disabled={saving}
+                  disabled={saving || savingDraft}
                   error={errors.inicioServicioObra}
                 />
 
@@ -873,7 +940,7 @@ export default function WorkOrderCompleteModal({
                   placeholder="Ej: 04:30"
                   value={f.terminoServicioObra}
                   onChange={(e) => setField("terminoServicioObra", e.target.value)}
-                  disabled={saving}
+                  disabled={saving || savingDraft}
                   error={errors.terminoServicioObra}
                 />
 
@@ -882,7 +949,7 @@ export default function WorkOrderCompleteModal({
                   placeholder="Ej: 05:00"
                   value={f.salidaFaena}
                   onChange={(e) => setField("salidaFaena", e.target.value)}
-                  disabled={saving}
+                  disabled={saving || savingDraft}
                   error={errors.salidaFaena}
                 />
 
@@ -891,7 +958,7 @@ export default function WorkOrderCompleteModal({
                   placeholder="Ej: 06:00"
                   value={f.llegadaPlanta}
                   onChange={(e) => setField("llegadaPlanta", e.target.value)}
-                  disabled={saving}
+                  disabled={saving || savingDraft}
                   error={errors.llegadaPlanta}
                 />
 
@@ -900,7 +967,7 @@ export default function WorkOrderCompleteModal({
                   placeholder="Ej: 01:00"
                   value={f.colacion}
                   onChange={(e) => setField("colacion", e.target.value)}
-                  disabled={saving}
+                  disabled={saving || savingDraft}
                   error={errors.colacion}
                 />
 
@@ -910,14 +977,14 @@ export default function WorkOrderCompleteModal({
                     placeholder="Ej: 123456"
                     value={f.kmSalidaPlanta}
                     onChange={(e) => setField("kmSalidaPlanta", e.target.value)}
-                    disabled={saving}
+                    disabled={saving || savingDraft}
                   />
                   <LabeledInput
                     label="Km llegada faena (opcional)"
                     placeholder="Ej: 123999"
                     value={f.kmLlegadaFaena}
                     onChange={(e) => setField("kmLlegadaFaena", e.target.value)}
-                    disabled={saving}
+                    disabled={saving || savingDraft}
                   />
                 </div>
 
@@ -927,14 +994,14 @@ export default function WorkOrderCompleteModal({
                     placeholder="Ej: 124100"
                     value={f.kmSalidaFaena}
                     onChange={(e) => setField("kmSalidaFaena", e.target.value)}
-                    disabled={saving}
+                    disabled={saving || savingDraft}
                   />
                   <LabeledInput
                     label="Km llegada planta (opcional)"
                     placeholder="Ej: 124500"
                     value={f.kmLlegadaPlanta}
                     onChange={(e) => setField("kmLlegadaPlanta", e.target.value)}
-                    disabled={saving}
+                    disabled={saving || savingDraft}
                   />
                 </div>
               </div>
@@ -946,7 +1013,7 @@ export default function WorkOrderCompleteModal({
                 placeholder="Ej: instalación de vigas, movimiento de equipos..."
                 value={f.movimientos}
                 onChange={(e) => setField("movimientos", e.target.value)}
-                disabled={saving}
+                disabled={saving || savingDraft}
                 error={errors.movimientos}
               />
             </Box>
@@ -961,7 +1028,7 @@ export default function WorkOrderCompleteModal({
                     placeholder="Ej: Juan Pérez"
                     value={recibi.nombre}
                     onChange={(e) => setRecibiField("nombre", e.target.value)}
-                    disabled={saving}
+                    disabled={saving || savingDraft}
                     error={errors.recibiNombre}
                   />
                   <LabeledInput
@@ -969,14 +1036,13 @@ export default function WorkOrderCompleteModal({
                     placeholder="Ej: 12.345.678-9"
                     value={recibi.rut}
                     onChange={(e) => setRecibiField("rut", e.target.value)}
-                    disabled={saving}
+                    disabled={saving || savingDraft}
                     error={errors.recibiRut}
                   />
                 </div>
               )}
             </Box>
 
-            {/* ✅ FIRMA */}
             <Box title="Firma del cliente">
               {!isAdmin ? (
                 <>
@@ -990,13 +1056,13 @@ export default function WorkOrderCompleteModal({
                     value={signature}
                     onChange={(v) => {
                       setSignature(v);
-                      // si ya se dibujó algo, limpiamos el error
                       setErrors((prev) => ({ ...prev, signature: undefined }));
+                      setDraftMsg("");
                     }}
-                    disabled={saving}
+                    disabled={saving || savingDraft}
                     enabled={signatureEnabled}
                     onEnableChange={setSignatureEnabled}
-                    helperText='Habilita la firma, pide al cliente que firme dentro del recuadro. Luego presiona “Enviar a administración”.'
+                    helperText='Habilita la firma, pide al cliente que firme dentro del recuadro. Luego presiona “Guardar borrador” o “Enviar a administración”.'
                   />
 
                   <div style={{ marginTop: 10, fontSize: 12, fontWeight: 900, opacity: 0.75 }}>
@@ -1014,7 +1080,9 @@ export default function WorkOrderCompleteModal({
                         padding: 12,
                       }}
                     >
-                      <div style={{ fontWeight: 900, opacity: 0.85, marginBottom: 10 }}>Firma registrada (solo lectura)</div>
+                      <div style={{ fontWeight: 900, opacity: 0.85, marginBottom: 10 }}>
+                        Firma registrada (solo lectura)
+                      </div>
 
                       <div
                         style={{
@@ -1028,10 +1096,16 @@ export default function WorkOrderCompleteModal({
                           background: "#fff",
                         }}
                       >
-                        <img src={signature} alt="Firma cliente" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                        <img
+                          src={signature}
+                          alt="Firma cliente"
+                          style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+                        />
                       </div>
 
-                      <div style={{ marginTop: 10, fontSize: 12, fontWeight: 900, opacity: 0.7 }}>Estado firma: ✅ Firmada</div>
+                      <div style={{ marginTop: 10, fontSize: 12, fontWeight: 900, opacity: 0.7 }}>
+                        Estado firma: ✅ Firmada
+                      </div>
                     </div>
                   ) : (
                     <div style={{ fontWeight: 900, opacity: 0.75 }}>Sin firma registrada.</div>

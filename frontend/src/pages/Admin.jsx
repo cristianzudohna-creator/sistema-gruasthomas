@@ -85,7 +85,7 @@ export default function Admin() {
   const canSeeAuditoria = isSuperadmin;
 
   // ✅ Configuración: SUPERADMIN + CONTROL_FLOTA + ADMINISTRADORA
-  const canSeeConfiguracion = isSuperadmin || isControlFlota || isAdministradora;
+  const canSeeConfiguracion = isSuperadmin;
 
   // ✅ Papelera camiones (solo SUPERADMIN)
   const canSeePapelera = isSuperadmin;

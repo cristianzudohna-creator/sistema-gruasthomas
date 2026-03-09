@@ -29,6 +29,12 @@
 // ✅ NUEVO (OBRA):
 // - Al completar OT: validar HH:MM de inicioServicioObra y terminoServicioObra (obligatorios en el frontend)
 // - En PDF: mostrar "Hora Inicio Servicio en Obra" + "Hora Término Servicio en Obra"
+//
+// ✅ NUEVO (BORRADOR):
+// - saveDraft(): guarda workerReport parcial
+// - merge profundo con workerReport anterior
+// - deja status EN_PROCESO
+// - complete(): mezcla borrador previo + datos finales y recién marca COMPLETADA
 
 import {
   BadRequestException,
@@ -42,6 +48,7 @@ import {
   DIAS_TRABAJO_VALIDOS,
 } from "./dto/create-work-order.dto";
 import { CompleteWorkOrderDto } from "./dto/complete-work-order.dto";
+import { SaveWorkOrderDraftDto } from "./dto/save-work-order-draft.dto";
 import {
   Empresa,
   WorkOrderStatus,
@@ -369,6 +376,41 @@ export class WorkOrdersService {
 
   private whereInactivosOnly() {
     return { activo: false };
+  }
+
+  private deepMergeObjects(base: any, patch: any): any {
+    const baseIsObj =
+      base !== null && typeof base === "object" && !Array.isArray(base);
+    const patchIsObj =
+      patch !== null && typeof patch === "object" && !Array.isArray(patch);
+
+    if (!patchIsObj) {
+      return patch;
+    }
+
+    const result: any = baseIsObj ? { ...base } : {};
+
+    for (const key of Object.keys(patch)) {
+      const patchValue = patch[key];
+      const baseValue = baseIsObj ? base[key] : undefined;
+
+      const bothObjects =
+        patchValue !== null &&
+        typeof patchValue === "object" &&
+        !Array.isArray(patchValue) &&
+        baseValue !== null &&
+        typeof baseValue === "object" &&
+        !Array.isArray(baseValue);
+
+      if (bothObjects) {
+        result[key] = this.deepMergeObjects(baseValue, patchValue);
+        continue;
+      }
+
+      result[key] = patchValue;
+    }
+
+    return result;
   }
 
   private async ensureAccessOrThrowActive(id: string, actor: any) {
@@ -943,6 +985,69 @@ export class WorkOrdersService {
     });
   }
 
+  async saveDraft(id: string, dto: SaveWorkOrderDraftDto, userId?: string) {
+    if (!id) throw new BadRequestException("Falta id");
+    if (!userId) throw new BadRequestException("No se detectó el usuario logueado.");
+
+    const exists = await this.prisma.workOrder.findUnique({ where: { id } });
+    if (!exists) throw new NotFoundException("OT no encontrada");
+    if (exists.activo === false) throw new NotFoundException("OT no encontrada");
+
+    if (exists.assignedToId && exists.assignedToId !== userId) {
+      throw new ForbiddenException("No tienes asignada esta OT.");
+    }
+
+    if (exists.status === WorkOrderStatus.APROBADA || exists.status === WorkOrderStatus.CERRADA) {
+      throw new BadRequestException("Esta OT ya fue aprobada/cerrada.");
+    }
+
+    const currentReport = safeParseWorkerReport(exists.workerReport) || {};
+    const incomingReport = safeParseWorkerReport((dto as any)?.workerReport) || {};
+    const mergedWorkerReport = this.deepMergeObjects(currentReport, incomingReport);
+
+    const data: any = {
+      workerReport: mergedWorkerReport,
+      status: WorkOrderStatus.EN_PROCESO,
+
+      completedAt: null,
+      completedById: null,
+      finishedAt: null,
+
+      rejectReason: null,
+      approvedAt: null,
+      approvedById: null,
+      approvalComment: null,
+    };
+
+    if ("comentarioFinal" in (dto as any)) {
+      data.comentarioFinal = cleanStr((dto as any)?.comentarioFinal);
+    }
+
+    const before = this.snapshotWorkOrder(exists);
+    const after = await this.prisma.workOrder.update({
+      where: { id },
+      data,
+    });
+
+    const actor = await this.getActorOrThrowById(userId);
+
+    await this.audit.log({
+      entity: AuditEntity.WORK_ORDER,
+      entityId: id,
+      action: AuditAction.UPDATE,
+      actor: this.safeActor(actor),
+      data: {
+        targetLabel: this.woLabel(after, id),
+        title: after?.titulo || null,
+        before,
+        after: this.snapshotWorkOrder(after),
+        meta: { title: "Trabajador guardó OT en borrador" },
+      },
+    });
+
+    return after;
+  }
+
   async complete(id: string, dto: CompleteWorkOrderDto, userId?: string) {
     if (!id) throw new BadRequestException("Falta id");
     if (!userId) throw new BadRequestException("No se detectó el usuario logueado.");
@@ -959,12 +1064,16 @@ export class WorkOrdersService {
       throw new BadRequestException("Esta OT ya fue aprobada/cerrada.");
     }
 
-    const workerReport = (dto as any)?.workerReport ?? null;
-    if (!workerReport || typeof workerReport !== "object") {
+    const incomingWorkerReport = safeParseWorkerReport((dto as any)?.workerReport);
+    if (!incomingWorkerReport || typeof incomingWorkerReport !== "object") {
       throw new BadRequestException("workerReport es obligatorio.");
     }
 
-    // ✅ NUEVO (OBRA): validar HH:MM (si vienen; en tu frontend son obligatorios)
+    // ✅ mezcla borrador previo + envío final
+    const currentWorkerReport = safeParseWorkerReport(exists.workerReport) || {};
+    const workerReport = this.deepMergeObjects(currentWorkerReport, incomingWorkerReport);
+
+    // ✅ NUEVO (OBRA): validar HH:MM sobre el reporte final ya fusionado
     const dh = (workerReport as any)?.detalleHoras || {};
     const iniObra = cleanStr((dh as any)?.inicioServicioObra);
     const finObra = cleanStr((dh as any)?.terminoServicioObra);
@@ -986,41 +1095,36 @@ export class WorkOrdersService {
       workerReport,
       completedAt: new Date(),
       completedById: userId,
+      status: WorkOrderStatus.COMPLETADA,
+      finishedAt: new Date(),
+
+      rejectReason: null,
+      approvedAt: null,
+      approvedById: null,
+      approvalComment: null,
     };
 
-    const comentarioFinal = cleanStr((dto as any)?.comentarioFinal);
-    if (comentarioFinal) data.comentarioFinal = comentarioFinal;
-
-    if ((dto as any)?.marcarCompletada) {
-      data.status = WorkOrderStatus.COMPLETADA;
-      data.finishedAt = new Date();
-    } else {
-      data.status = WorkOrderStatus.EN_PROCESO;
+    if ("comentarioFinal" in (dto as any)) {
+      data.comentarioFinal = cleanStr((dto as any)?.comentarioFinal);
     }
-
-    data.rejectReason = null;
-    data.approvedAt = null;
-    data.approvedById = null;
-    data.approvalComment = null;
 
     const before = this.snapshotWorkOrder(exists);
     const after = await this.prisma.workOrder.update({ where: { id }, data });
+
+    const actor = await this.getActorOrThrowById(userId);
 
     await this.audit.log({
       entity: AuditEntity.WORK_ORDER,
       entityId: id,
       action: AuditAction.UPDATE,
-      actor: this.safeActor({ id: userId, email: (dto as any)?.email }),
+      actor: this.safeActor(actor),
       data: {
         targetLabel: this.woLabel(after, id),
         title: after?.titulo || null,
         before,
         after: this.snapshotWorkOrder(after),
         meta: {
-          title:
-            after.status === WorkOrderStatus.COMPLETADA
-              ? "Trabajador marcó OT como COMPLETADA"
-              : "Trabajador actualizó OT a EN_PROCESO",
+          title: "Trabajador marcó OT como COMPLETADA",
         },
       },
     });
@@ -1178,7 +1282,7 @@ export class WorkOrdersService {
   }
 
   // =========================
-  // ✅ CALENDARIO (ADMIN)  ✅✅✅ (ESTO ERA LO QUE FALTABA)
+  // ✅ CALENDARIO (ADMIN)  ✅✅✅
   // =========================
 
   private parseISODateOnly(s: any): string | null {
@@ -1213,13 +1317,12 @@ export class WorkOrdersService {
   async listCalendar(actor?: any, range?: { from?: string; to?: string }) {
     if (!this.isOtAdminRole(actor)) throw new ForbiddenException("No autorizado.");
 
-    // default: mes actual (UTC)
     const now = new Date();
     const yyyy = now.getUTCFullYear();
     const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
 
     const fromDefault = `${yyyy}-${mm}-01`;
-    const end = new Date(Date.UTC(yyyy, now.getUTCMonth() + 1, 0)); // último día del mes
+    const end = new Date(Date.UTC(yyyy, now.getUTCMonth() + 1, 0));
     const toDefault = `${end.getUTCFullYear()}-${String(end.getUTCMonth() + 1).padStart(2, "0")}-${String(
       end.getUTCDate()
     ).padStart(2, "0")}`;
@@ -1486,8 +1589,6 @@ export class WorkOrdersService {
           km: pickKm("llegadaFaena") || "—",
           showKm: true,
         },
-
-        // ✅ NUEVO OBRA (sin KM)
         {
           label: "Hora Inicio Servicio en Obra",
           hora: fmtTimeIfHHMM((dh as any)?.inicioServicioObra) || "—",
@@ -1500,7 +1601,6 @@ export class WorkOrdersService {
           km: "",
           showKm: false,
         },
-
         {
           label: "Hora Salida Faena",
           hora: fmtTimeIfHHMM((dh as any)?.salidaFaena) || "—",
@@ -1568,12 +1668,11 @@ export class WorkOrdersService {
     doc.text("info@gruasthomas.cl  •  www.gruasthomas.cl", left, y + 24, { width: w - 160 });
 
     const logoPath = getLogoPath();
-if (logoPath) {
-  const logoW = 140;   // 👈 más grande
-  const logoH = 200;
-
-  doc.image(logoPath, right - logoW - 40, y - 50, { fit: [logoW, logoH] });
-}
+    if (logoPath) {
+      const logoW = 140;
+      const logoH = 200;
+      doc.image(logoPath, right - logoW - 40, y - 50, { fit: [logoW, logoH] });
+    }
 
     y += 54;
     fullLine(y);
@@ -1637,7 +1736,7 @@ if (logoPath) {
     const desiredBottomGap = 18;
     const remaining = bottom - y;
     const spacer = Math.max(0, remaining - (neededForFooter + desiredBottomGap));
-    if (spacer > 0) y += Math.max(0, spacer - 38); // 👈 sube 12px aprox
+    if (spacer > 0) y += Math.max(0, spacer - 38);
 
     doc.font("Helvetica").fontSize(10).fillColor("#111");
 

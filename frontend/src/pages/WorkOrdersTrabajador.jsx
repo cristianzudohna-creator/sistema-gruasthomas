@@ -1,4 +1,5 @@
 // ✅ Archivo: src/pages/WorkOrdersTrabajador.jsx (COMPLETO)
+// ✅ Ajustado para flujo BORRADOR / EN_PROCESO / COMPLETADA
 import { useEffect, useMemo, useState } from "react";
 import "./Admin.css";
 import WorkOrderDetailModal from "./WorkOrderDetailModal";
@@ -88,7 +89,6 @@ function fmtDate(v) {
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return "-";
 
-  // dd/mm/yyyy
   const dd = String(d.getDate()).padStart(2, "0");
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const yy = String(d.getFullYear());
@@ -149,7 +149,7 @@ function Badge({ children, tone = "neutral" }) {
 
 function statusTone(s) {
   const v = String(s || "").toUpperCase();
-  if (v === "COMPLETADA") return "warn"; // ⏳ espera aprobación
+  if (v === "COMPLETADA") return "warn";
   if (v === "EN_PROCESO") return "info";
   if (v === "RECHAZADA") return "bad";
   if (v === "APROBADA") return "ok";
@@ -205,7 +205,6 @@ function isFinalizada(status) {
 
 function isActiva(status) {
   const st = String(status || "").toUpperCase();
-  // “Activas” = las que el trabajador trabaja/corrige o están esperando aprobación
   return st === "ABIERTA" || st === "EN_PROCESO" || st === "RECHAZADA" || st === "COMPLETADA";
 }
 
@@ -214,20 +213,16 @@ export default function WorkOrdersTrabajador() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
-  // ✅ pestañas
-  const [tab, setTab] = useState("activas"); // "activas" | "finalizadas"
+  const [tab, setTab] = useState("activas");
 
-  // ✅ descarga PDF
   const [downloadingId, setDownloadingId] = useState(null);
   const [downloadErr, setDownloadErr] = useState("");
 
-  // ===== DETALLE (CARGA POR ID) =====
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailErr, setDetailErr] = useState("");
   const [detailData, setDetailData] = useState(null);
 
-  // ✅ COMPLETAR OT
   const [completeOpen, setCompleteOpen] = useState(false);
   const [completeLoading, setCompleteLoading] = useState(false);
   const [completeErr, setCompleteErr] = useState("");
@@ -237,7 +232,6 @@ export default function WorkOrdersTrabajador() {
     setLoading(true);
     setErr("");
     try {
-      // ✅ IMPORTANTE: pedimos incluir finalizadas (APROBADA/CERRADA)
       const data = await apiGet("/work-orders/worker?includeFinalizadas=1");
       const list = Array.isArray(data) ? data : data?.items || [];
 
@@ -329,7 +323,6 @@ export default function WorkOrdersTrabajador() {
 
   return (
     <div style={{ paddingBottom: 24 }}>
-      {/* ✅ FIX CSS local: Cliente en 2 líneas */}
       <style>
         {`
           td.col-cliente{
@@ -348,7 +341,6 @@ export default function WorkOrdersTrabajador() {
         `}
       </style>
 
-      {/* ✅ Header */}
       <div
         style={{
           padding: 18,
@@ -384,21 +376,18 @@ export default function WorkOrdersTrabajador() {
         </div>
       </div>
 
-      {/* ✅ Stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12, marginBottom: 14 }}>
         <StatCard title="Total" value={stats.total} hint="Órdenes asignadas" />
         <StatCard title="Nuevas" value={stats.nuevas} hint="Últimas 24 horas" />
-        <StatCard title="En proceso" value={stats.enProceso} hint="Marcadas en proceso" />
+        <StatCard title="En proceso" value={stats.enProceso} hint="Guardadas como borrador" />
         <StatCard title="En aprobación" value={stats.enAprobacion} hint="Esperando visto bueno" />
       </div>
 
-      {/* ✅ Panel tabla */}
       <div className="panel">
         <div className="panel-head" style={{ alignItems: "flex-end", gap: 12, justifyContent: "space-between", flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 auto", minWidth: 260 }}>
             <h2 style={{ marginBottom: 6 }}>Listado</h2>
 
-            {/* ✅ Tabs */}
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <button
                 type="button"
@@ -485,9 +474,15 @@ export default function WorkOrdersTrabajador() {
                 const nueva = isNew(x.createdAt);
                 const st = String(x.status || "").toUpperCase();
 
-                // ✅ si estamos en Finalizadas => siempre solo lectura
                 const readOnlyTab = tab === "finalizadas";
-                const blockComplete = readOnlyTab || st === "COMPLETADA" || st === "APROBADA" || st === "CERRADA";
+
+                // ✅ COMPLETADA / APROBADA / CERRADA = bloqueadas
+                // ✅ ABIERTA / EN_PROCESO / RECHAZADA = se puede abrir para seguir
+                const blockComplete =
+                  readOnlyTab ||
+                  st === "COMPLETADA" ||
+                  st === "APROBADA" ||
+                  st === "CERRADA";
 
                 const rejectReason = String(x.rejectReason || "").trim();
                 const isDownloading = downloadingId === x.id;
@@ -535,14 +530,16 @@ export default function WorkOrdersTrabajador() {
                           </div>
                         ) : null}
 
+                        {st === "EN_PROCESO" ? (
+                          <Badge tone="info">💾 Borrador guardado</Badge>
+                        ) : null}
+
                         {readOnlyTab ? <Badge tone="neutral">👁 Solo lectura</Badge> : null}
                       </div>
                     </td>
 
-                    {/* ✅ NUEVA COLUMNA OT */}
                     <td style={{ fontWeight: 900, whiteSpace: "nowrap" }}>{otCode(x.id)}</td>
 
-                    {/* ✅ CLIENTE en 2 líneas */}
                     <td className="col-cliente" style={{ fontWeight: 900 }}>
                       <div className="cliente-2l" title={x.cliente || ""}>
                         {x.cliente || "—"}
@@ -591,9 +588,15 @@ export default function WorkOrdersTrabajador() {
                               ? "Esta OT está cerrada."
                               : st === "RECHAZADA"
                               ? "Corrige lo que falta y vuelve a enviar."
+                              : st === "EN_PROCESO"
+                              ? "Continuar llenando borrador."
                               : "Completar OT"
                           }
-                          style={blockComplete ? { height: 36, minWidth: 190, opacity: 0.6, cursor: "not-allowed" } : { height: 36, minWidth: 190 }}
+                          style={
+                            blockComplete
+                              ? { height: 36, minWidth: 190, opacity: 0.6, cursor: "not-allowed" }
+                              : { height: 36, minWidth: 190 }
+                          }
                         >
                           {readOnlyTab
                             ? "👁 Solo lectura"
@@ -605,6 +608,8 @@ export default function WorkOrdersTrabajador() {
                             ? "📦 Cerrada"
                             : st === "RECHAZADA"
                             ? "🛠️ Corregir y reenviar"
+                            : st === "EN_PROCESO"
+                            ? "✏️ Continuar borrador"
                             : "✅ Completar"}
                         </button>
                       </div>
@@ -622,7 +627,13 @@ export default function WorkOrdersTrabajador() {
         </div>
       </div>
 
-      <WorkOrderDetailModal open={detailOpen} onClose={() => setDetailOpen(false)} data={detailData} loading={detailLoading} error={detailErr} />
+      <WorkOrderDetailModal
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        data={detailData}
+        loading={detailLoading}
+        error={detailErr}
+      />
 
       <WorkOrderCompleteModal
         open={completeOpen}
