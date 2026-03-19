@@ -1,0 +1,246 @@
+/* ✅ Archivo: src/pages/ReportIncidentWorker.css */
+
+.riw-page {
+  padding: 18px;
+  min-height: 100%;
+}
+
+.riw-card {
+  max-width: 720px;
+  margin: 0 auto;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 24px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+  padding: 22px;
+}
+
+.riw-card * {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.riw-head {
+  margin-bottom: 18px;
+}
+
+.riw-title {
+  margin: 0;
+  font-size: clamp(28px, 5vw, 40px);
+  font-weight: 900;
+  line-height: 1.1;
+  color: #0f172a;
+}
+
+.riw-subtitle {
+  margin: 10px 0 0;
+  font-size: 16px;
+  color: rgba(15, 23, 42, 0.75);
+  line-height: 1.5;
+}
+
+.riw-form {
+  display: grid;
+  gap: 16px;
+}
+
+.riw-field {
+  display: grid;
+  gap: 8px;
+}
+
+.riw-field--autocomplete {
+  position: relative;
+}
+
+.riw-label {
+  display: block;
+  font-weight: 800;
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.riw-input,
+.riw-textarea {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  outline: none;
+  font-size: 16px;
+  background: #fff;
+  font-family: inherit;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.riw-input {
+  min-height: 52px;
+  padding: 0 14px;
+}
+
+.riw-input--plate {
+  text-transform: uppercase;
+}
+
+.riw-textarea {
+  padding: 12px 14px;
+  resize: vertical;
+  min-height: 140px;
+}
+
+.riw-input:focus,
+.riw-textarea:focus {
+  border-color: rgba(245, 184, 0, 0.55);
+  box-shadow: 0 0 0 3px rgba(245, 184, 0, 0.18);
+}
+
+.riw-suggestions {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 14px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.1);
+  overflow: hidden;
+  z-index: 20;
+}
+
+.riw-suggestion {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: #fff;
+  padding: 12px 14px;
+  font-size: 15px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+  transition: background 120ms ease;
+}
+
+.riw-suggestion:hover {
+  background: rgba(245, 184, 0, 0.08);
+}
+
+.riw-suggestion--last {
+  border-bottom: none;
+}
+
+.riw-help {
+  margin-top: 2px;
+  font-size: 13px;
+  color: rgba(15, 23, 42, 0.55);
+  line-height: 1.45;
+}
+
+.riw-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.riw-action-btn {
+  min-height: 48px;
+  min-width: 140px;
+}
+
+.riw-actions .btn-primary.riw-action-btn {
+  min-width: 180px;
+}
+
+/* Tablet */
+@media (max-width: 900px) {
+  .riw-page {
+    padding: 16px;
+  }
+
+  .riw-card {
+    padding: 20px;
+  }
+}
+
+/* Mobile */
+@media (max-width: 640px) {
+  .riw-page {
+    padding: 12px;
+  }
+
+  .riw-card {
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .riw-title {
+    font-size: clamp(24px, 8vw, 32px);
+  }
+
+  .riw-subtitle {
+    font-size: 14px;
+  }
+
+  .riw-label {
+    font-size: 14px;
+  }
+
+  .riw-input,
+  .riw-textarea {
+    font-size: 16px; /* evita zoom en iPhone */
+  }
+
+  .riw-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .riw-action-btn,
+  .riw-actions .btn-primary.riw-action-btn {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* Mobile pequeño */
+@media (max-width: 420px) {
+  .riw-page {
+    padding: 10px;
+  }
+
+  .riw-card {
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .riw-title {
+    font-size: 28px;
+  }
+
+  .riw-suggestion {
+    font-size: 14px;
+    padding: 11px 12px;
+  }
+}
+/* HEADER */
+.riw-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.riw-toolbar-btn {
+  min-height: 42px;
+}
+
+.riw-logout-btn {
+  min-height: 42px;
+  border-radius: 12px;
+  border: 1px solid rgba(239,68,68,.20);
+  background: rgba(239,68,68,.10);
+  color: #b91c1c;
+  font-weight: 800;
+  padding: 0 16px;
+  cursor: pointer;
+}

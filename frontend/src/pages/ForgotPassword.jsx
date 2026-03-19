@@ -1,10 +1,15 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import "./Login.css";
 import { getApiUrl } from "../api/apiUrl";
 
-function isValidEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim());
+function normalizeRut(v) {
+  return String(v || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\./g, "")
+    .replace(/-/g, "")
+    .replace(/\s+/g, "");
 }
 
 async function readError(res) {
@@ -26,27 +31,28 @@ async function readError(res) {
 
 export default function ForgotPassword() {
   const API_URL = useMemo(() => getApiUrl(), []);
-  const isDev = !!(import.meta && import.meta.env && import.meta.env.DEV);
+  const navigate = useNavigate();
 
-  const [email, setEmail] = useState("");
+  const [step, setStep] = useState(1);
+
+  const [rut, setRut] = useState("");
+  const [code, setCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+
   const [msg, setMsg] = useState("");
-  const [resetUrl, setResetUrl] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e) {
+  async function handleRequestCode(e) {
     e.preventDefault();
     setError("");
     setMsg("");
-    setResetUrl("");
 
-    const emailClean = String(email || "").trim().toLowerCase();
-    if (!emailClean) {
-      setError("Debes ingresar un correo.");
-      return;
-    }
-    if (!isValidEmail(emailClean)) {
-      setError("Correo no válido.");
+    const rutClean = normalizeRut(rut);
+
+    if (!rutClean) {
+      setError("Debes ingresar tu RUT.");
       return;
     }
 
@@ -57,21 +63,105 @@ export default function ForgotPassword() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ email: emailClean }),
+        body: JSON.stringify({ rut: rutClean }),
       });
 
-      const data = await res.json().catch(() => ({}));
-
       if (!res.ok) {
-        // si vino json con message, úsalo; si no, lee texto/json genérico
-        const m = data?.message ? (Array.isArray(data.message) ? data.message.join(", ") : data.message) : await readError(res);
+        const m = await readError(res);
         setError(m || "No se pudo procesar la solicitud");
         return;
       }
 
-      setMsg(data?.message || "Revisa tu correo.");
-      // ✅ solo mostrar resetUrl en desarrollo
-      if (isDev && data?.resetUrl) setResetUrl(data.resetUrl);
+      const data = await res.json().catch(() => ({}));
+
+      setMsg(
+        data?.message ||
+          "Solicitud registrada. Contacta a soporte para que te entregue el código de recuperación."
+      );
+      setStep(2);
+    } catch {
+      setError("Error de conexión con el servidor");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleResetPassword(e) {
+    e.preventDefault();
+    setError("");
+    setMsg("");
+
+    const rutClean = normalizeRut(rut);
+    const codeClean = String(code || "").trim();
+    const pass1 = String(newPassword || "");
+    const pass2 = String(confirm || "");
+
+    if (!rutClean) {
+      setError("Debes ingresar tu RUT.");
+      return;
+    }
+
+    if (!codeClean) {
+      setError("Debes ingresar el código.");
+      return;
+    }
+
+    if (!/^\d{6}$/.test(codeClean)) {
+      setError("El código debe tener 6 dígitos.");
+      return;
+    }
+
+    if (!pass1) {
+      setError("Debes ingresar una nueva contraseña.");
+      return;
+    }
+
+    if (pass1.length < 8) {
+      setError("La nueva contraseña debe tener al menos 8 caracteres.");
+      return;
+    }
+
+    if (pass1 !== pass2) {
+      setError("La confirmación no coincide.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const res = await fetch(`${API_URL}/auth/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          rut: rutClean,
+          code: codeClean,
+          newPassword: pass1,
+        }),
+      });
+
+      if (!res.ok) {
+        const m = await readError(res);
+        setError(m || "No se pudo restablecer la contraseña");
+        return;
+      }
+
+      const data = await res.json().catch(() => ({}));
+
+      setMsg(
+        data?.message ||
+          "Contraseña restablecida correctamente. Redirigiendo al login..."
+      );
+
+      setCode("");
+      setNewPassword("");
+      setConfirm("");
+
+      // 🔥 REDIRECCIÓN AUTOMÁTICA AL LOGIN
+      setTimeout(() => {
+        navigate("/login", { replace: true });
+      }, 1200);
+
     } catch {
       setError("Error de conexión con el servidor");
     } finally {
@@ -85,68 +175,143 @@ export default function ForgotPassword() {
         <div className="login-card">
           <div className="login-header">
             <div className="login-brand">
-              <img src="/logo-thomas.png" alt="Grúas Thomas" className="login-logo" />
+              <img
+                src="/logo-thomas.png"
+                alt="Grúas Thomas"
+                className="login-logo"
+              />
               <div className="login-text">
                 <h2 className="login-title">Recuperar contraseña</h2>
-                <p className="login-subtitle">Ingresa tu correo. Te enviaremos un enlace de recuperación.</p>
+                <p className="login-subtitle">
+                  Ingresa tu RUT. Soporte te entregará un código de recuperación.
+                </p>
               </div>
             </div>
           </div>
 
           <div className="login-body">
-            <form onSubmit={handleSubmit}>
-              <div className="form-group">
-                <label className="label" htmlFor="email">
-                  Correo
-                </label>
-                <input
-                  id="email"
-                  className="input"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  autoComplete="username"
-                  inputMode="email"
-                />
-              </div>
+            {step === 1 ? (
+              <form onSubmit={handleRequestCode}>
+                <div className="form-group">
+                  <label className="label">RUT</label>
+                  <input
+                    className="input"
+                    type="text"
+                    value={rut}
+                    onChange={(e) => setRut(e.target.value)}
+                    placeholder="Ej: 12.345.678-9"
+                  />
+                </div>
 
-              {error && <div className="error">{error}</div>}
-
-              {msg && (
-                <div
-                  className="error"
-                  style={{
+                {error && <div className="error">{error}</div>}
+                {msg && (
+                  <div className="error" style={{
                     background: "rgba(0,150,0,0.08)",
                     borderColor: "rgba(0,150,0,0.25)",
-                    color: "#0a6b2b",
-                  }}
-                >
-                  {msg}
+                    color: "#0a6b2b"
+                  }}>
+                    {msg}
+                  </div>
+                )}
 
-                  {isDev && resetUrl && (
-                    <div style={{ marginTop: 8 }}>
-                      <div style={{ fontWeight: 800, marginBottom: 4 }}>(DEV) Link de reset:</div>
-                      <a href={resetUrl} target="_blank" rel="noreferrer">
-                        Abrir enlace
-                      </a>
-                    </div>
-                  )}
+                <button className="btn btn-primary" disabled={loading}>
+                  {loading ? "Solicitando..." : "Solicitar código"}
+                </button>
+
+                <div className="login-actions">
+                  <Link className="login-link" to="/login">
+                    Volver al login
+                  </Link>
                 </div>
-              )}
+              </form>
+            ) : (
+              <form onSubmit={handleResetPassword}>
 
-              <button type="submit" className="btn btn-primary" disabled={loading}>
-                {loading ? "Enviando..." : "Enviar enlace"}
-              </button>
+                <div className="form-group">
+                  <label className="label">RUT</label>
+                  <input
+                    className="input"
+                    type="text"
+                    value={rut}
+                    onChange={(e) => setRut(e.target.value)}
+                  />
+                </div>
 
-              <div className="login-actions" style={{ justifyContent: "flex-start", marginTop: 10 }}>
-                <Link className="login-link" to="/login">
-                  Volver al login
-                </Link>
-              </div>
-            </form>
+                <div className="form-group">
+                  <label className="label">Código de recuperación</label>
+                  <input
+                    className="input"
+                    type="text"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    placeholder="Ej: 483921"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="label">Nueva contraseña</label>
+                  <input
+                    className="input"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="label">Confirmar nueva contraseña</label>
+                  <input
+                    className="input"
+                    type="password"
+                    value={confirm}
+                    onChange={(e) => setConfirm(e.target.value)}
+                  />
+                </div>
+
+                {error && <div className="error">{error}</div>}
+                {msg && (
+                  <div className="error" style={{
+                    background: "rgba(0,150,0,0.08)",
+                    borderColor: "rgba(0,150,0,0.25)",
+                    color: "#0a6b2b"
+                  }}>
+                    {msg}
+                  </div>
+                )}
+
+                <button className="btn btn-primary" disabled={loading}>
+                  {loading ? "Restableciendo..." : "Restablecer contraseña"}
+                </button>
+
+                <div className="login-actions" style={{justifyContent:"space-between"}}>
+                  <button
+                    type="button"
+                    className="login-link"
+                    onClick={() => {
+                      setStep(1);
+                      setCode("");
+                      setNewPassword("");
+                      setConfirm("");
+                      setError("");
+                      setMsg("");
+                    }}
+                    style={{background:"transparent",border:"none",padding:0,cursor:"pointer"}}
+                  >
+                    Solicitar otro código
+                  </button>
+
+                  <Link className="login-link" to="/login">
+                    Volver al login
+                  </Link>
+                </div>
+
+              </form>
+            )}
           </div>
 
-          <div className="login-footer">© {new Date().getFullYear()} Grúas Thomas</div>
+          <div className="login-footer">
+            © {new Date().getFullYear()} Grúas Thomas
+          </div>
         </div>
       </div>
     </div>

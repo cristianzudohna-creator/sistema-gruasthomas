@@ -1,6 +1,7 @@
 // ✅ Archivo: src/pages/WorkOrdersAdmin.jsx (COMPLETO)
 // ✅ NUEVO: Auto-refresh (polling) + refresh al volver a la pestaña
 // ✅ FIX: se elimina columna "CREADO POR" del listado
+// ✅ FIX: se elimina botón "Abrir" del listado
 import { useCallback, useEffect, useMemo, useState } from "react";
 import "./Admin.css";
 
@@ -781,10 +782,6 @@ export default function WorkOrdersAdmin() {
                           style={disableOtherDownload ? { opacity: 0.6, cursor: "not-allowed" } : undefined}
                         >
                           {isDownloading ? "⏳ PDF..." : "📄 PDF"}
-                        </button>
-
-                        <button className="btn ghost" type="button" onClick={() => openDetail(x.id)}>
-                          Abrir
                         </button>
 
                         {canFixReport ? (

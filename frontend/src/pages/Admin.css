@@ -1964,6 +1964,65 @@ details.gt-actions summary::-webkit-details-marker {
     min-width: 0 !important;
   }
 }
+/* =========================
+   MODAL FORM STYLE
+========================= */
+
+.modal-form {
+  display: grid;
+  gap: 16px;
+}
+
+.modal-form label {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.modal-form select,
+.modal-form textarea,
+.modal-form input {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(15,23,42,.12);
+  padding: 10px 12px;
+  font-size: 14px;
+  background: #fff;
+  outline: none;
+}
+
+.modal-form textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+/* botones redondeados */
+
+.btn-primary {
+  background: #eab308;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.btn-secondary {
+  background: #e5e7eb;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
 
 
 

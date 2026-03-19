@@ -1,6 +1,7 @@
 // ✅ Archivo: src/auth/dto/update-user.dto.ts (COMPLETO)
 // ✅ Cambio: rut sigue siendo opcional en update, PERO si viene debe ser string NO vacío
 // ✅ Motivo: evitar que alguien deje rut="" y después no pueda loguear
+// ✅ NUEVO: workerType ahora contempla ADQUISICIONES
 
 import {
   IsBoolean,
@@ -59,7 +60,7 @@ export class UpdateUserDto {
   @IsOptional()
   @IsEnum(WorkerType, {
     message:
-      "workerType debe ser CONDUCTOR, RIGGER, OPERADOR, MECANICO u OTRO",
+      "workerType debe ser CONDUCTOR, RIGGER, OPERADOR, MECANICO, ADQUISICIONES u OTRO",
   })
   workerType?: WorkerType;
 

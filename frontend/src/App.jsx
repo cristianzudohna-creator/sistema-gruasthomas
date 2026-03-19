@@ -10,23 +10,23 @@ import ResetPassword from "./pages/ResetPassword";
 import Auditoria from "./pages/Auditoria";
 import Configuracion from "./pages/Configuracion";
 
-// ✅ NUEVO
 import Clientes from "./pages/Clientes";
-
-// ✅ Portal trabajador
+import Incidents from "./pages/Incidents";
+import Repuestos from "./pages/Repuestos";
+import ReportIncidentWorker from "./pages/ReportIncidentWorker";
 import PortalTrabajador from "./pages/PortalTrabajador";
 
-// ✅ Órdenes de trabajo (Admin)
 import WorkOrdersAdmin from "./pages/WorkOrdersAdmin";
-
-// ✅ Órdenes de trabajo (Trabajador)
 import WorkOrdersTrabajador from "./pages/WorkOrdersTrabajador";
 
-// ✅ Papelera de camiones (SUPERADMIN)
 import VehiclesDeleted from "./pages/VehiclesDeleted";
-
-// ✅ Papelera de OT (SUPERADMIN)
 import WorkOrdersDeleted from "./pages/WorkOrdersDeleted";
+
+// ✅ Pantalla de incidentes asignados de taller
+import WorkshopTasksWorker from "./pages/WorkshopTasksWorker";
+
+// ✅ Pantalla real de tareas de taller
+import WorkshopMyTasks from "./pages/WorkshopMyTasks";
 
 export default function App() {
   return (
@@ -50,14 +50,20 @@ export default function App() {
         <Route
           path="/admin"
           element={
-            <ProtectedRoute role={["CONTROL_FLOTA", "ADMINISTRADORA", "SUPERADMIN"]}>
+            <ProtectedRoute
+              role={[
+                "CONTROL_FLOTA",
+                "ADMINISTRADORA",
+                "SUPERADMIN",
+                "TRABAJADOR",
+              ]}
+            >
               <Admin />
             </ProtectedRoute>
           }
         >
           <Route index element={<Navigate to="camiones" replace />} />
 
-          {/* Camiones */}
           <Route
             path="camiones"
             element={
@@ -67,7 +73,6 @@ export default function App() {
             }
           />
 
-          {/* Camiones eliminados */}
           <Route
             path="camiones-eliminados"
             element={
@@ -77,7 +82,6 @@ export default function App() {
             }
           />
 
-          {/* Trabajadores */}
           <Route
             path="trabajadores"
             element={
@@ -87,17 +91,35 @@ export default function App() {
             }
           />
 
-          {/* Órdenes de trabajo */}
           <Route
             path="ordenes-trabajo"
             element={
-              <ProtectedRoute role={["CONTROL_FLOTA", "ADMINISTRADORA", "SUPERADMIN"]}>
+              <ProtectedRoute
+                role={["CONTROL_FLOTA", "ADMINISTRADORA", "SUPERADMIN"]}
+              >
                 <WorkOrdersAdmin />
               </ProtectedRoute>
             }
           />
 
-          {/* Clientes */}
+          <Route
+            path="incidentes"
+            element={
+              <ProtectedRoute role={["CONTROL_FLOTA", "SUPERADMIN"]}>
+                <Incidents />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="repuestos"
+            element={
+              <ProtectedRoute role={["SUPERADMIN", "TRABAJADOR"]}>
+                <Repuestos />
+              </ProtectedRoute>
+            }
+          />
+
           <Route
             path="clientes"
             element={
@@ -107,7 +129,6 @@ export default function App() {
             }
           />
 
-          {/* Órdenes eliminadas */}
           <Route
             path="ordenes-trabajo-eliminadas"
             element={
@@ -117,7 +138,6 @@ export default function App() {
             }
           />
 
-          {/* Auditoría */}
           <Route
             path="auditoria"
             element={
@@ -127,11 +147,17 @@ export default function App() {
             }
           />
 
-          {/* Configuración */}
           <Route
             path="configuracion"
             element={
-              <ProtectedRoute role={["SUPERADMIN", "CONTROL_FLOTA", "ADMINISTRADORA"]}>
+              <ProtectedRoute
+                role={[
+                  "SUPERADMIN",
+                  "CONTROL_FLOTA",
+                  "ADMINISTRADORA",
+                  "TRABAJADOR",
+                ]}
+              >
                 <Configuracion />
               </ProtectedRoute>
             }
@@ -142,20 +168,51 @@ export default function App() {
         <Route
           path="/trabajador"
           element={
-            <ProtectedRoute role="TRABAJADOR">
+            <ProtectedRoute role={["TRABAJADOR"]}>
               <PortalTrabajador />
             </ProtectedRoute>
           }
         />
 
-        {/* ✅ BLOQUEADO: si alguien pega la URL antigua, lo mandamos al portal */}
-        <Route path="/trabajador/horometro" element={<Navigate to="/trabajador" replace />} />
+        <Route
+          path="/trabajador/horometro"
+          element={<Navigate to="/trabajador" replace />}
+        />
 
         <Route
           path="/trabajador/ordenes-trabajo"
           element={
-            <ProtectedRoute role="TRABAJADOR">
+            <ProtectedRoute role={["TRABAJADOR"]}>
               <WorkOrdersTrabajador />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/trabajador/reportar-incidente"
+          element={
+            <ProtectedRoute role={["TRABAJADOR"]}>
+              <ReportIncidentWorker />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ✅ Pantalla de incidentes asignados */}
+        <Route
+          path="/trabajador/tareas-taller"
+          element={
+            <ProtectedRoute role={["TRABAJADOR"]}>
+              <WorkshopTasksWorker />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ✅ Pantalla real de tareas de taller */}
+        <Route
+          path="/trabajador/mis-tareas-taller"
+          element={
+            <ProtectedRoute role={["TRABAJADOR"]}>
+              <WorkshopMyTasks />
             </ProtectedRoute>
           }
         />

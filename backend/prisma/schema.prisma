@@ -1,8 +1,13 @@
-// ✅ Archivo: prisma/schema.prisma (COMPLETO) ✅
-// Incluye:
-// - ✅ AlertKind: agrega HOROMETER
-// - ✅ Nuevo model HorometerMaintenancePlan
-// - ✅ Vehicle: agrega relación inversa horometerPlan
+// ✅ Archivo: prisma/schema.prisma (COMPLETO)
+// ✅ NUEVO:
+// - PasswordResetRequest para recuperación por RUT + código
+// - relación inversa en User: passwordResetRequests
+// - módulo base de Incidentes + Taller + Repuestos usados
+// - WorkshopTaskAssignment para múltiples personas en una tarea
+// - WorkshopTask.codigo único
+// - WorkerType incluye ADQUISICIONES
+// - WorkshopTaskStatus incluye EN_COMPRA, COMPRADO, ENTREGADO
+// ✅ pensado para funcionar en local y producción
 
 datasource db {
   provider = "postgresql"
@@ -27,7 +32,10 @@ enum AuditEntity {
   MAINTENANCE
   WORK_ORDER
   HOROMETER
-  CLIENT // ✅ NUEVO
+  CLIENT
+
+  VEHICLE_INCIDENT
+  WORKSHOP_TASK
 }
 
 enum AuditAction {
@@ -84,8 +92,10 @@ enum WorkerType {
   RIGGER
   OPERADOR
   MECANICO
+  JEFE_TALLER
 
   ADMINISTRACION
+  ADQUISICIONES
   ASEO
   AYUDANTE_DE_MECANICO
   CASA_PARTICULAR
@@ -97,6 +107,61 @@ enum WorkerType {
   SUPERVISOR
 
   OTRO
+}
+
+// =========================
+// ✅ INCIDENTES / TALLER
+// =========================
+
+enum VehicleIncidentType {
+  PINCHAZO
+  PANE_MECANICA
+  FALLA_HIDRAULICA
+  FALLA_ELECTRICA
+  SOBRECALENTAMIENTO
+  FUGA
+  ACCIDENTE
+  OTRO
+}
+
+enum VehicleIncidentSeverity {
+  BAJA
+  MEDIA
+  ALTA
+  CRITICA
+}
+
+enum VehicleIncidentStatus {
+  ABIERTO
+  EN_REVISION
+  RESUELTO
+  CERRADO
+  CANCELADO
+}
+
+enum WorkshopTaskStatus {
+  PENDIENTE
+  EN_REVISION
+  EN_REPARACION
+  ESPERANDO_REPUESTO
+  EN_COMPRA
+  COMPRADO
+  ENTREGADO
+  TERMINADA
+  CANCELADA
+}
+
+enum WorkshopTaskPriority {
+  BAJA
+  MEDIA
+  ALTA
+  CRITICA
+}
+
+// ✅ NUEVO: múltiples personas por tarea
+enum WorkshopTaskAssignmentRole {
+  RESPONSABLE
+  APOYO
 }
 
 model User {
@@ -112,27 +177,29 @@ model User {
   mustChangePassword Boolean   @default(false)
   passwordResetAt    DateTime?
 
-  // ✅ empresa del usuario (para filtrar vehículos al trabajador)
-  empresa Empresa?
-
-  // ✅ tipo de trabajador (solo aplica a TRABAJADOR)
+  empresa    Empresa?
   workerType WorkerType?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  passwordResetTokens PasswordResetToken[]
-  auditLogs           AuditLog[]
+  passwordResetTokens      PasswordResetToken[]
+  passwordResetRequests    PasswordResetRequest[]
+  auditLogs                AuditLog[]
 
-  // ✅ INVERSA: registros de horómetro hechos por este usuario
   horometers HorometerRecord[] @relation("UserHorometers")
 
-  // ✅ INVERSAS: Work Orders
   workOrdersCreated   WorkOrder[]         @relation("WorkOrderCreatedBy")
   workOrdersAssigned  WorkOrder[]         @relation("WorkOrderAssignedTo")
   workOrdersCompleted WorkOrder[]         @relation("WorkOrderCompletedBy")
   workOrdersApproved  WorkOrder[]         @relation("WorkOrderApprovedBy")
   workOrderEvidences  WorkOrderEvidence[]
+
+  reportedIncidents       VehicleIncident[]         @relation("VehicleIncidentReportedBy")
+  workshopTasksCreated    WorkshopTask[]            @relation("WorkshopTaskCreatedBy")
+  workshopTasksAssigned   WorkshopTask[]            @relation("WorkshopTaskAssignedTo")
+  workshopTasksClosed     WorkshopTask[]            @relation("WorkshopTaskClosedBy")
+  workshopTaskAssignments WorkshopTaskAssignment[]
 
   @@index([empresa])
   @@index([workerType])
@@ -149,6 +216,24 @@ model PasswordResetToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+model PasswordResetRequest {
+  id        String   @id @default(uuid())
+  userId    String
+  rut       String
+  code      String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([rut])
+  @@index([code])
+  @@index([expiresAt])
+  @@index([createdAt])
 }
 
 model AuditLog {
@@ -172,10 +257,8 @@ model AuditLog {
   @@index([actorId])
   @@index([actorEmail])
   @@index([createdAt])
-  // ✅ recomendados para filtros + orden por fecha
   @@index([entity, createdAt])
   @@index([action, createdAt])
-  // ✅ opcional: si filtras mucho por ambos
   @@index([entity, action, createdAt])
 }
 
@@ -191,7 +274,6 @@ model Vehicle {
 
   empresa Empresa @default(GRUAS_THOMAS)
 
-  // ✅ estado operativo
   estadoOperativo VehicleOperationalStatus @default(OPERATIVO)
 
   activo    Boolean  @default(true)
@@ -201,14 +283,12 @@ model Vehicle {
   documents    VehicleDocument[]
   maintenances VehicleMaintenance[]
 
-  // ✅ INVERSA: registros de horómetro de este vehículo
-  horometers HorometerRecord[]
-
-  // ✅ INVERSA: plan de mantención por horómetro (1 por vehículo)
+  horometers    HorometerRecord[]
   horometerPlan HorometerMaintenancePlan?
+  workOrders    WorkOrder[]
 
-  // ✅ INVERSA: órdenes asociadas a este vehículo
-  workOrders WorkOrder[]
+  incidents     VehicleIncident[]
+  workshopTasks WorkshopTask[]
 
   @@index([empresa])
   @@index([estadoOperativo])
@@ -224,7 +304,6 @@ model VehicleDocument {
   observacion      String?
   archivoUrl       String?
 
-  // ✅ archivo subido
   filePath     String
   originalName String
   mimeType     String
@@ -233,11 +312,6 @@ model VehicleDocument {
   createdAt DateTime @default(now())
 
   vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-
-  // 🚫 OJO:
-  // NO pongas @@unique([vehicleId, type]) aquí,
-  // porque queremos permitir múltiples OTRO y además Prisma no soporta unique parcial en schema.
-  // La restricción real la haremos con un índice UNIQUE parcial en una migración SQL.
 
   @@index([vehicleId])
   @@index([type])
@@ -254,7 +328,6 @@ model VehicleMaintenance {
   observacion    String?
   archivoUrl     String?
 
-  // ✅ archivo subido (para nombre real en Excel)
   filePath     String?
   originalName String?
   mimeType     String?
@@ -272,28 +345,22 @@ model VehicleMaintenance {
 model HorometerRecord {
   id String @id @default(uuid())
 
-  // Relación vehículo
   vehicleId String
   vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
 
-  // Relación trabajador (usuario)
   trabajadorId String
   trabajador   User   @relation("UserHorometers", fields: [trabajadorId], references: [id], onDelete: Restrict)
 
-  // Snapshot trabajador (para auditoría)
   trabajadorNombre   String
   trabajadorApellido String
   trabajadorRut      String?
   trabajadorEmail    String
 
-  // Empresa (snapshot)
   empresa Empresa
 
-  // Datos horómetro
   horas      Int
   comentario String?
 
-  // Evidencia
   fotoUrl      String
   filePath     String
   originalName String
@@ -323,7 +390,7 @@ model CompanySettings {
 }
 
 // =========================
-// ✅ CLIENTES (AUTOCOMPLETE)
+// CLIENTES
 // =========================
 
 model Client {
@@ -331,21 +398,17 @@ model Client {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Para filtrar/compartimentar clientes por empresa
   empresa Empresa
 
-  // Datos básicos del cliente
   nombre String
   rut    String?
 
-  // Opcionales (por si después quieres autollenar más)
   giro      String?
   telefono  String?
   direccion String?
   comuna    String?
   ciudad    String?
 
-  // INVERSA
   workOrders WorkOrder[]
 
   @@unique([empresa, rut], name: "client_empresa_rut_unique")
@@ -384,16 +447,14 @@ model WorkOrder {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  empresa  Empresa
+  empresa  Empresa           @default(GRUAS_THOMAS)
   status   WorkOrderStatus   @default(ABIERTA)
   priority WorkOrderPriority @default(MEDIA)
   type     WorkOrderType     @default(OTRO)
 
-  // ✅ Relación a Cliente (para autocomplete)
   clientId String?
   client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
 
-  // ✅ Campos “Registro manual” (tu modal)
   cliente       String?
   rut           String?
   giro          String?
@@ -415,56 +476,44 @@ model WorkOrder {
   rigger    String?
   sinJib    Boolean @default(false)
 
-  // ✅ Días que va a trabajar (ej: ["LUN","MAR","MIE"])
   diasTrabajo     String[] @default([])
-  // ✅ Fechas exactas marcadas en calendario (ej: ["2026-02-19","2026-02-20"])
   diasProgramados String[] @default([])
 
   nota String?
 
-  // ✅ Si después quieres usar “título/descripcion” (opcional por ahora)
   titulo      String?
   descripcion String?
 
-  // Programación
   fechaProgramada DateTime?
 
-  // Relaciones
   vehicleId String?
   vehicle   Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
 
-  // Admin que crea
   createdById String
   createdBy   User   @relation("WorkOrderCreatedBy", fields: [createdById], references: [id])
 
-  // Trabajador asignado (opcional)
   assignedToId String?
-  assignedTo   User?   @relation("WorkOrderAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedTo   User? @relation("WorkOrderAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
 
-  // Trabajo realizado (lo completa el trabajador)
   startedAt       DateTime?
   finishedAt      DateTime?
   horasTrabajo    Int?
   comentarioFinal String?
 
-  // ✅ Reporte que completa el trabajador
   workerReport  Json?
   completedAt   DateTime?
   completedById String?
-  completedBy   User?     @relation("WorkOrderCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+  completedBy   User? @relation("WorkOrderCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
 
-  // ✅ Visto bueno administradora / superadmin
   approvedAt      DateTime?
   approvedById    String?
-  approvedBy      User?     @relation("WorkOrderApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedBy      User? @relation("WorkOrderApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
   approvalComment String?
   rejectReason    String?
 
-  // Checklist y evidencias
   items     WorkOrderItem[]
   evidences WorkOrderEvidence[]
 
-  // ✅ SOFT DELETE (PAPELERA)
   activo    Boolean   @default(true)
   deletedAt DateTime?
 
@@ -477,7 +526,6 @@ model WorkOrder {
   @@index([approvedAt])
   @@index([approvedById])
   @@index([clientId])
-  // ✅ índices extra para papelera / filtros
   @@index([activo])
   @@index([empresa, activo])
   @@index([deletedAt])
@@ -493,7 +541,6 @@ model WorkOrderItem {
   titulo      String
   obligatorio Boolean @default(false)
 
-  // lo marca el trabajador
   done   Boolean   @default(false)
   doneAt DateTime?
 
@@ -507,11 +554,9 @@ model WorkOrderEvidence {
   workOrderId String
   workOrder   WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
 
-  // quién subió
   uploadedById String
   uploadedBy   User   @relation(fields: [uploadedById], references: [id])
 
-  // Archivo
   fileUrl      String
   filePath     String
   originalName String
@@ -546,8 +591,7 @@ model AlertDispatchLog {
 }
 
 // =========================
-// ✅ PLAN DE MANTENCIÓN POR HORÓMETRO
-// - 1 plan por vehículo
+// PLAN DE MANTENCIÓN POR HORÓMETRO
 // =========================
 
 model HorometerMaintenancePlan {
@@ -559,10 +603,8 @@ model HorometerMaintenancePlan {
   enabled       Boolean @default(true)
   intervalHours Int     @default(500)
 
-  // ✅ meta fija: ej si hoy es 20280, nextDueHours = 20780
   nextDueHours Int
 
-  // ✅ para no spamear el mismo aviso
   lastNotifiedDueHours Int?
 
   createdAt DateTime @default(now())
@@ -570,4 +612,157 @@ model HorometerMaintenancePlan {
 
   @@index([enabled])
   @@index([nextDueHours])
+}
+
+// =========================
+// INCIDENTES DE VEHÍCULOS
+// =========================
+
+model VehicleIncident {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vehicleId String
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  reportedById String
+  reportedBy   User @relation("VehicleIncidentReportedBy", fields: [reportedById], references: [id], onDelete: Restrict)
+
+  empresa Empresa
+
+  type     VehicleIncidentType
+  severity VehicleIncidentSeverity @default(MEDIA)
+  status   VehicleIncidentStatus   @default(ABIERTO)
+
+  titulo      String?
+  descripcion String
+
+  ubicacionTexto String?
+  lat           Decimal? @db.Decimal(10, 7)
+  lng           Decimal? @db.Decimal(10, 7)
+
+  kilometraje Int?
+  horometro   Int?
+
+  estadoOperativoReportado VehicleOperationalStatus?
+
+  reportadoEn DateTime @default(now())
+  cerradoEn   DateTime?
+
+  workshopTasks WorkshopTask[]
+
+  @@index([vehicleId])
+  @@index([reportedById])
+  @@index([empresa])
+  @@index([type])
+  @@index([severity])
+  @@index([status])
+  @@index([reportadoEn])
+  @@index([cerradoEn])
+}
+
+// =========================
+// TAREAS DE TALLER
+// =========================
+
+model WorkshopTask {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  incidentId String?
+  incident   VehicleIncident? @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+
+  vehicleId String
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  empresa Empresa
+
+  createdById String
+  createdBy   User @relation("WorkshopTaskCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  assignedToId String?
+  assignedTo   User? @relation("WorkshopTaskAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  closedById String?
+  closedBy   User? @relation("WorkshopTaskClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+
+  codigo String @unique
+
+  titulo      String
+  descripcion String?
+
+  priority WorkshopTaskPriority @default(MEDIA)
+  status   WorkshopTaskStatus   @default(PENDIENTE)
+
+  diagnostico      String?
+  trabajoRealizado String?
+  observaciones    String?
+
+  startedAt DateTime?
+  closedAt  DateTime?
+
+  estimatedCost Decimal? @db.Decimal(12, 2)
+  actualCost    Decimal? @db.Decimal(12, 2)
+
+  assignments WorkshopTaskAssignment[]
+  partsUsed   WorkshopTaskPart[]
+
+  @@index([codigo])
+  @@index([incidentId])
+  @@index([vehicleId])
+  @@index([empresa])
+  @@index([createdById])
+  @@index([assignedToId])
+  @@index([closedById])
+  @@index([priority])
+  @@index([status])
+  @@index([startedAt])
+  @@index([closedAt])
+}
+
+// =========================
+// ASIGNACIONES DE TALLER
+// =========================
+
+model WorkshopTaskAssignment {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  workshopTaskId String
+  workshopTask   WorkshopTask @relation(fields: [workshopTaskId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  role WorkshopTaskAssignmentRole @default(APOYO)
+
+  @@index([workshopTaskId])
+  @@index([userId])
+  @@index([role])
+  @@unique([workshopTaskId, userId], name: "workshop_task_assignment_unique")
+}
+
+// =========================
+// REPUESTOS USADOS EN TALLER
+// =========================
+
+model WorkshopTaskPart {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  workshopTaskId String
+  workshopTask   WorkshopTask @relation(fields: [workshopTaskId], references: [id], onDelete: Cascade)
+
+  nombre String
+
+  cantidad      Int      @default(1)
+  costoUnitario Decimal? @db.Decimal(12, 2)
+  costoTotal    Decimal? @db.Decimal(12, 2)
+
+  observacion String?
+
+  @@index([workshopTaskId])
+  @@index([nombre])
 }

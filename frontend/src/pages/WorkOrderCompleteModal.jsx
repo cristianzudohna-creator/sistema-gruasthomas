@@ -1,17 +1,8 @@
 // ✅ Archivo: src/pages/WorkOrderCompleteModal.jsx (COMPLETO + BORRADOR + FIRMA BLOQUEABLE)
-// ✅ Cambio nuevo:
-// - Firma NO se puede dibujar por accidente mientras haces scroll.
-// - Firma viene BLOQUEADA por defecto.
-// - Botón "✍️ Habilitar firma" para que recién ahí el cliente firme.
-// - Overlay encima del canvas cuando está bloqueado (evita “rayas” accidentales).
-// - touchAction: "none" para que el canvas NO haga scroll/zoom mientras firmas.
-//
-// ✅ NUEVO (BORRADOR):
-// - Botón "Guardar borrador" solo para trabajador
-// - Guarda workerReport parcial en /work-orders/:id/draft
-// - NO exige validación completa para guardar borrador
-// - Al reabrir el modal, carga lo ya guardado
-// - "Enviar a administración" sigue siendo la acción final
+// ✅ FIX NUEVO:
+// - En modo admin ahora SÍ muestra "Recibí Conforme (cliente)" en solo lectura.
+// - Se visualiza nombre y rut guardados por el trabajador.
+// - Firma sigue siendo solo lectura en administración.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -478,7 +469,7 @@ export default function WorkOrderCompleteModal({
   loading,
   error,
   onSaved,
-  mode = "worker", // ✅ worker | admin
+  mode = "worker",
 }) {
   const isAdmin = mode === "admin";
 
@@ -761,6 +752,8 @@ export default function WorkOrderCompleteModal({
   }, [workOrder]);
 
   const firmaOk = !!normalizeText(signature) && String(signature).startsWith("data:image/");
+  const recibiNombre = normalizeText(recibi.nombre);
+  const recibiRut = normalizeText(recibi.rut);
 
   return (
     <>
@@ -1020,7 +1013,10 @@ export default function WorkOrderCompleteModal({
 
             <Box title="Recibí Conforme (cliente)">
               {isAdmin ? (
-                <div style={{ fontWeight: 900, opacity: 0.75 }}>Solo lectura en modo administración.</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <FieldRO label="Nombre quien recibe conforme" value={recibiNombre || "—"} />
+                  <FieldRO label="RUT quien recibe conforme" value={recibiRut || "—"} />
+                </div>
               ) : (
                 <div className="ot-grid-2">
                   <LabeledInput

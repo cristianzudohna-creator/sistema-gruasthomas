@@ -21,8 +21,11 @@ import { MailModule } from "./mail/mail.module";
 // ✅ ALERTAS
 import { AlertsModule } from "./alerts/alerts.module";
 
-// ✅ NUEVO CLIENTES
+// ✅ CLIENTES
 import { ClientsModule } from "./clients/clients.module";
+
+// ✅ TALLER / INCIDENTES
+import { WorkshopModule } from "./workshop/workshop.module";
 
 // ✅ Scheduler / Cron
 import { ScheduleModule } from "@nestjs/schedule";
@@ -39,9 +42,10 @@ import { ScheduleModule } from "@nestjs/schedule";
     WorkOrdersModule,
     MailModule,
     AlertsModule,
-
-    // 🔥 AQUÍ
     ClientsModule,
+
+    // ✅ NUEVO MÓDULO
+    WorkshopModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,7 +1,18 @@
 // ✅ Archivo: src/auth/auth.service.ts (COMPLETO)
 // ✅ Login por RUT + password
 // ✅ Forzar cambio de clave cuando mustChangePassword = true
-// ✅ Auditoría: LOGIN, CHANGE PASSWORD, FORGOT, RESET
+// ✅ Auditoría: LOGIN, CHANGE PASSWORD, REQUEST RESET, RESET WITH CODE
+//
+// ✅ NUEVO:
+// - Recuperación por RUT + código de 6 dígitos
+// - Ya NO usa correo para recuperar
+// - requestPasswordResetByRut(rut)
+// - resetPasswordWithCode(rut, code, newPassword)
+// - ENVÍA correo a soporte con el código
+//
+// ✅ FIX:
+// - ahora devuelve workerType en login
+// - ahora incluye workerType en payload JWT
 
 import {
   Injectable,
@@ -10,7 +21,6 @@ import {
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcrypt";
-import { randomBytes } from "crypto";
 
 import { UsersService } from "../users/users.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -55,6 +65,10 @@ function normalizeRut(input: any): string {
     .replace(/\s+/g, "");
 }
 
+function generate6DigitCode(): string {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -85,19 +99,18 @@ export class AuthService {
 
     const mustChangePassword = !!(user as any).mustChangePassword;
 
-    // ✅ incluir empresa en JWT (y opcional el flag si quieres)
     const payload: any = {
       sub: user.id,
       role: user.role,
       email: user.email,
       rut: (user as any).rut ?? null,
       empresa: (user as any).empresa ?? null,
-      mustChangePassword, // opcional
+      workerType: (user as any).workerType ?? null,
+      mustChangePassword,
     };
 
     const access_token = await this.jwtService.signAsync(payload);
 
-    // ✅ AUDIT: Login exitoso
     try {
       await this.audit.log({
         entity: AuditEntity.USER,
@@ -117,6 +130,7 @@ export class AuthService {
             rut: (user as any).rut ?? null,
             role: user.role,
             empresa: (user as any).empresa ?? null,
+            workerType: (user as any).workerType ?? null,
           },
           mustChangePassword,
         },
@@ -125,7 +139,7 @@ export class AuthService {
 
     return {
       access_token,
-      mustChangePassword, // ✅ CLAVE: el frontend lo usa para obligar cambio
+      mustChangePassword,
       user: {
         id: user.id,
         email: user.email,
@@ -134,13 +148,13 @@ export class AuthService {
         apellido: user.apellido,
         role: user.role,
         empresa: (user as any).empresa ?? null,
+        workerType: (user as any).workerType ?? null,
         mustChangePassword,
       },
     };
   }
 
   // ✅ Cambiar contraseña (usuario logueado)
-  // ✅ Al cambiarla, se apaga mustChangePassword
   async changePassword(
     userId: string,
     dto: { currentPassword: string; newPassword: string }
@@ -166,6 +180,7 @@ export class AuthService {
         activo: true,
         role: true,
         empresa: true as any,
+        workerType: true as any,
         mustChangePassword: true as any,
       },
     });
@@ -188,12 +203,11 @@ export class AuthService {
       where: { id: user.id },
       data: {
         password: hashed,
-        mustChangePassword: false, // ✅ apaga el bloqueo
-        passwordResetAt: null as any, // opcional (si existe en prisma)
+        mustChangePassword: false,
+        passwordResetAt: null as any,
       } as any,
     });
 
-    // ✅ AUDIT: cambio contraseña (sin guardar password)
     try {
       await this.audit.log({
         entity: AuditEntity.USER,
@@ -211,36 +225,79 @@ export class AuthService {
     return { message: "Contraseña actualizada correctamente" };
   }
 
-  // ✅ OLVIDÉ MI CONTRASEÑA (por email) - puedes dejarlo o desactivarlo
-  async forgotPassword(email: string) {
-    const cleanEmail = String(email || "").toLowerCase().trim();
-
-    const user = await this.prisma.user.findUnique({
-      where: { email: cleanEmail },
-      select: { id: true, email: true, rut: true as any, activo: true },
-    });
+  // ✅ NUEVO: solicitar recuperación por RUT
+  async requestPasswordResetByRut(rut: string, req?: any) {
+    const cleanRut = normalizeRut(rut);
 
     const generic = {
       message:
-        "Si el correo existe, recibirás instrucciones para recuperar tu contraseña.",
+        "Si el RUT existe, soporte recibirá o podrá revisar un código de recuperación.",
     };
+
+    if (!cleanRut) return generic;
+
+    const user = await this.prisma.user.findFirst({
+      where: { rut: cleanRut },
+      select: {
+        id: true,
+        email: true,
+        rut: true as any,
+        activo: true,
+        nombre: true,
+        apellido: true,
+        workerType: true as any,
+      },
+    });
 
     if (!user || !user.activo) return generic;
 
-    const token = randomBytes(32).toString("hex");
-    const tokenHash = await bcrypt.hash(token, 10);
-
+    const code = generate6DigitCode();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
-    const createdTokenRow = await this.prisma.passwordResetToken.create({
-      data: { userId: user.id, tokenHash, expiresAt },
-      select: { id: true, expiresAt: true },
+    // ✅ invalida solicitudes anteriores no usadas
+    await this.prisma.passwordResetRequest.updateMany({
+      where: {
+        userId: user.id,
+        usedAt: null,
+      },
+      data: {
+        usedAt: new Date(),
+      },
     });
 
-    const frontend = process.env.FRONTEND_URL || "http://localhost:5173";
-    const resetUrl = `${frontend}/reset-password?token=${token}`;
+    const createdRequest = await this.prisma.passwordResetRequest.create({
+      data: {
+        userId: user.id,
+        rut: cleanRut,
+        code,
+        expiresAt,
+      },
+      select: {
+        id: true,
+        code: true,
+        expiresAt: true,
+        createdAt: true,
+      },
+    });
 
-    await this.mailService.sendResetPasswordEmail(user.email, resetUrl);
+    // ✅ NUEVO: enviar código al correo de soporte
+    try {
+      await this.mailService.sendPasswordResetCodeToSupport({
+        rut: cleanRut,
+        code: createdRequest.code,
+        requestedAt: createdRequest.createdAt,
+        expiresAt: createdRequest.expiresAt,
+        nombre: user.nombre,
+        apellido: user.apellido,
+        email: user.email,
+      });
+    } catch (e: any) {
+      // no rompe el flujo de recuperación si falla el correo
+      console.error(
+        "[AUTH] No se pudo enviar correo de código de recuperación a soporte:",
+        e?.message || e
+      );
+    }
 
     try {
       await this.audit.log({
@@ -248,13 +305,17 @@ export class AuthService {
         entityId: user.id,
         action: AuditAction.UPDATE,
         actor: safeActorFromUser(user),
+        ip: pickIp(req),
+        userAgent: pickUserAgent(req),
         meta: {
-          title: "Solicitó recuperación de contraseña",
-          kind: "AUTH_FORGOT_PASSWORD",
+          title: "Solicitó recuperación por RUT",
+          kind: "AUTH_REQUEST_RESET_BY_RUT",
           targetLabel: (user as any).rut ?? user.email,
-          reset: {
-            tokenId: createdTokenRow.id,
-            expiresAt: createdTokenRow.expiresAt,
+          resetRequest: {
+            id: createdRequest.id,
+            code: createdRequest.code,
+            expiresAt: createdRequest.expiresAt,
+            createdAt: createdRequest.createdAt,
           },
         },
       });
@@ -263,76 +324,128 @@ export class AuthService {
     return generic;
   }
 
-  // ✅ RESET PASSWORD (token + newPassword)
-  async resetPassword(token: string, newPassword: string) {
-    const cleanToken = String(token || "").trim();
+  // ✅ NUEVO: reset con RUT + código + nueva contraseña
+  async resetPasswordWithCode(
+    rut: string,
+    code: string,
+    newPassword: string,
+    req?: any
+  ) {
+    const cleanRut = normalizeRut(rut);
+    const cleanCode = String(code || "").trim();
     const cleanNew = String(newPassword || "");
 
-    if (!cleanToken) throw new BadRequestException("Token requerido");
+    if (!cleanRut) throw new BadRequestException("RUT requerido");
+    if (!cleanCode) throw new BadRequestException("Código requerido");
+    if (!/^\d{6}$/.test(cleanCode)) {
+      throw new BadRequestException("Código inválido");
+    }
     if (!cleanNew || cleanNew.length < 8) {
       throw new BadRequestException(
         "La nueva contraseña debe tener al menos 8 caracteres"
       );
     }
 
-    const candidates = await this.prisma.passwordResetToken.findMany({
-      where: { usedAt: null, expiresAt: { gt: new Date() } },
+    const resetRow = await this.prisma.passwordResetRequest.findFirst({
+      where: {
+        rut: cleanRut,
+        code: cleanCode,
+        usedAt: null,
+        expiresAt: { gt: new Date() },
+      },
       orderBy: { createdAt: "desc" },
-      take: 50,
-      select: { id: true, userId: true, tokenHash: true },
+      select: {
+        id: true,
+        userId: true,
+        code: true,
+        rut: true,
+        expiresAt: true,
+        createdAt: true,
+      },
     });
 
-    let match: { id: string; userId: string } | null = null;
-
-    for (const t of candidates) {
-      const ok = await bcrypt.compare(cleanToken, t.tokenHash);
-      if (ok) {
-        match = { id: t.id, userId: t.userId };
-        break;
-      }
+    if (!resetRow) {
+      throw new BadRequestException("Código inválido o expirado");
     }
 
-    if (!match) throw new BadRequestException("Token inválido o expirado");
-
     const user = await this.prisma.user.findUnique({
-      where: { id: match.userId },
-      select: { id: true, email: true, rut: true as any, activo: true },
+      where: { id: resetRow.userId },
+      select: {
+        id: true,
+        email: true,
+        rut: true as any,
+        activo: true,
+        password: true,
+        workerType: true as any,
+      },
     });
+
+    if (!user || !user.activo) {
+      throw new BadRequestException("Usuario no válido para recuperación");
+    }
+
+    const same = await bcrypt.compare(cleanNew, user.password);
+    if (same) {
+      throw new BadRequestException(
+        "La nueva contraseña no puede ser igual a la actual"
+      );
+    }
 
     const hashed = await bcrypt.hash(cleanNew, 10);
 
     await this.prisma.$transaction([
       this.prisma.user.update({
-        where: { id: match.userId },
+        where: { id: user.id },
         data: {
           password: hashed,
-          mustChangePassword: false, // ✅ si venía forzado, se apaga
+          mustChangePassword: false,
           passwordResetAt: null as any,
         } as any,
       }),
-      this.prisma.passwordResetToken.update({
-        where: { id: match.id },
-        data: { usedAt: new Date() },
+      this.prisma.passwordResetRequest.update({
+        where: { id: resetRow.id },
+        data: {
+          usedAt: new Date(),
+        },
       }),
     ]);
 
-    // ✅ AUDIT: reset completado (arregla TS5076)
     try {
       await this.audit.log({
         entity: AuditEntity.USER,
-        entityId: match.userId,
+        entityId: user.id,
         action: AuditAction.UPDATE,
         actor: safeActorFromUser(user),
+        ip: pickIp(req),
+        userAgent: pickUserAgent(req),
         meta: {
-          title: "Restableció contraseña con token",
-          kind: "AUTH_RESET_PASSWORD",
-          targetLabel: (((user as any)?.rut ?? user?.email) || match.userId) as any,
-          reset: { tokenId: match.id },
+          title: "Restableció contraseña con código",
+          kind: "AUTH_RESET_PASSWORD_WITH_CODE",
+          targetLabel: (user as any).rut ?? user.email,
+          resetRequest: {
+            id: resetRow.id,
+            rut: resetRow.rut,
+            code: resetRow.code,
+            expiresAt: resetRow.expiresAt,
+          },
         },
       });
     } catch {}
 
     return { message: "Contraseña restablecida correctamente" };
+  }
+
+  // ✅ LEGACY
+  async forgotPassword(emailOrRut: string, req?: any) {
+    const maybeRut = normalizeRut(emailOrRut);
+    return this.requestPasswordResetByRut(maybeRut, req);
+  }
+
+  // ✅ LEGACY
+  async resetPassword(token: string, newPassword: string, req?: any) {
+    throw new BadRequestException(
+      "Este método ya no usa token. Usa recuperación por RUT + código."
+    );
   }
 }
 

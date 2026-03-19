@@ -9,6 +9,21 @@ import { normRole } from "../common/utils/norm-role";
 
 const ROLES_KEY = "roles";
 
+function norm(value: any) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function getWorkerType(user: any) {
+  return norm(
+    user?.workerType ||
+      user?.tipoTrabajador ||
+      user?.worker_type ||
+      user?.tipo_trabajador ||
+      user?.cargo ||
+      user?.type
+  );
+}
+
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
@@ -36,15 +51,31 @@ export class RolesGuard implements CanActivate {
     const user = req?.user ?? null;
 
     const userRole = this.pickRole(user);
+    const workerType = getWorkerType(user);
     const required = requiredRoles.map(normRole);
 
-    // eslint-disable-next-line no-console
-    console.log("[RolesGuard] required:", required, "| userRole:", userRole, "| rawUser:", user);
+    console.log("[RolesGuard]", {
+      required,
+      userRole,
+      workerType,
+    });
 
     if (!userRole) {
       throw new ForbiddenException(
         `No tienes permisos (sin rol). required=${required.join(",")}`
       );
+    }
+
+    // ✅ SUPERADMIN siempre pasa
+    if (userRole === "SUPERADMIN") return true;
+
+    // 🔥 FIX CLAVE: permitir JEFE_TALLER en módulos admin
+    if (
+      userRole === "TRABAJADOR" &&
+      workerType === "JEFE_TALLER" &&
+      required.includes("SUPERADMIN")
+    ) {
+      return true;
     }
 
     if (!required.includes(userRole)) {

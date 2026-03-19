@@ -6,7 +6,6 @@ function normalizeRecipients(to: string | string[]) {
     return to.map((x) => String(x).trim()).filter(Boolean);
   }
 
-  // ✅ si viene "a@a.com,b@b.com" => ["a@a.com","b@b.com"]
   const s = String(to || "").trim();
   if (!s) return [];
 
@@ -16,6 +15,15 @@ function normalizeRecipients(to: string | string[]) {
     .filter(Boolean);
 }
 
+function fmtDateTimeEsCL(v: Date | string | number) {
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString("es-CL", {
+    dateStyle: "short",
+    timeStyle: "medium",
+  });
+}
+
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
@@ -23,7 +31,7 @@ export class MailService {
   private transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT || 587),
-    secure: process.env.SMTP_SECURE === "true", // true para 465 (SSL)
+    secure: process.env.SMTP_SECURE === "true",
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
@@ -31,12 +39,11 @@ export class MailService {
   });
 
   private from() {
-    // ✅ El "FROM" real será SMTP_FROM si existe, si no SMTP_USER
     return process.env.SMTP_FROM || process.env.SMTP_USER;
   }
 
   /**
-   * ✅ Enviar correo HTML genérico (para alertas)
+   * ✅ Enviar correo HTML genérico
    */
   async sendHtml(params: {
     to: string | string[];
@@ -51,15 +58,18 @@ export class MailService {
     if (!toList.length) {
       throw new Error("Falta destinatario en sendHtml({to,...}).");
     }
-    if (!params?.subject) throw new Error("Falta subject en sendHtml({subject,...}).");
-    if (!params?.html) throw new Error("Falta html en sendHtml({html,...}).");
+    if (!params?.subject) {
+      throw new Error("Falta subject en sendHtml({subject,...}).");
+    }
+    if (!params?.html) {
+      throw new Error("Falta html en sendHtml({html,...}).");
+    }
 
-    // ✅ verifica conexión/config antes de enviar (ayuda a detectar credenciales/puerto)
     await this.transporter.verify();
 
     const info = await this.transporter.sendMail({
       from,
-      to: toList, // ✅ SIEMPRE array ya normalizado
+      to: toList,
       subject: params.subject,
       html: params.html,
       text: params.textFallback,
@@ -69,10 +79,15 @@ export class MailService {
       `Correo enviado a ${toList.join(", ")}. subject="${params.subject}" messageId=${info.messageId}`
     );
 
-    return { ok: true, to: toList, subject: params.subject, messageId: info.messageId };
+    return {
+      ok: true,
+      to: toList,
+      subject: params.subject,
+      messageId: info.messageId,
+    };
   }
 
-  // ✅ EXISTENTE: no se toca (Auth lo usa)
+  // ✅ EXISTENTE
   async sendResetPasswordEmail(to: string, resetUrl: string) {
     const from = this.from();
 
@@ -94,7 +109,101 @@ export class MailService {
     });
   }
 
-  // ✅ EXISTENTE: correo de prueba (para validar SMTP)
+  // ✅ NUEVO: enviar código de recuperación a soporte
+  async sendPasswordResetCodeToSupport(params: {
+    supportTo?: string | string[];
+    rut: string;
+    code: string;
+    requestedAt: Date | string;
+    expiresAt: Date | string;
+    nombre?: string | null;
+    apellido?: string | null;
+    email?: string | null;
+  }) {
+    const supportTo =
+      params.supportTo ||
+      process.env.PASSWORD_RESET_SUPPORT_TO ||
+      process.env.SMTP_TEST_TO ||
+      process.env.SMTP_USER;
+
+    const toList = normalizeRecipients(supportTo || "");
+
+    if (!toList.length) {
+      throw new Error(
+        "Falta destinatario para código de recuperación. Define PASSWORD_RESET_SUPPORT_TO o SMTP_USER."
+      );
+    }
+
+    const nombre = String(params.nombre || "").trim();
+    const apellido = String(params.apellido || "").trim();
+    const fullName =
+      `${nombre}${apellido ? " " + apellido : ""}`.trim() || "Usuario";
+    const email = String(params.email || "").trim() || "—";
+
+    const requestedAtFmt = fmtDateTimeEsCL(params.requestedAt);
+    const expiresAtFmt = fmtDateTimeEsCL(params.expiresAt);
+
+    const subject = `🔐 Código recuperación clave - ${params.rut}`;
+
+    const html = `
+      <div style="font-family: Arial, sans-serif; line-height:1.5; color:#111">
+        <h2 style="margin:0 0 12px 0;">Recuperación de contraseña</h2>
+        <p>Se generó un nuevo código de recuperación para un trabajador.</p>
+
+        <table style="border-collapse: collapse; width: 100%; max-width: 700px; margin-top: 12px;">
+          <tr>
+            <td style="padding:8px; border:1px solid #ddd; font-weight:bold; width: 220px;">Trabajador</td>
+            <td style="padding:8px; border:1px solid #ddd;">${fullName}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px; border:1px solid #ddd; font-weight:bold;">RUT</td>
+            <td style="padding:8px; border:1px solid #ddd;">${params.rut}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px; border:1px solid #ddd; font-weight:bold;">Correo</td>
+            <td style="padding:8px; border:1px solid #ddd;">${email}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px; border:1px solid #ddd; font-weight:bold;">Código</td>
+            <td style="padding:8px; border:1px solid #ddd; font-size:20px; font-weight:bold; letter-spacing:2px;">
+              ${params.code}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px; border:1px solid #ddd; font-weight:bold;">Fecha solicitud</td>
+            <td style="padding:8px; border:1px solid #ddd;">${requestedAtFmt}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px; border:1px solid #ddd; font-weight:bold;">Expira</td>
+            <td style="padding:8px; border:1px solid #ddd;">${expiresAtFmt}</td>
+          </tr>
+        </table>
+
+        <p style="margin-top:16px;">
+          Entrega este código al trabajador por el canal interno que corresponda.
+        </p>
+      </div>
+    `;
+
+    const textFallback = [
+      "Recuperación de contraseña",
+      `Trabajador: ${fullName}`,
+      `RUT: ${params.rut}`,
+      `Correo: ${email}`,
+      `Código: ${params.code}`,
+      `Fecha solicitud: ${requestedAtFmt}`,
+      `Expira: ${expiresAtFmt}`,
+    ].join("\n");
+
+    return this.sendHtml({
+      to: toList,
+      subject,
+      html,
+      textFallback,
+    });
+  }
+
+  // ✅ EXISTENTE
   async sendTestEmail(to?: string) {
     const from = this.from();
 
@@ -122,9 +231,10 @@ export class MailService {
       `,
     });
 
-    this.logger.log(`Correo de prueba enviado a ${targetList.join(", ")}. messageId=${info.messageId}`);
+    this.logger.log(
+      `Correo de prueba enviado a ${targetList.join(", ")}. messageId=${info.messageId}`
+    );
     return { ok: true, to: targetList, messageId: info.messageId };
   }
 }
-
 

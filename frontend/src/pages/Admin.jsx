@@ -1,6 +1,8 @@
 // ✅ Archivo: src/pages/Admin.jsx (COMPLETO - RESPONSIVE PRO)
 // ✅ Menú "Clientes" SOLO SUPERADMIN
 // ✅ Sidebar responsive (toggle, ESC, lock scroll, close on route change)
+// ✅ NUEVO: Menú "Incidentes / Taller" para SUPERADMIN + CONTROL_FLOTA + JEFE_TALLER
+// ✅ NUEVO: Menú "Repuestos / Solicitudes" SOLO SUPERADMIN + TRABAJADOR ADQUISICIONES
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useNavigate, useLocation, Link } from "react-router-dom";
@@ -30,8 +32,8 @@ function getInitials(nameOrEmail) {
   return (a + b).toUpperCase();
 }
 
-function norm(role) {
-  return String(role || "").trim().toUpperCase();
+function norm(value) {
+  return String(value || "").trim().toUpperCase();
 }
 
 export default function Admin() {
@@ -40,7 +42,6 @@ export default function Admin() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const sidebarRef = useRef(null);
 
-  // ✅ Logo desde /public
   const LOGO_SRC = "/logo-thomas.png";
 
   function logout() {
@@ -63,40 +64,41 @@ export default function Admin() {
     "Admin";
 
   const role = norm(user?.role || user?.rol || user?.perfil);
+  const workerType = norm(
+    user?.workerType ||
+      user?.tipoTrabajador ||
+      user?.worker_type ||
+      user?.tipo_trabajador ||
+      user?.cargo ||
+      user?.type
+  );
+
   const initials = getInitials(displayName);
 
   const isSuperadmin = role === "SUPERADMIN";
   const isControlFlota = role === "CONTROL_FLOTA";
   const isAdministradora = role === "ADMINISTRADORA";
+  const isAdquisiciones =
+    role === "TRABAJADOR" && workerType === "ADQUISICIONES";
+  const isJefeTaller =
+    role === "TRABAJADOR" && workerType === "JEFE_TALLER";
 
-  // ✅ Permisos por menú (UI)
   const canSeeDashboard = isSuperadmin;
-
-  // ✅ Camiones: SOLO CONTROL_FLOTA + SUPERADMIN
   const canSeeCamiones = isSuperadmin || isControlFlota;
-
-  // ✅ Órdenes de trabajo: CONTROL_FLOTA + ADMINISTRADORA + SUPERADMIN
   const canSeeWorkOrders = isSuperadmin || isControlFlota || isAdministradora;
-
-  // ✅ Trabajadores: SOLO SUPERADMIN
   const canSeeTrabajadores = isSuperadmin;
-
-  // ✅ Auditoría: SOLO SUPERADMIN
   const canSeeAuditoria = isSuperadmin;
-
-  // ✅ Configuración: SUPERADMIN + CONTROL_FLOTA + ADMINISTRADORA
   const canSeeConfiguracion = isSuperadmin;
-
-  // ✅ Papelera camiones (solo SUPERADMIN)
   const canSeePapelera = isSuperadmin;
-
-  // ✅ Papelera OT (solo SUPERADMIN)
   const canSeePapeleraOt = isSuperadmin;
-
-  // ✅ Clientes (solo SUPERADMIN)
   const canSeeClientes = isSuperadmin;
 
-  // ✅ Detecta secciones (para active + breadcrumb)
+  // ✅ JEFE_TALLER también ve este módulo
+  const canSeeIncidentes = isSuperadmin || isControlFlota || isJefeTaller;
+
+  // ✅ SOLO SUPERADMIN + ADQUISICIONES
+  const canSeeRepuestos = isSuperadmin || isAdquisiciones;
+
   const isDashboard = path === "/admin";
 
   const isCamiones = path.startsWith("/admin/camiones");
@@ -107,24 +109,43 @@ export default function Admin() {
     "/admin/ordenes-trabajo-eliminadas"
   );
 
+  const isIncidentes = path.startsWith("/admin/incidentes");
+  const isRepuestos = path.startsWith("/admin/repuestos");
+
   const isTrabajadores = path.startsWith("/admin/trabajadores");
   const isAuditoria = path.startsWith("/admin/auditoria");
   const isConfiguracion = path.startsWith("/admin/configuracion");
-
   const isClientes = path.startsWith("/admin/clientes");
 
-  // ✅ Etiqueta del rol para UI (bonita)
   const roleLabel = useMemo(() => {
     if (isSuperadmin) return "SUPERADMIN";
     if (isControlFlota) return "CONTROL DE FLOTA";
     if (isAdministradora) return "ADMINISTRADORA";
+    if (isAdquisiciones) return "ADQUISICIONES";
+    if (isJefeTaller) return "JEFE DE TALLER";
     if (role) return role;
     return "Usuario";
-  }, [isSuperadmin, isControlFlota, isAdministradora, role]);
+  }, [
+    isSuperadmin,
+    isControlFlota,
+    isAdministradora,
+    isAdquisiciones,
+    isJefeTaller,
+    role,
+  ]);
 
-  // ✅ Redirección inteligente: si cae a /admin, lo mandamos al módulo del rol
   useEffect(() => {
     if (path !== "/admin") return;
+
+    if (isAdquisiciones) {
+      navigate("/admin/repuestos", { replace: true });
+      return;
+    }
+
+    if (isJefeTaller) {
+      navigate("/admin/incidentes", { replace: true });
+      return;
+    }
 
     if (isControlFlota) {
       navigate("/admin/camiones", { replace: true });
@@ -136,17 +157,20 @@ export default function Admin() {
       return;
     }
 
-    // SUPERADMIN (o desconocido) -> camiones por defecto
     navigate("/admin/camiones", { replace: true });
-  }, [path, isControlFlota, isAdministradora, navigate]);
+  }, [
+    path,
+    isAdquisiciones,
+    isJefeTaller,
+    isControlFlota,
+    isAdministradora,
+    navigate,
+  ]);
 
-  // ✅ UX: cerrar sidebar cuando cambia la ruta
   useEffect(() => {
     setSidebarOpen(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
-  // ✅ UX: si el sidebar está abierto, bloqueamos scroll (móvil)
   useEffect(() => {
     if (!sidebarOpen) return;
     const prev = document.body.style.overflow;
@@ -156,7 +180,6 @@ export default function Admin() {
     };
   }, [sidebarOpen]);
 
-  // ✅ UX: cerrar con ESC
   useEffect(() => {
     function onKeyDown(e) {
       if (e.key === "Escape") setSidebarOpen(false);
@@ -165,7 +188,6 @@ export default function Admin() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  // ✅ UX: cuando abre sidebar, intenta enfocar el primer botón
   useEffect(() => {
     if (!sidebarOpen) return;
     const el = sidebarRef.current;
@@ -174,7 +196,6 @@ export default function Admin() {
     if (first && typeof first.focus === "function") first.focus();
   }, [sidebarOpen]);
 
-  // ✅ Breadcrumb simple (Panel > Sección)
   function getSectionLabel() {
     if (isCamionesEliminados) return "Camiones eliminados";
     if (isCamiones) return "Camiones";
@@ -182,8 +203,10 @@ export default function Admin() {
     if (isWorkOrdersEliminados) return "Órdenes eliminadas";
     if (isWorkOrders) return "Órdenes de trabajo";
 
-    if (isClientes) return "Clientes";
+    if (isIncidentes) return "Incidentes / Taller";
+    if (isRepuestos) return "Repuestos / Solicitudes";
 
+    if (isClientes) return "Clientes";
     if (isTrabajadores) return "Trabajadores";
     if (isAuditoria) return "Auditoría";
     if (isConfiguracion) return "Configuración";
@@ -195,14 +218,12 @@ export default function Admin() {
 
   return (
     <div className="admin-layout">
-      {/* Overlay para móvil */}
       <div
         className={`admin-overlay ${sidebarOpen ? "show" : ""}`}
         onClick={() => setSidebarOpen(false)}
         aria-hidden={!sidebarOpen}
       />
 
-      {/* Sidebar */}
       <aside
         ref={sidebarRef}
         className={`admin-sidebar ${sidebarOpen ? "open" : ""}`}
@@ -256,9 +277,7 @@ export default function Admin() {
                 navigate("/admin");
               }}
             >
-              <span className="sb-ico" aria-hidden="true">
-                🏠
-              </span>
+              <span className="sb-ico" aria-hidden="true">🏠</span>
               <span>Dashboard</span>
             </button>
           ) : null}
@@ -274,9 +293,7 @@ export default function Admin() {
                 navigate("/admin/camiones");
               }}
             >
-              <span className="sb-ico" aria-hidden="true">
-                🚛
-              </span>
+              <span className="sb-ico" aria-hidden="true">🚛</span>
               <span>Camiones</span>
             </button>
           ) : null}
@@ -291,9 +308,7 @@ export default function Admin() {
               }}
               title="Papelera de camiones eliminados"
             >
-              <span className="sb-ico" aria-hidden="true">
-                🗑️
-              </span>
+              <span className="sb-ico" aria-hidden="true">🗑️</span>
               <span>Camiones eliminados</span>
             </button>
           ) : null}
@@ -309,9 +324,7 @@ export default function Admin() {
                 navigate("/admin/ordenes-trabajo");
               }}
             >
-              <span className="sb-ico" aria-hidden="true">
-                🧾
-              </span>
+              <span className="sb-ico" aria-hidden="true">🧾</span>
               <span>Órdenes de trabajo</span>
             </button>
           ) : null}
@@ -326,10 +339,38 @@ export default function Admin() {
               }}
               title="Papelera de órdenes de trabajo"
             >
-              <span className="sb-ico" aria-hidden="true">
-                🗑️
-              </span>
+              <span className="sb-ico" aria-hidden="true">🗑️</span>
               <span>Órdenes eliminadas</span>
+            </button>
+          ) : null}
+
+          {canSeeIncidentes ? (
+            <button
+              className={`sb-item ${isIncidentes ? "active" : ""}`}
+              type="button"
+              onClick={() => {
+                setSidebarOpen(false);
+                navigate("/admin/incidentes");
+              }}
+              title="Incidentes y taller"
+            >
+              <span className="sb-ico" aria-hidden="true">🔧</span>
+              <span>Incidentes / Taller</span>
+            </button>
+          ) : null}
+
+          {canSeeRepuestos ? (
+            <button
+              className={`sb-item ${isRepuestos ? "active" : ""}`}
+              type="button"
+              onClick={() => {
+                setSidebarOpen(false);
+                navigate("/admin/repuestos");
+              }}
+              title="Solicitudes de repuestos"
+            >
+              <span className="sb-ico" aria-hidden="true">📦</span>
+              <span>Repuestos / Solicitudes</span>
             </button>
           ) : null}
 
@@ -343,9 +384,7 @@ export default function Admin() {
               }}
               title="Administración de clientes (solo SUPERADMIN)"
             >
-              <span className="sb-ico" aria-hidden="true">
-                🏢
-              </span>
+              <span className="sb-ico" aria-hidden="true">🏢</span>
               <span>Clientes</span>
             </button>
           ) : null}
@@ -359,9 +398,7 @@ export default function Admin() {
                 navigate("/admin/trabajadores");
               }}
             >
-              <span className="sb-ico" aria-hidden="true">
-                🧑‍🔧
-              </span>
+              <span className="sb-ico" aria-hidden="true">🧑‍🔧</span>
               <span>Trabajadores</span>
             </button>
           ) : null}
@@ -375,9 +412,7 @@ export default function Admin() {
                 navigate("/admin/auditoria");
               }}
             >
-              <span className="sb-ico" aria-hidden="true">
-                🕵️
-              </span>
+              <span className="sb-ico" aria-hidden="true">🕵️</span>
               <span>Auditoría</span>
             </button>
           ) : null}
@@ -391,9 +426,7 @@ export default function Admin() {
                 navigate("/admin/configuracion");
               }}
             >
-              <span className="sb-ico" aria-hidden="true">
-                ⚙️
-              </span>
+              <span className="sb-ico" aria-hidden="true">⚙️</span>
               <span>Configuración</span>
             </button>
           ) : null}
@@ -409,9 +442,7 @@ export default function Admin() {
         </div>
       </aside>
 
-      {/* Main */}
       <main className="admin-main">
-        {/* Topbar */}
         <header className="topbar">
           <button
             className="icon-btn"
@@ -478,7 +509,6 @@ export default function Admin() {
           </div>
         </header>
 
-        {/* Content */}
         <section className="content">
           <Outlet />
         </section>
@@ -486,7 +516,6 @@ export default function Admin() {
     </div>
   );
 }
-
 
 
 

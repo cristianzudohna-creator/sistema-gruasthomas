@@ -1,7 +1,9 @@
 // ✅ Archivo: src/auth/auth.controller.ts (COMPLETO)
-// ✅ Login usa RUT + password (dto.rut)
-// ✅ Change password usa req.user.id (porque JwtStrategy retorna el usuario real desde BD)
-// ✅ Forgot/Reset deshabilitados (porque "solo SUPERADMIN resetea")
+// ✅ Login usa RUT + password
+// ✅ Change password usa req.user.id
+// ✅ NUEVO:
+// - forgot-password => recuperación por RUT
+// - reset-password => reset con RUT + código + nueva contraseña
 
 import {
   Body,
@@ -24,8 +26,7 @@ import { ResetPasswordDto } from "./dto/reset-password.dto";
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  // ✅ Login (auditoría se hace en AuthService.login)
-  // ✅ IMPORTANTE: pasar req para guardar ip/userAgent
+  // ✅ Login
   @Post("login")
   login(@Req() req: Request, @Body() dto: LoginDto) {
     return this.authService.login(dto.rut, dto.password, req);
@@ -36,8 +37,6 @@ export class AuthController {
   @Post("change-password")
   async changePassword(@Req() req: Request, @Body() dto: ChangePasswordDto) {
     const user: any = (req as any).user;
-
-    // JwtStrategy.validate retorna { id, email, role, activo, empresa }
     const userId: string = user?.id;
 
     if (!userId) throw new BadRequestException("Usuario inválido");
@@ -45,20 +44,22 @@ export class AuthController {
     return this.authService.changePassword(userId, dto);
   }
 
-  // ❌ Olvidé mi contraseña (DESHABILITADO)
-  // ✅ Política del sistema: "solo SUPERADMIN resetea"
+  // ✅ NUEVO: solicitar recuperación por RUT
+  // body: { rut: "195657955" }
   @Post("forgot-password")
-  forgotPassword(@Body() _dto: ForgotPasswordDto) {
-    throw new BadRequestException(
-      "Recuperación por correo deshabilitada. Solicita al SUPERADMIN un reset de clave."
-    );
+  forgotPassword(@Req() req: Request, @Body() dto: ForgotPasswordDto) {
+    return this.authService.requestPasswordResetByRut(dto.rut, req);
   }
 
-  // ❌ Reset contraseña con token (DESHABILITADO)
+  // ✅ NUEVO: restablecer con RUT + código
+  // body: { rut, code, newPassword }
   @Post("reset-password")
-  resetPassword(@Body() _dto: ResetPasswordDto) {
-    throw new BadRequestException(
-      "Reset por token deshabilitado. Solicita al SUPERADMIN un reset de clave."
+  resetPassword(@Req() req: Request, @Body() dto: ResetPasswordDto) {
+    return this.authService.resetPasswordWithCode(
+      dto.rut,
+      dto.code,
+      dto.newPassword,
+      req
     );
   }
 }
