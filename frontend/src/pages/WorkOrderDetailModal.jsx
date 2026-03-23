@@ -1,4 +1,4 @@
-// ✅ Archivo: src/pages/WorkOrderDetailModal.jsx (COMPLETO + REORDEN CLIENTE/FAENA)
+// ✅ Archivo: src/pages/WorkOrderDetailModal.jsx (COMPLETO + REORDEN CLIENTE/OBRA-TRAMO)
 // ✅ FIX:
 // 1) Texto de banner COMpletada más correcto para admin/superadmin
 // 2) Quita “Empresa” del subtitle y chips (no es dato del cliente en este modal)
@@ -14,7 +14,7 @@
 // - fixText() en strings del backend
 // ✅ REORDEN:
 // - Información del cliente: Cliente, RUT, Giro, Solicitado por, Dirección cliente, Comuna, Ciudad
-// - Información de la faena: Días programados, Horario llegada, Dirección de la faena, Link Maps
+// - Información de la faena: Días programados, Horario llegada, Obra/Tramo, Link Maps
 
 import { useEffect, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -765,7 +765,7 @@ export default function WorkOrderDetailModal({ open, onClose, data, loading, err
                 }
               />
 
-              <Field label="Dirección de la faena" value={pick(direccionFaena, lugar)} />
+              <Field label="Obra/Tramo" value={pick(direccionFaena, lugar)} />
               <Field label="Link Maps" value={mapsValue} valueContainerStyle={{ marginTop: 8 }} />
             </div>
           </Section>

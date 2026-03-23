@@ -25,6 +25,10 @@
 // ✅ FIX NUEVO:
 // - Cliente y Patente YA NO se cierran al escribir
 // - Se eliminó el auto-cierre por scroll en esos dos autocompletes
+//
+// ✅ FIX UI NUEVO:
+// - Textarea de descripción sin resize manual
+// - Alto fijo + scroll interno
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -263,7 +267,7 @@ function Resumen({ f, photosCount }) {
         <Row label="Dirección" value={v(f.direccion)} />
         <Row label="Comuna" value={v(f.comuna)} />
         <Row label="Ciudad" value={v(f.ciudad)} />
-        <Row label="Dirección faena" value={v(f.direccionFaena)} />
+        <Row label="Obra/Tramo" value={v(f.direccionFaena)} />
         <Row label="Maps" value={v(f.mapsLink)} />
         <Row label="Horario llegada" value={v(f.horario)} />
         <Row label="Días programado" value={prog} />
@@ -349,7 +353,14 @@ function LabeledTextarea({
         value={value}
         onChange={onChange}
         disabled={disabled}
-        style={errStyle}
+        style={{
+          ...errStyle,
+          resize: "none",
+          height: 110,
+          minHeight: 110,
+          maxHeight: 110,
+          overflowY: "auto",
+        }}
       />
     </div>
   );
@@ -1643,8 +1654,8 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
             <div className="ot-grid-2">
               <div className="ot-span">
                 <LabeledInput
-                  label="Dirección de la faena"
-                  placeholder="Ej: Faena minera - Acceso norte / Bodega 3 / etc."
+                  label="Obra/Tramo"
+                  placeholder="Ej: Tramo norte / Faena minera / Acceso principal / etc."
                   value={f.direccionFaena}
                   onChange={(e) => setField("direccionFaena", e.target.value)}
                   disabled={saving}
@@ -1857,19 +1868,18 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
       />
 
       <Modal open={successOpen} onClose={handleClose} title="✅ Onder de trabajo creada">
-  <div style={{ padding: 6 }}>
-    <div style={{ fontWeight: 900, marginBottom: 12 }}>
-      Se creó correctamente la programación de orden de trabajo.
-    </div>
-    <button className="gt-btn gt-btn-primary" type="button" onClick={handleClose}>
-      Cerrar
-    </button>
-  </div>
-</Modal>
+        <div style={{ padding: 6 }}>
+          <div style={{ fontWeight: 900, marginBottom: 12 }}>
+            Se creó correctamente la programación de orden de trabajo.
+          </div>
+          <button className="gt-btn gt-btn-primary" type="button" onClick={handleClose}>
+            Cerrar
+          </button>
+        </div>
+      </Modal>
     </>
   );
 }
-
 
 
 

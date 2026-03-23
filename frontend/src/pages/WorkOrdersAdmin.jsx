@@ -1,9 +1,18 @@
 // ✅ Archivo: src/pages/WorkOrdersAdmin.jsx (COMPLETO)
+// ✅ NUEVO: CSS propio en WorkOrdersAdmin.css
+// ✅ NUEVO: bloque Exportar OT en ZIP con clases separadas
+// ✅ NUEVO: se mantiene Admin.css como base global
 // ✅ NUEVO: Auto-refresh (polling) + refresh al volver a la pestaña
 // ✅ FIX: se elimina columna "CREADO POR" del listado
 // ✅ FIX: se elimina botón "Abrir" del listado
-import { useCallback, useEffect, useMemo, useState } from "react";
+// ✅ NUEVO: filtros para exportar ZIP por fecha / operador / rigger
+// ✅ FIX REAL: autocomplete remoto contra backend /users con q + workerType + limit=50
+// ✅ NUEVO: descarga ZIP de múltiples OT filtradas
+// ✅ NUEVO: descarga EXCEL de OTs aprobadas por rango de fecha
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./Admin.css";
+import "./WorkOrdersAdmin.css";
 
 import CreateWorkOrderModal from "./CreateWorkOrderModal";
 import EditWorkOrderModal from "./EditWorkOrderModal";
@@ -130,7 +139,7 @@ async function apiDelete(path) {
 }
 
 // =========================
-// ✅ PDF helpers
+// ✅ Descarga helpers
 // =========================
 function getFilenameFromContentDisposition(cd) {
   if (!cd) return null;
@@ -144,6 +153,9 @@ function getFilenameFromContentDisposition(cd) {
   return null;
 }
 
+// =========================
+// ✅ PDF helpers
+// =========================
 async function apiDownloadPdf(id) {
   const res = await fetch(`${API_URL}/work-orders/${id}/pdf`, {
     method: "GET",
@@ -159,6 +171,76 @@ async function apiDownloadPdf(id) {
   const blob = await res.blob();
   const cd = res.headers.get("content-disposition") || "";
   const filename = getFilenameFromContentDisposition(cd) || `OT-${id}.pdf`;
+
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+// =========================
+// ✅ ZIP helpers
+// =========================
+async function apiDownloadZip({ from, to, operadorId, rigger }) {
+  const qs = new URLSearchParams();
+
+  if (from) qs.set("from", from);
+  if (to) qs.set("to", to);
+  if (operadorId) qs.set("operadorId", operadorId);
+  if (rigger) qs.set("rigger", rigger);
+
+  const res = await fetch(`${API_URL}/work-orders/export-zip?${qs.toString()}`, {
+    method: "GET",
+    credentials: "include",
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+
+  if (!res.ok) {
+    const msg = await readError(res);
+    throw new Error(msg || `ZIP -> ${res.status}`);
+  }
+
+  const blob = await res.blob();
+  const cd = res.headers.get("content-disposition") || "";
+  const filename = getFilenameFromContentDisposition(cd) || "OT_EXPORT.zip";
+
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+// =========================
+// ✅ EXCEL helpers
+// =========================
+async function apiDownloadExcel({ from, to }) {
+  const qs = new URLSearchParams();
+
+  if (from) qs.set("from", from);
+  if (to) qs.set("to", to);
+
+  const res = await fetch(`${API_URL}/work-orders/export-excel?${qs.toString()}`, {
+    method: "GET",
+    credentials: "include",
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+
+  if (!res.ok) {
+    const msg = await readError(res);
+    throw new Error(msg || `EXCEL -> ${res.status}`);
+  }
+
+  const blob = await res.blob();
+  const cd = res.headers.get("content-disposition") || "";
+  const filename = getFilenameFromContentDisposition(cd) || "OT_APROBADAS.xlsx";
 
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -235,7 +317,6 @@ function shortOtId(id) {
   return `OT-${s.slice(0, 6).toUpperCase()}`;
 }
 
-// ✅ CLIENTE: SIEMPRE 2 líneas + "..." + tooltip
 function TruncText2({ text, lines = 2, style }) {
   const t = String(text ?? "").trim();
   return (
@@ -257,6 +338,21 @@ function TruncText2({ text, lines = 2, style }) {
   );
 }
 
+function getArrayFromApi(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.data)) return data.data;
+  return [];
+}
+
+function fullName(user) {
+  return [user?.nombre, user?.apellido].filter(Boolean).join(" ").trim();
+}
+
+function makeWorkerLabel(user) {
+  return fullName(user) || String(user?.email || "").trim() || "Sin nombre";
+}
+
 export default function WorkOrdersAdmin() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
@@ -268,9 +364,31 @@ export default function WorkOrdersAdmin() {
   const [status, setStatus] = useState("ALL");
   const [q, setQ] = useState("");
 
-  // ✅ NUEVO: auto refresh
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [refreshEvery, setRefreshEvery] = useState(15000); // 15s
+  const [refreshEvery, setRefreshEvery] = useState(15000);
+
+  const [exportFrom, setExportFrom] = useState("");
+  const [exportTo, setExportTo] = useState("");
+
+  const [exportOperadorText, setExportOperadorText] = useState("");
+  const [exportOperadorId, setExportOperadorId] = useState("");
+  const [showOperadorSuggestions, setShowOperadorSuggestions] = useState(false);
+  const [operadorSuggestions, setOperadorSuggestions] = useState([]);
+  const [operadorLoading, setOperadorLoading] = useState(false);
+
+  const [exportRiggerText, setExportRiggerText] = useState("");
+  const [showRiggerSuggestions, setShowRiggerSuggestions] = useState(false);
+  const [riggerSuggestions, setRiggerSuggestions] = useState([]);
+  const [riggerLoading, setRiggerLoading] = useState(false);
+
+  const [zipLoading, setZipLoading] = useState(false);
+  const [zipErr, setZipErr] = useState("");
+
+  const [excelLoading, setExcelLoading] = useState(false);
+  const [excelErr, setExcelErr] = useState("");
+
+  const operadorBoxRef = useRef(null);
+  const riggerBoxRef = useRef(null);
 
   const statusOptions = useMemo(
     () => ["ALL", "ABIERTA", "EN_PROCESO", "COMPLETADA", "APROBADA", "RECHAZADA", "CERRADA"],
@@ -329,6 +447,104 @@ export default function WorkOrdersAdmin() {
     };
   }, [autoRefresh, refreshEvery, loadAll, loading]);
 
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (operadorBoxRef.current && !operadorBoxRef.current.contains(e.target)) {
+        setShowOperadorSuggestions(false);
+      }
+      if (riggerBoxRef.current && !riggerBoxRef.current.contains(e.target)) {
+        setShowRiggerSuggestions(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadOperadores() {
+      const qx = exportOperadorText.trim();
+
+      if (!showOperadorSuggestions) return;
+
+      try {
+        setOperadorLoading(true);
+
+        const qs = new URLSearchParams();
+        qs.set("role", "TRABAJADOR");
+        qs.set("workerType", "OPERADOR");
+        qs.set("limit", "50");
+        if (qx) qs.set("q", qx);
+
+        const data = await apiGet(`/users?${qs.toString()}`);
+        const list = getArrayFromApi(data);
+
+        if (cancelled) return;
+
+        const mapped = list.map((u) => ({
+          id: String(u?.id || ""),
+          nombre: makeWorkerLabel(u),
+        }));
+
+        setOperadorSuggestions(mapped);
+      } catch {
+        if (!cancelled) setOperadorSuggestions([]);
+      } finally {
+        if (!cancelled) setOperadorLoading(false);
+      }
+    }
+
+    loadOperadores();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [exportOperadorText, showOperadorSuggestions]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRiggers() {
+      const qx = exportRiggerText.trim();
+
+      if (!showRiggerSuggestions) return;
+
+      try {
+        setRiggerLoading(true);
+
+        const qs = new URLSearchParams();
+        qs.set("role", "TRABAJADOR");
+        qs.set("workerType", "RIGGER");
+        qs.set("limit", "50");
+        if (qx) qs.set("q", qx);
+
+        const data = await apiGet(`/users?${qs.toString()}`);
+        const list = getArrayFromApi(data);
+
+        if (cancelled) return;
+
+        const mapped = list.map((u) => ({
+          id: String(u?.id || ""),
+          nombre: makeWorkerLabel(u),
+        }));
+
+        setRiggerSuggestions(mapped);
+      } catch {
+        if (!cancelled) setRiggerSuggestions([]);
+      } finally {
+        if (!cancelled) setRiggerLoading(false);
+      }
+    }
+
+    loadRiggers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [exportRiggerText, showRiggerSuggestions]);
+
   async function downloadPdfById(id) {
     if (!id) return;
     if (downloadingId) return;
@@ -341,6 +557,64 @@ export default function WorkOrdersAdmin() {
       setDownloadErr(e.message || "Error descargando PDF");
     } finally {
       setDownloadingId(null);
+    }
+  }
+
+  async function downloadZipByFilters() {
+    if (zipLoading) return;
+
+    setZipErr("");
+
+    if (!exportFrom || !exportTo) {
+      setZipErr("Debes seleccionar fecha desde y fecha hasta.");
+      return;
+    }
+
+    if (exportFrom > exportTo) {
+      setZipErr("La fecha desde no puede ser mayor que la fecha hasta.");
+      return;
+    }
+
+    try {
+      setZipLoading(true);
+      await apiDownloadZip({
+        from: exportFrom,
+        to: exportTo,
+        operadorId: exportOperadorId,
+        rigger: exportRiggerText.trim(),
+      });
+    } catch (e) {
+      setZipErr(e.message || "Error descargando ZIP");
+    } finally {
+      setZipLoading(false);
+    }
+  }
+
+  async function downloadExcelByFilters() {
+    if (excelLoading) return;
+
+    setExcelErr("");
+
+    if (!exportFrom || !exportTo) {
+      setExcelErr("Debes seleccionar fecha desde y fecha hasta.");
+      return;
+    }
+
+    if (exportFrom > exportTo) {
+      setExcelErr("La fecha desde no puede ser mayor que la fecha hasta.");
+      return;
+    }
+
+    try {
+      setExcelLoading(true);
+      await apiDownloadExcel({
+        from: exportFrom,
+        to: exportTo,
+      });
+    } catch (e) {
+      setExcelErr(e.message || "Error descargando Excel");
+    } finally {
+      setExcelLoading(false);
     }
   }
 
@@ -569,46 +843,236 @@ export default function WorkOrdersAdmin() {
     return { total, pendientesVB, abiertas, enProceso, aprobadas };
   }, [items]);
 
+  function handleOperadorInputChange(value) {
+    setExportOperadorText(value);
+    setExportOperadorId("");
+    setShowOperadorSuggestions(true);
+  }
+
+  function handleSelectOperador(op) {
+    setExportOperadorText(op.nombre);
+    setExportOperadorId(op.id);
+    setShowOperadorSuggestions(false);
+  }
+
+  function clearOperador() {
+    setExportOperadorText("");
+    setExportOperadorId("");
+    setShowOperadorSuggestions(false);
+    setOperadorSuggestions([]);
+  }
+
+  function handleRiggerInputChange(value) {
+    setExportRiggerText(value);
+    setShowRiggerSuggestions(true);
+  }
+
+  function handleSelectRigger(rg) {
+    setExportRiggerText(rg.nombre);
+    setShowRiggerSuggestions(false);
+  }
+
+  function clearRigger() {
+    setExportRiggerText("");
+    setShowRiggerSuggestions(false);
+    setRiggerSuggestions([]);
+  }
+
   return (
-    <div>
+    <div className="woa-page">
       <div className="page-title">
         <h1>Programación ordenes de trabajo</h1>
         <p>Listado general para administración + visto bueno de OTs completadas.</p>
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-          gap: 10,
-          marginBottom: 12,
-        }}
-      >
-        <div className="panel" style={{ padding: 12 }}>
-          <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 900 }}>Total</div>
-          <div style={{ fontSize: 22, fontWeight: 900, marginTop: 4 }}>{stats.total}</div>
+      <div className="woa-stats-grid">
+        <div className="panel woa-stat-card">
+          <div className="woa-stat-label">Total</div>
+          <div className="woa-stat-value">{stats.total}</div>
         </div>
-        <div className="panel" style={{ padding: 12, borderColor: "rgba(245,179,1,.35)" }}>
-          <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 900 }}>Pendientes visto bueno</div>
-          <div style={{ fontSize: 22, fontWeight: 900, marginTop: 4 }}>{stats.pendientesVB}</div>
+
+        <div className="panel woa-stat-card woa-stat-card--warn">
+          <div className="woa-stat-label">Pendientes visto bueno</div>
+          <div className="woa-stat-value">{stats.pendientesVB}</div>
         </div>
-        <div className="panel" style={{ padding: 12 }}>
-          <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 900 }}>Abiertas</div>
-          <div style={{ fontSize: 22, fontWeight: 900, marginTop: 4 }}>{stats.abiertas}</div>
+
+        <div className="panel woa-stat-card">
+          <div className="woa-stat-label">Abiertas</div>
+          <div className="woa-stat-value">{stats.abiertas}</div>
         </div>
-        <div className="panel" style={{ padding: 12 }}>
-          <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 900 }}>En proceso</div>
-          <div style={{ fontSize: 22, fontWeight: 900, marginTop: 4 }}>{stats.enProceso}</div>
+
+        <div className="panel woa-stat-card">
+          <div className="woa-stat-label">En proceso</div>
+          <div className="woa-stat-value">{stats.enProceso}</div>
         </div>
-        <div className="panel" style={{ padding: 12 }}>
-          <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 900 }}>Aprobadas</div>
-          <div style={{ fontSize: 22, fontWeight: 900, marginTop: 4 }}>{stats.aprobadas}</div>
+
+        <div className="panel woa-stat-card">
+          <div className="woa-stat-label">Aprobadas</div>
+          <div className="woa-stat-value">{stats.aprobadas}</div>
+        </div>
+      </div>
+
+      <div className="panel woa-export-panel">
+        <div className="panel-head woa-export-head">
+          <div>
+            <h2>Exportar OT</h2>
+            <p>Descarga múltiples OT en PDF ZIP o un Excel de OTs aprobadas por rango de fecha.</p>
+          </div>
+        </div>
+
+        <div className="woa-export-box">
+          <div className="woa-export-grid">
+            <div className="woa-field">
+              <div className="woa-field-label">Desde</div>
+              <input
+                type="date"
+                className="gt-input"
+                value={exportFrom}
+                onChange={(e) => setExportFrom(e.target.value)}
+              />
+            </div>
+
+            <div className="woa-field">
+              <div className="woa-field-label">Hasta</div>
+              <input
+                type="date"
+                className="gt-input"
+                value={exportTo}
+                onChange={(e) => setExportTo(e.target.value)}
+              />
+            </div>
+
+            <div ref={operadorBoxRef} className="woa-field woa-autocomplete">
+              <div className="woa-field-label">Operador</div>
+
+              <div className="woa-autocomplete-input-wrap">
+                <input
+                  className="gt-input woa-autocomplete-input"
+                  value={exportOperadorText}
+                  onChange={(e) => handleOperadorInputChange(e.target.value)}
+                  onFocus={() => setShowOperadorSuggestions(true)}
+                  placeholder="Escribe nombre del operador"
+                  autoComplete="off"
+                />
+
+                {exportOperadorText ? (
+                  <button
+                    type="button"
+                    onClick={clearOperador}
+                    className="woa-autocomplete-clear"
+                    title="Limpiar operador"
+                  >
+                    ×
+                  </button>
+                ) : null}
+              </div>
+
+              {showOperadorSuggestions ? (
+                <div className="woa-suggestions">
+                  {operadorLoading ? (
+                    <div className="woa-suggestion-state">Buscando operadores...</div>
+                  ) : operadorSuggestions.length > 0 ? (
+                    operadorSuggestions.map((op) => {
+                      const selected = String(exportOperadorId) === String(op.id);
+                      return (
+                        <button
+                          key={`${op.id}-${op.nombre}`}
+                          type="button"
+                          onClick={() => handleSelectOperador(op)}
+                          className={`woa-suggestion-item ${selected ? "is-selected" : ""}`}
+                        >
+                          {op.nombre}
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div className="woa-suggestion-empty">No se encontraron operadores.</div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+
+            <div ref={riggerBoxRef} className="woa-field woa-autocomplete">
+              <div className="woa-field-label">Rigger</div>
+
+              <div className="woa-autocomplete-input-wrap">
+                <input
+                  className="gt-input woa-autocomplete-input"
+                  value={exportRiggerText}
+                  onChange={(e) => handleRiggerInputChange(e.target.value)}
+                  onFocus={() => setShowRiggerSuggestions(true)}
+                  placeholder="Ej: Juan Pérez"
+                  autoComplete="off"
+                />
+
+                {exportRiggerText ? (
+                  <button
+                    type="button"
+                    onClick={clearRigger}
+                    className="woa-autocomplete-clear"
+                    title="Limpiar rigger"
+                  >
+                    ×
+                  </button>
+                ) : null}
+              </div>
+
+              {showRiggerSuggestions ? (
+                <div className="woa-suggestions">
+                  {riggerLoading ? (
+                    <div className="woa-suggestion-state">Buscando riggers...</div>
+                  ) : riggerSuggestions.length > 0 ? (
+                    riggerSuggestions.map((rg) => (
+                      <button
+                        key={`${rg.id}-${rg.nombre}`}
+                        type="button"
+                        onClick={() => handleSelectRigger(rg)}
+                        className="woa-suggestion-item"
+                      >
+                        {rg.nombre}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="woa-suggestion-empty">No se encontraron riggers.</div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="woa-export-action" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button
+                className="btn woa-zip-btn"
+                type="button"
+                onClick={downloadZipByFilters}
+                disabled={zipLoading}
+              >
+                {zipLoading ? "⏳ Generando ZIP..." : "📦 Descargar ZIP"}
+              </button>
+
+              <button
+                className="btn"
+                type="button"
+                onClick={downloadExcelByFilters}
+                disabled={excelLoading}
+                style={{
+                  background: "#166534",
+                  borderColor: "#166534",
+                  color: "#fff",
+                }}
+              >
+                {excelLoading ? "⏳ Generando Excel..." : "📗 Descargar Excel"}
+              </button>
+            </div>
+          </div>
+
+          {zipErr ? <div className="woa-export-error">{zipErr}</div> : null}
+          {excelErr ? <div className="woa-export-error">{excelErr}</div> : null}
         </div>
       </div>
 
       <div className="panel">
-        <div className="panel-head" style={{ alignItems: "flex-end" }}>
-          <div>
+        <div className="panel-head woa-list-head">
+          <div className="woa-list-head-left">
             <h2>Listado</h2>
             <p>
               {status === "ALL" ? "Todos los estados" : status} • {filtered.length} OT
@@ -626,7 +1090,7 @@ export default function WorkOrdersAdmin() {
             ) : null}
           </div>
 
-          <div className="panel-actions" style={{ width: "100%", justifyContent: "flex-end" }}>
+          <div className="panel-actions woa-list-actions">
             <select
               className="gt-select"
               value={status}
@@ -848,7 +1312,16 @@ export default function WorkOrdersAdmin() {
         </div>
       </div>
 
-      <CreateWorkOrderModal open={openNew} onClose={() => setOpenNew(false)} onCreated={loadAll} apiPost={apiPost} apiGet={apiGet} />
+      <CreateWorkOrderModal
+        open={openNew}
+        onClose={() => setOpenNew(false)}
+        onCreated={async () => {
+          setOpenNew(false);
+          await loadAll();
+        }}
+        apiPost={apiPost}
+        apiGet={apiGet}
+      />
 
       <EditWorkOrderModal
         open={editOpen}
@@ -860,7 +1333,13 @@ export default function WorkOrdersAdmin() {
         onSaved={handleSavedEdit}
       />
 
-      <WorkOrderDetailModal open={detailOpen} onClose={() => setDetailOpen(false)} data={detailData} loading={detailLoading} error={detailErr} />
+      <WorkOrderDetailModal
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        data={detailData}
+        loading={detailLoading}
+        error={detailErr}
+      />
 
       <ConfirmModal
         open={delOpen}
@@ -970,7 +1449,6 @@ export default function WorkOrdersAdmin() {
     </div>
   );
 }
-
 
 
 

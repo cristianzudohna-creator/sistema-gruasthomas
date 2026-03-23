@@ -1,4 +1,7 @@
 // ✅ Archivo: src/work-orders/work-orders.controller.ts (COMPLETO)
+// ✅ FIX: export-zip ahora llama al método real del service: exportPdfZipByFilters()
+// ✅ FIX: mapeo correcto de filtros -> operatorId / riggerName
+// ✅ NUEVO: export-excel para OTs APROBADAS
 import {
   Body,
   Controller,
@@ -87,7 +90,6 @@ export class WorkOrdersController {
   // =========================================================
   // ✅ CALENDARIO (ADMIN)
   // GET /work-orders/calendar?from=2026-02-01&to=2026-02-29
-  // Devuelve OTs con diasProgramados dentro del rango (para pintar calendario)
   // =========================================================
   @Get("calendar")
   async calendar(
@@ -98,7 +100,83 @@ export class WorkOrdersController {
     const role = req.user?.role as Role | undefined;
     if (!this.isOtAdmin(role)) throw new ForbiddenException("No autorizado.");
 
-    return (this.service as any).listCalendar(req.user, { from, to });
+    return this.service.listCalendar(req.user, { from, to });
+  }
+
+  // =========================================================
+  // ✅ EXPORT ZIP PDF MASIVO (ADMIN)
+  // GET /work-orders/export-zip?from=2026-03-01&to=2026-03-31&operadorId=xxx&rigger=juan
+  // =========================================================
+  @Get("export-zip")
+  async exportZip(
+    @Query("from") from: string,
+    @Query("to") to: string,
+    @Query("operadorId") operadorId: string,
+    @Query("rigger") rigger: string,
+    @Req() req: any,
+    @Res() res: Response
+  ) {
+    const role = req.user?.role as Role | undefined;
+
+    if (!this.isOtAdmin(role)) {
+      throw new ForbiddenException("No autorizado.");
+    }
+
+    const { buffer, filename } = await this.service.exportPdfZipByFilters(
+      {
+        from,
+        to,
+        operatorId: operadorId,
+        riggerName: rigger,
+      },
+      req.user
+    );
+
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Length", String(buffer.length));
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Pragma", "no-cache");
+
+    return res.status(200).send(buffer);
+  }
+
+  // =========================================================
+  // ✅ EXPORT EXCEL (ADMIN)
+  // GET /work-orders/export-excel?from=2026-03-01&to=2026-03-31
+  // ✅ SOLO OTs APROBADAS
+  // =========================================================
+  @Get("export-excel")
+  async exportExcel(
+    @Query("from") from: string,
+    @Query("to") to: string,
+    @Req() req: any,
+    @Res() res: Response
+  ) {
+    const role = req.user?.role as Role | undefined;
+
+    if (!this.isOtAdmin(role)) {
+      throw new ForbiddenException("No autorizado.");
+    }
+
+    const { buffer, filename } = await this.service.exportApprovedExcel(
+      {
+        from,
+        to,
+      },
+      req.user
+    );
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Length", String(buffer.length));
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Pragma", "no-cache");
+
+    return res.status(200).send(buffer);
   }
 
   // =========================================================
@@ -120,7 +198,7 @@ export class WorkOrdersController {
       ? body.diasProgramados
       : [];
 
-    return (this.service as any).updateSchedule(id, diasProgramados, req.user);
+    return this.service.updateSchedule(id, diasProgramados, req.user);
   }
 
   // =========================================================
@@ -159,11 +237,11 @@ export class WorkOrdersController {
     const include = this.parseBool(includeFinalizadas);
 
     try {
-      return await (this.service as any).listForWorker(req.user, {
+      return await this.service.listForWorker(req.user, {
         includeFinalizadas: include,
       });
     } catch {
-      return await (this.service as any).listForWorker(req.user, include);
+      return await this.service.listForWorker(req.user, include);
     }
   }
 
@@ -231,8 +309,14 @@ export class WorkOrdersController {
   ) {
     const role = req.user?.role as Role | undefined;
 
-    // ✅ admin o trabajador asignado pueden subir
-    if (![Role.TRABAJADOR, Role.CONTROL_FLOTA, Role.ADMINISTRADORA, Role.SUPERADMIN].includes(role as any)) {
+    if (
+      ![
+        Role.TRABAJADOR,
+        Role.CONTROL_FLOTA,
+        Role.ADMINISTRADORA,
+        Role.SUPERADMIN,
+      ].includes(role as any)
+    ) {
       throw new ForbiddenException("No autorizado.");
     }
     if (!id) throw new BadRequestException("Falta id");
@@ -243,7 +327,7 @@ export class WorkOrdersController {
   }
 
   // =========================
-  // ✅ DESCARGAR PDF
+  // ✅ DESCARGAR PDF INDIVIDUAL
   // =========================
   @Get(":id/pdf")
   async downloadPdf(

@@ -1,6 +1,8 @@
 // ✅ Archivo: src/pages/Camiones.jsx (COMPLETO - PROD FIX + COOKIES FIX + TEXT FIX + HORÓMETRO CRUD SIN EDITAR/SIN COMENTARIO)
+// ✅ NUEVO: CSS propio en Camiones.css
 import { useEffect, useMemo, useState } from "react";
 import "./Admin.css";
+import "./Camiones.css";
 
 import VehicleModal from "./VehicleModal";
 import DocumentsModal from "./DocumentsModal";
@@ -42,10 +44,7 @@ function normalizeVehicleTypeKey(raw) {
   const s0 = String(raw ?? "").trim();
   if (!s0) return "";
 
-  // arregla mojibake si viene roto
   const fixed = fixText(s0).replace(/\s+/g, " ").trim();
-
-  // quita tildes => CAMION
   const noDiacritics = fixed.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   return noDiacritics.toUpperCase();
 }
@@ -57,7 +56,7 @@ function displayTipoVehiculo(value) {
   return fixText(out);
 }
 
-/** ✅ Botón consistente y visible (evita que el CSS lo “aplane” o lo deje invisible) */
+/** ✅ Botón consistente y visible */
 function ActionButton({ variant = "ghost", className = "", style = {}, ...props }) {
   const base = {
     height: 40,
@@ -101,61 +100,47 @@ export default function Camiones() {
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // ALL | VENCIDO | POR_VENCER | VIGENTE (estado del vehículo por próxima mantención)
   const [statusFilter, setStatusFilter] = useState("ALL");
-
-  // ALL | GRUAS_THOMAS | INSPROTEL
   const [empresaFilter, setEmpresaFilter] = useState("ALL");
 
-  // ✅ Export scope (selector)
-  const [exportScope, setExportScope] = useState("VISTA"); // "VISTA" | "ALL" | "GRUAS_THOMAS" | "INSPROTEL"
+  const [exportScope, setExportScope] = useState("VISTA");
   const [exporting, setExporting] = useState(false);
 
-  // modal create/edit
   const [openAdd, setOpenAdd] = useState(false);
   const [openEdit, setOpenEdit] = useState(false);
   const [editInitial, setEditInitial] = useState(null);
 
-  // modal detalle (acciones dentro)
   const [openDetail, setOpenDetail] = useState(false);
   const [detailVehicle, setDetailVehicle] = useState(null);
 
-  // modal docs/mant
   const [openDocs, setOpenDocs] = useState(false);
   const [docsVehicle, setDocsVehicle] = useState(null);
 
   const [openMaint, setOpenMaint] = useState(false);
   const [maintVehicle, setMaintVehicle] = useState(null);
 
-  // ✅ Eliminar (Confirm + Éxito)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteSuccessOpen, setDeleteSuccessOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
-  // ✅ Paginación (FIJO 25)
   const [page, setPage] = useState(1);
   const pageSize = 25;
 
-  // ✅ Modal “ver detalle de cards”
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [alertsMode, setAlertsMode] = useState(null);
-  // alertsMode: "DOCS_CRIT" | "DOCS_SOON" | "MAINT_CRIT" | "MAINT_SOON"
 
-  // ✅ Cambiar estado operativo
   const [opConfirmOpen, setOpConfirmOpen] = useState(false);
   const [opTarget, setOpTarget] = useState(null);
-  const [opNextStatus, setOpNextStatus] = useState(null); // "OPERATIVO" | "EN_PANA" | "PARADO"
+  const [opNextStatus, setOpNextStatus] = useState(null);
   const [opSaving, setOpSaving] = useState(false);
 
-  // ✅ HORÓMETRO (ADMIN)
   const [horoOpen, setHoroOpen] = useState(false);
   const [horoVehicle, setHoroVehicle] = useState(null);
   const [horoLoading, setHoroLoading] = useState(false);
   const [horoError, setHoroError] = useState("");
   const [horoItems, setHoroItems] = useState([]);
 
-  // ✅ HORÓMETRO CREATE/DELETE (SIN EDITAR / SIN COMENTARIO)
   const [horoFormHoras, setHoroFormHoras] = useState("");
   const [horoFormFile, setHoroFormFile] = useState(null);
   const [horoSaving, setHoroSaving] = useState(false);
@@ -163,7 +148,6 @@ export default function Camiones() {
   const [horoDeleteConfirmOpen, setHoroDeleteConfirmOpen] = useState(false);
   const [horoDeleteTarget, setHoroDeleteTarget] = useState(null);
 
-  // ✅ Preview evidencia (foto)
   const [photoOpen, setPhotoOpen] = useState(false);
   const [photoUrl, setPhotoUrl] = useState("");
   const [photoTitle, setPhotoTitle] = useState("");
@@ -534,7 +518,6 @@ export default function Camiones() {
     setHoroDeleteTarget(null);
   }
 
-  // ✅ normaliza respuesta del backend para horómetro (soporta {records, plan})
   function normalizeHorometerResponse(data) {
     if (data && Array.isArray(data.records)) return { records: data.records, plan: data.plan || null };
     if (Array.isArray(data)) return { records: data, plan: null };
@@ -558,7 +541,7 @@ export default function Camiones() {
     }
 
     const data = await res.json();
-    return normalizeHorometerResponse(data); // ✅ {records, plan}
+    return normalizeHorometerResponse(data);
   }
 
   async function createHorometerRequest(vehicleId, { horas, file }) {
@@ -596,7 +579,6 @@ export default function Camiones() {
     return res.json().catch(() => null);
   }
 
-  // ✅ helper: calcula label si backend no lo manda (compat)
   function computeFaltanLabel(faltanHoras) {
     const n = faltanHoras == null ? null : Number(faltanHoras);
     if (n == null || !Number.isFinite(n)) return "—";
@@ -615,10 +597,7 @@ export default function Camiones() {
         const { records } = await fetchHorometers(horoVehicle.id);
 
         const mapped = (records || []).map((r) => {
-          // ✅ Opción A: backend nuevo -> faltanHoras / faltanLabel
-          const faltanHoras =
-            r.faltanHoras ?? r.faltan ?? null; // compat por si llega "faltan"
-
+          const faltanHoras = r.faltanHoras ?? r.faltan ?? null;
           const faltanLabel = fixText(r.faltanLabel || computeFaltanLabel(faltanHoras));
 
           return {
@@ -626,14 +605,10 @@ export default function Camiones() {
             horas: r.horas,
             fotoUrl: r.fotoUrl || r.fotoURL || r.archivoUrl || r.fileUrl || "",
             createdAt: r.createdAt,
-
             trabajadorNombre: fixText(r.trabajadorNombre || ""),
             trabajadorApellido: fixText(r.trabajadorApellido || ""),
             trabajadorRut: fixText(r.trabajadorRut || ""),
-
             originalName: fixText(r.originalName || r.filename || ""),
-
-            // ✅ NUEVO
             faltanHoras,
             faltanLabel,
           };
@@ -777,7 +752,6 @@ export default function Camiones() {
     return () => document.removeEventListener("click", onDocClick);
   }, []);
 
-  // ✅ helpers cards
   function cardSubtextTotal() {
     if (empresaFilter === "ALL") return "Toda la flota en el sistema";
     if (empresaFilter === "GRUAS_THOMAS") return "Solo vehículos de Grúas Thomas";
@@ -792,7 +766,6 @@ export default function Camiones() {
     return empresaLogo(empresaFilter);
   }
 
-  // ✅ Export helpers
   function formatDateISO(value) {
     if (!value) return "";
     try {
@@ -953,7 +926,6 @@ export default function Camiones() {
         <p>Ingreso / edición / documentos / mantenciones</p>
       </div>
 
-      {/* ✅ Tabs empresa */}
       <div className="empresa-tabs">
         <button
           type="button"
@@ -980,8 +952,7 @@ export default function Camiones() {
         </button>
       </div>
 
-      {/* 🔎 buscador */}
-      <div className="topbar-search" style={{ marginBottom: 14 }}>
+      <div className="topbar-search cam-search-bar">
         <span className="search-ico" aria-hidden="true">
           🔎
         </span>
@@ -993,7 +964,6 @@ export default function Camiones() {
         />
       </div>
 
-      {/* ✅ Cards (5) */}
       <div className="cards cards-5">
         <div
           className={`card ${totalCardActive ? "card-active" : ""}`}
@@ -1001,23 +971,12 @@ export default function Camiones() {
           onClick={() => setStatusFilter("ALL")}
           title="Click para quitar filtros de estado"
         >
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8, pointerEvents: "none" }}>
+          <div className="cam-card-scope-row">
             <ScopePill text={scopeText()} logo={scopeLogo()} />
           </div>
 
-          <div className="card-top" style={{ display: "flex", alignItems: "center" }}>
-            <div
-              style={{
-                width: 56,
-                height: 56,
-                borderRadius: 16,
-                background: "rgba(0,0,0,0.04)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                marginRight: 12,
-              }}
-            >
+          <div className="card-top cam-total-card-top">
+            <div className="cam-total-card-icon">
               <span style={{ fontSize: 26 }} aria-hidden="true">
                 🚚
               </span>
@@ -1038,7 +997,7 @@ export default function Camiones() {
           onClick={() => stats.docsCriticos > 0 && openAlerts("DOCS_CRIT")}
           title={stats.docsCriticos > 0 ? "Click para ver vehículos operativos" : "Sin vencimientos críticos en operativos"}
         >
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8, pointerEvents: "none" }}>
+          <div className="cam-card-scope-row">
             <ScopePill text={scopeText()} logo={scopeLogo()} />
           </div>
 
@@ -1058,7 +1017,7 @@ export default function Camiones() {
           onClick={() => stats.docsPorVencer > 0 && openAlerts("DOCS_SOON")}
           title={stats.docsPorVencer > 0 ? "Click para ver vehículos operativos" : "Sin documentos por vencer en operativos"}
         >
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8, pointerEvents: "none" }}>
+          <div className="cam-card-scope-row">
             <ScopePill text={scopeText()} logo={scopeLogo()} />
           </div>
 
@@ -1078,7 +1037,7 @@ export default function Camiones() {
           onClick={() => stats.maintCriticos > 0 && openAlerts("MAINT_CRIT")}
           title={stats.maintCriticos > 0 ? "Click para ver vehículos operativos" : "Sin mantenciones críticas en operativos"}
         >
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8, pointerEvents: "none" }}>
+          <div className="cam-card-scope-row">
             <ScopePill text={scopeText()} logo={scopeLogo()} />
           </div>
 
@@ -1098,7 +1057,7 @@ export default function Camiones() {
           onClick={() => stats.maintPorVencer > 0 && openAlerts("MAINT_SOON")}
           title={stats.maintPorVencer > 0 ? "Click para ver vehículos operativos" : "Sin mantenciones por vencer en operativos"}
         >
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8, pointerEvents: "none" }}>
+          <div className="cam-card-scope-row">
             <ScopePill text={scopeText()} logo={scopeLogo()} />
           </div>
 
@@ -1114,8 +1073,8 @@ export default function Camiones() {
       </div>
 
       <div className="panel">
-        <div className="panel-head" style={{ alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
-          <div style={{ minWidth: 260 }}>
+        <div className="panel-head cam-panel-head">
+          <div className="cam-panel-head-left">
             <h2>Listado de Vehículos</h2>
             <p>
               {empresaFilter === "ALL" ? "Todas las empresas" : `Empresa: ${empresaLabel(empresaFilter)}`} •{" "}
@@ -1128,20 +1087,7 @@ export default function Camiones() {
             </p>
           </div>
 
-          <div
-            className="panel-actions"
-            style={{
-              display: "flex",
-              gap: 10,
-              rowGap: 10,
-              flexWrap: "wrap",
-              justifyContent: "flex-end",
-              alignItems: "center",
-              flex: "1 1 520px",
-              minWidth: 320,
-              maxWidth: "100%",
-            }}
-          >
+          <div className="panel-actions cam-panel-actions">
             <ActionButton
               variant="ghost"
               type="button"
@@ -1152,30 +1098,13 @@ export default function Camiones() {
               {loading ? "Cargando..." : "Refrescar"}
             </ActionButton>
 
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "6px 10px",
-                borderRadius: 12,
-                border: "1px solid rgba(0,0,0,0.08)",
-                background: "rgba(255,255,255,0.9)",
-              }}
-            >
-              <span style={{ fontSize: 12, color: "rgba(0,0,0,0.6)", fontWeight: 900 }}>Exportar:</span>
+            <div className="cam-export-scope-box">
+              <span className="cam-export-scope-label">Exportar:</span>
               <select
                 value={exportScope}
                 onChange={(e) => setExportScope(e.target.value)}
                 disabled={loading || exporting}
-                style={{
-                  height: 36,
-                  borderRadius: 10,
-                  border: "1px solid rgba(0,0,0,0.14)",
-                  padding: "0 10px",
-                  fontWeight: 900,
-                  background: "#fff",
-                }}
+                className="cam-export-scope-select"
                 title="Elige el scope del Excel"
               >
                 <option value="VISTA">Vista actual (según filtros)</option>
@@ -1268,21 +1197,13 @@ export default function Camiones() {
                   >
                     <td>
                       <div
-                        style={{
-                          width: 36,
-                          height: 36,
-                          borderRadius: 10,
-                          background: "rgba(0,0,0,0.04)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
+                        className="cam-table-logo-box"
                         title={empresaLabel(t.empresa)}
                       >
                         <img
                           src={empresaLogo(t.empresa)}
                           alt={empresaLabel(t.empresa)}
-                          style={{ width: 28, height: 28, objectFit: "contain" }}
+                          className="cam-table-logo-img"
                         />
                       </div>
                     </td>
@@ -1299,7 +1220,7 @@ export default function Camiones() {
                     <td title={displayTipoVehiculo(t.tipoVehiculo || "")}>{displayTipoVehiculo(t.tipoVehiculo || "")}</td>
 
                     <td onClick={(e) => e.stopPropagation()}>
-                      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
+                      <div className="cam-row-actions">
                         <ActionButton
                           variant="ghost"
                           type="button"
@@ -1380,9 +1301,6 @@ export default function Camiones() {
         </div>
       </div>
 
-      {/* =========================
-         ✅ MODALES
-         ========================= */}
       <VehicleModal
         open={openAdd}
         onClose={() => setOpenAdd(false)}
@@ -1423,7 +1341,6 @@ export default function Camiones() {
         }}
       />
 
-      {/* ✅ Modal: Horómetro */}
       <Modal
         open={horoOpen}
         onClose={closeHorometer}
@@ -1442,33 +1359,24 @@ export default function Camiones() {
           </div>
         ) : null}
 
-        <div
-          style={{
-            border: "1px solid rgba(0,0,0,0.08)",
-            borderRadius: 14,
-            padding: 12,
-            marginBottom: 12,
-            background: "rgba(255,255,255,0.85)",
-          }}
-        >
-          <div style={{ fontWeight: 900, marginBottom: 8 }}>Agregar registro</div>
+        <div className="cam-horo-form-box">
+          <div className="cam-horo-form-title">Agregar registro</div>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <label style={{ fontSize: 12, fontWeight: 900, opacity: 0.7 }}>Horas</label>
+          <div className="cam-horo-form-row">
+            <div className="cam-horo-form-field">
+              <label className="cam-horo-form-label">Horas</label>
               <input
                 value={horoFormHoras}
                 onChange={(e) => setHoroFormHoras(e.target.value)}
                 placeholder="Ej: 4565161"
                 inputMode="numeric"
-                className="search-input"
-                style={{ width: 200, height: 38 }}
+                className="search-input cam-horo-hours-input"
                 disabled={horoSaving || horoLoading}
               />
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <label style={{ fontSize: 12, fontWeight: 900, opacity: 0.7 }}>Foto</label>
+            <div className="cam-horo-form-field">
+              <label className="cam-horo-form-label">Foto</label>
               <input type="file" accept="image/*" onChange={(e) => setHoroFormFile(e.target.files?.[0] || null)} disabled={horoSaving || horoLoading} />
             </div>
 
@@ -1522,18 +1430,18 @@ export default function Camiones() {
             </ActionButton>
           </div>
 
-          <div style={{ marginTop: 8, fontSize: 12, opacity: 0.7 }}>
+          <div className="cam-horo-form-note">
             Nota: este registro lo crea el <b>Control de Flota</b> o <b>Superadmin</b>.
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+        <div className="cam-horo-badges-row">
           <span className="status ok" style={{ whiteSpace: "nowrap" }}>
             Registros: {horoItems.length}
           </span>
         </div>
 
-        <div style={{ borderRadius: 14, border: "1px solid rgba(0,0,0,0.06)", overflow: "hidden" }}>
+        <div className="cam-horo-table-shell">
           <div style={{ width: "100%", overflowX: "auto" }}>
             <table className="table" style={{ minWidth: 980 }}>
               <thead>
@@ -1602,7 +1510,7 @@ export default function Camiones() {
                         </td>
 
                         <td>
-                          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                          <div className="cam-horo-evidence-cell">
                             {r.fotoUrl ? (
                               <ActionButton
                                 variant="ghost"
@@ -1619,7 +1527,7 @@ export default function Camiones() {
                         </td>
 
                         <td style={{ textAlign: "right" }}>
-                          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                          <div className="cam-horo-actions-cell">
                             <ActionButton
                               variant="ghost"
                               type="button"
@@ -1707,24 +1615,16 @@ export default function Camiones() {
         {!photoUrl ? (
           <div className="empty">No hay imagen para mostrar.</div>
         ) : (
-          <div style={{ width: "100%", display: "flex", justifyContent: "center" }}>
+          <div className="cam-photo-wrap">
             <img
               src={photoUrl}
               alt={fixText(photoTitle)}
-              style={{
-                maxWidth: "100%",
-                maxHeight: "70vh",
-                borderRadius: 14,
-                border: "1px solid rgba(0,0,0,0.08)",
-                objectFit: "contain",
-                background: "rgba(0,0,0,0.02)",
-              }}
+              className="cam-photo-img"
             />
           </div>
         )}
       </Modal>
 
-      {/* ✅ Modal: detalle de cards (vehículos con alertas) */}
       <Modal
         open={alertsOpen}
         onClose={closeAlerts}
@@ -1737,8 +1637,8 @@ export default function Camiones() {
           </button>
         }
       >
-        <div style={{ borderRadius: 14, border: "1px solid rgba(0,0,0,0.06)", background: "#fff" }}>
-          <div style={{ width: "100%", overflowX: "auto", scrollbarGutter: "stable both-edges" }}>
+        <div className="cam-alerts-table-shell">
+          <div className="cam-alerts-table-wrap">
             <table className="table" style={{ minWidth: 1180 }}>
               <thead>
                 <tr>
@@ -1756,21 +1656,13 @@ export default function Camiones() {
                   <tr key={v.id}>
                     <td>
                       <div
-                        style={{
-                          width: 34,
-                          height: 34,
-                          borderRadius: 10,
-                          background: "rgba(0,0,0,0.04)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
+                        className="cam-alert-logo-box"
                         title={empresaLabel(v.empresa)}
                       >
                         <img
                           src={empresaLogo(v.empresa)}
                           alt={empresaLabel(v.empresa)}
-                          style={{ width: 24, height: 24, objectFit: "contain" }}
+                          className="cam-alert-logo-img"
                         />
                       </div>
                     </td>
@@ -1789,7 +1681,7 @@ export default function Camiones() {
                     </td>
 
                     <td>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      <div className="cam-alert-actions">
                         <ActionButton
                           variant="ghost"
                           type="button"
@@ -1856,7 +1748,7 @@ export default function Camiones() {
           </div>
         </div>
 
-        <div style={{ marginTop: 10, fontSize: 12, color: "rgba(0,0,0,0.65)" }}>
+        <div className="cam-alerts-tip">
           Tip: Las alertas consideran solo camiones <b>OPERATIVOS</b>.
         </div>
       </Modal>
@@ -1943,23 +1835,10 @@ function ScopePill({ text, logo }) {
   return (
     <div
       title={`Scope: ${text}`}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "4px 8px",
-        borderRadius: 999,
-        border: "1px solid rgba(0,0,0,0.08)",
-        background: "rgba(255,255,255,0.95)",
-        fontSize: 11,
-        fontWeight: 800,
-        color: "rgba(0,0,0,0.65)",
-        whiteSpace: "nowrap",
-        lineHeight: 1,
-      }}
+      className="cam-scope-pill"
     >
       {logo ? (
-        <img src={logo} alt={text} style={{ width: 14, height: 14, objectFit: "contain", borderRadius: 6 }} />
+        <img src={logo} alt={text} className="cam-scope-pill-logo" />
       ) : (
         <span aria-hidden="true">🏢</span>
       )}

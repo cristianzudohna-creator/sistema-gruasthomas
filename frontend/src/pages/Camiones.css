@@ -1,0 +1,281 @@
+/* =========================================
+   Camiones.css
+   ✅ estilos propios de la vista Camiones
+   ✅ mantiene Admin.css como base
+   ========================================= */
+
+.cam-search-bar {
+  margin-bottom: 14px;
+}
+
+.cam-card-scope-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+  pointer-events: none;
+}
+
+.cam-total-card-top {
+  display: flex;
+  align-items: center;
+}
+
+.cam-total-card-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 12px;
+}
+
+.cam-panel-head {
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.cam-panel-head-left {
+  min-width: 260px;
+}
+
+.cam-panel-actions {
+  display: flex;
+  gap: 10px;
+  row-gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  flex: 1 1 520px;
+  min-width: 320px;
+  max-width: 100%;
+}
+
+.cam-export-scope-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.cam-export-scope-label {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.6);
+  font-weight: 900;
+}
+
+.cam-export-scope-select {
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  padding: 0 10px;
+  font-weight: 900;
+  background: #fff;
+}
+
+.cam-table-logo-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cam-table-logo-img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.cam-row-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.cam-horo-form-box {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.cam-horo-form-title {
+  font-weight: 900;
+  margin-bottom: 8px;
+}
+
+.cam-horo-form-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.cam-horo-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cam-horo-form-label {
+  font-size: 12px;
+  font-weight: 900;
+  opacity: 0.7;
+}
+
+.cam-horo-hours-input {
+  width: 200px;
+  height: 38px;
+}
+
+.cam-horo-form-note {
+  margin-top: 8px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.cam-horo-badges-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.cam-horo-table-shell {
+  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+.cam-horo-evidence-cell {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.cam-horo-actions-cell {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.cam-photo-wrap {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.cam-photo-img {
+  max-width: 100%;
+  max-height: 70vh;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  object-fit: contain;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.cam-alerts-table-shell {
+  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: #fff;
+}
+
+.cam-alerts-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-gutter: stable both-edges;
+}
+
+.cam-alert-logo-box {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cam-alert-logo-img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.cam-alert-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.cam-alerts-tip {
+  margin-top: 10px;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.65);
+}
+
+.cam-scope-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.95);
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(0, 0, 0, 0.65);
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.cam-scope-pill-logo {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+@media (max-width: 1100px) {
+  .cam-panel-actions {
+    justify-content: flex-start;
+    min-width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .cam-export-scope-box {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .cam-export-scope-select {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .cam-row-actions,
+  .cam-alert-actions {
+    justify-content: flex-start;
+  }
+
+  .cam-horo-form-row {
+    align-items: stretch;
+  }
+
+  .cam-horo-hours-input {
+    width: 100%;
+  }
+}

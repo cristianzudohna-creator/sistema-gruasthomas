@@ -3,6 +3,8 @@
 // - En modo admin ahora SÍ muestra "Recibí Conforme (cliente)" en solo lectura.
 // - Se visualiza nombre y rut guardados por el trabajador.
 // - Firma sigue siendo solo lectura en administración.
+// ✅ CAMBIO NUEVO:
+// - "Dirección de la faena" -> "Obra/Tramo"
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -838,7 +840,7 @@ export default function WorkOrderCompleteModal({
                 <FieldRO label="Horario llegada" value={ro.horario} />
 
                 <div style={{ gridColumn: "1 / -1" }}>
-                  <FieldRO label="Dirección de la faena" value={ro.direccionFaena} />
+                  <FieldRO label="Obra/Tramo" value={ro.direccionFaena} />
                 </div>
 
                 <FieldRO label="Comuna" value={ro.comuna} />

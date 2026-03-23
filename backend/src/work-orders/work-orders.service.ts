@@ -13,6 +13,7 @@
 // ✅ FIX PDF NUEVO 2: Compactar para que TODO quepa en 1 hoja (sin addPage)
 // ✅ AJUSTE EXTRA: “auto spacer” para bajar el bloque final cuando sobra espacio (sin romper 1 hoja)
 // ✅ AJUSTE EXTRA: mejor padding/centrado del texto en “Detalle de Movimientos”
+// ✅ CAMBIO PDF NUEVO: "Dereccion Faena" -> "Obra/Tramo"
 //
 // ✅ NUEVO (AUDITORÍA):
 // - Audita CREATE OT
@@ -35,6 +36,32 @@
 // - merge profundo con workerReport anterior
 // - deja status EN_PROCESO
 // - complete(): mezcla borrador previo + datos finales y recién marca COMPLETADA
+//
+// ✅ NUEVO (EXPORT MASIVO):
+// - exportPdfZipByFilters()
+// - filtra OT por fecha, operador y rigger
+// - ✅ SOLO exporta OTs APROBADAS
+// - ordena por fecha ASC
+// - genera ZIP con PDFs individuales
+// - nombre de ZIP automático
+//
+// ✅ NUEVO (EXCEL):
+// - exportApprovedExcel()
+// - filtra por rango de fechas
+// - ✅ SOLO OTs APROBADAS
+// - 2 hojas: OPERADORES y RIGGER
+// - plantilla completa
+// - ESTADO = Firmada
+// - EMPRESA = nombre del cliente
+// - OBSERVACIONES = vacío
+// - fórmulas como tu Excel real
+//
+// ✅ FIX EXCEL NUEVO:
+// - ENTRADA / SALIDA se guardan como hora pura de Excel (sin fecha 1900 visible)
+// - HR. COL si viene como "13:00" => se interpreta como 1 hora de colación
+// - TOTAL HORAS queda coherente con la OT
+// - HOJA OPERADORES con encabezado gris oscuro
+// - HOJA RIGGER con encabezado azul
 
 import {
   BadRequestException,
@@ -59,9 +86,12 @@ import {
 import { AuditService } from "../audit/audit.service";
 
 import PDFDocument = require("pdfkit");
+import archiver = require("archiver");
+import ExcelJS = require("exceljs");
 
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { join } from "path";
+import { PassThrough } from "stream";
 
 function cleanStr(v: any): string | null {
   const s = String(v ?? "").trim();
@@ -77,7 +107,6 @@ function cleanDiasTrabajo(v: any): string[] {
   return Array.from(new Set(cleaned));
 }
 
-// ✅ NUEVO: limpiar diasProgramados ["YYYY-MM-DD", ...]
 function cleanDiasProgramados(v: any): string[] {
   if (!Array.isArray(v)) return [];
   const out: string[] = [];
@@ -99,6 +128,16 @@ function fmtDateOnly(d: any) {
   const mm = String(x.getMonth() + 1).padStart(2, "0");
   const yy = String(x.getFullYear());
   return `${dd}/${mm}/${yy}`;
+}
+
+function fmtDateOnlyDash(d: any) {
+  if (!d) return "";
+  const x = new Date(d);
+  if (Number.isNaN(x.getTime())) return "";
+  const dd = String(x.getDate()).padStart(2, "0");
+  const mm = String(x.getMonth() + 1).padStart(2, "0");
+  const yy = String(x.getFullYear());
+  return `${dd}-${mm}-${yy}`;
 }
 
 function fmtTimeIfHHMM(v: any) {
@@ -237,11 +276,50 @@ function getSignatureBuffer(workOrder: any, id: string): Buffer | null {
   return null;
 }
 
-// ✅ NUEVO: validación HH:MM
 function isHHMM(v: any): boolean {
   const s = String(v ?? "").trim();
   if (!s) return false;
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
+}
+
+function fmtIsoDateOnly(d: any): string {
+  if (!d) return "";
+  const x = new Date(d);
+  if (Number.isNaN(x.getTime())) return "";
+  const yy = x.getFullYear();
+  const mm = String(x.getMonth() + 1).padStart(2, "0");
+  const dd = String(x.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+function safeFilePart(v: any): string {
+  return String(v ?? "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9_-]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toUpperCase();
+}
+
+function zipBufferFromArchiver(archive: archiver.Archiver): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    const stream = new PassThrough();
+
+    stream.on("data", (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+    stream.on("end", () => resolve(Buffer.concat(chunks)));
+    stream.on("error", reject);
+
+    archive.on("warning", (err: any) => {
+      if (err?.code === "ENOENT") return;
+      reject(err);
+    });
+    archive.on("error", reject);
+
+    archive.pipe(stream);
+  });
 }
 
 @Injectable()
@@ -250,10 +328,6 @@ export class WorkOrdersService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService
   ) {}
-
-  // =========================================================
-  // ✅ AUDIT HELPERS
-  // =========================================================
 
   private safeActor(actor: any) {
     return actor?.id && actor?.email ? { id: actor.id, email: actor.email } : null;
@@ -430,9 +504,578 @@ export class WorkOrdersService {
     return wo;
   }
 
-  // =========================
-  // ✅ CLIENTES (AUTOCOMPLETE)
-  // =========================
+  private parseStartDate(dateOnly?: string | null): Date | null {
+    const s = cleanStr(dateOnly);
+    if (!s) return null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+    return new Date(`${s}T00:00:00.000Z`);
+  }
+
+  private parseEndExclusiveDate(dateOnly?: string | null): Date | null {
+    const s = cleanStr(dateOnly);
+    if (!s) return null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+
+    const base = new Date(`${s}T00:00:00.000Z`);
+    base.setUTCDate(base.getUTCDate() + 1);
+    return base;
+  }
+
+  private async buildZipFileName(params: {
+    from?: string | null;
+    to?: string | null;
+    operatorId?: string | null;
+    operatorName?: string | null;
+    riggerName?: string | null;
+  }) {
+    const parts: string[] = ["OT"];
+
+    const operatorId = cleanStr(params.operatorId);
+    const operatorName = cleanStr(params.operatorName);
+    const riggerName = cleanStr(params.riggerName);
+    const from = cleanStr(params.from);
+    const to = cleanStr(params.to);
+
+    let operatorLabel = operatorName;
+
+    if (!operatorLabel && operatorId) {
+      const operator = await this.prisma.user.findUnique({
+        where: { id: operatorId },
+        select: { nombre: true, apellido: true, email: true },
+      });
+
+      operatorLabel =
+        [operator?.nombre, operator?.apellido].filter(Boolean).join(" ").trim() ||
+        cleanStr(operator?.email);
+    }
+
+    if (operatorLabel) parts.push("OPERADOR", safeFilePart(operatorLabel));
+    if (riggerName) parts.push("RIGGER", safeFilePart(riggerName));
+
+    if (from && to) {
+      parts.push(from, "A", to);
+    } else if (from) {
+      parts.push("DESDE", from);
+    } else if (to) {
+      parts.push("HASTA", to);
+    }
+
+    return `${parts.filter(Boolean).join("_")}.zip`;
+  }
+
+  private buildExcelFileName(params: {
+    from?: string | null;
+    to?: string | null;
+  }) {
+    const from = cleanStr(params.from);
+    const to = cleanStr(params.to);
+
+    const parts = ["OT_APROBADAS"];
+
+    if (from && to) {
+      parts.push(from, "A", to);
+    } else if (from) {
+      parts.push("DESDE", from);
+    } else if (to) {
+      parts.push("HASTA", to);
+    }
+
+    return `${parts.filter(Boolean).join("_")}.xlsx`;
+  }
+
+  private extractHHMM(value: any): string | null {
+    const raw = cleanStr(value);
+    if (!raw) return null;
+
+    const direct = raw.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+    if (direct) {
+      return `${direct[1]}:${direct[2]}`;
+    }
+
+    const embedded = raw.match(/([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?/);
+    if (embedded) {
+      return `${embedded[1]}:${embedded[2]}`;
+    }
+
+    return null;
+  }
+
+  private parseExcelHour(value: any): number | null {
+    const hhmm = this.extractHHMM(value);
+    if (!hhmm) return null;
+
+    const [hh, mm] = hhmm.split(":").map(Number);
+
+    if (
+      Number.isNaN(hh) ||
+      Number.isNaN(mm) ||
+      hh < 0 ||
+      hh > 23 ||
+      mm < 0 ||
+      mm > 59
+    ) {
+      return null;
+    }
+
+    return (hh * 60 + mm) / 1440;
+  }
+
+  private parseExcelDateOnly(value: any): Date | null {
+    if (!value) return null;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+  }
+
+  private parseColacionHours(value: any): number {
+    const raw = cleanStr(value);
+    if (!raw) return 0;
+
+    if (this.extractHHMM(raw)) {
+      return 1;
+    }
+
+    const n = Number(String(raw).replace(",", "."));
+    if (!Number.isNaN(n) && n >= 0) {
+      return n;
+    }
+
+    return 0;
+  }
+
+  private styleExcelHeader(
+    row: ExcelJS.Row,
+    bgColorArgb: string = "FF111111"
+  ) {
+    row.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    row.alignment = { vertical: "middle", horizontal: "center" };
+    row.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: bgColorArgb },
+    };
+    row.height = 22;
+
+    row.eachCell((cell) => {
+      cell.border = {
+        top: { style: "thin", color: { argb: "FFFFFFFF" } },
+        left: { style: "thin", color: { argb: "FFFFFFFF" } },
+        bottom: { style: "thin", color: { argb: "FFFFFFFF" } },
+        right: { style: "thin", color: { argb: "FFFFFFFF" } },
+      };
+    });
+  }
+
+  private styleExcelBodyRow(row: ExcelJS.Row) {
+    row.alignment = { vertical: "middle", horizontal: "left" };
+
+    row.eachCell((cell) => {
+      cell.border = {
+        top: { style: "thin", color: { argb: "FFD9D9D9" } },
+        left: { style: "thin", color: { argb: "FFD9D9D9" } },
+        bottom: { style: "thin", color: { argb: "FFD9D9D9" } },
+        right: { style: "thin", color: { argb: "FFD9D9D9" } },
+      };
+    });
+  }
+
+  private addExcelTemplateSheet(
+    workbook: ExcelJS.Workbook,
+    sheetName: string,
+    personHeader: "OPERADOR" | "RIGGER"
+  ) {
+    const sheet = workbook.addWorksheet(sheetName, {
+      views: [{ state: "frozen", ySplit: 1 }],
+    });
+
+    sheet.columns = [
+      { header: "FECHA", key: "fecha", width: 14 },
+      { header: "ESTADO", key: "estado", width: 14 },
+      { header: "OT", key: "ot", width: 14 },
+      { header: "EMPRESA", key: "empresa", width: 34 },
+      { header: "OBRA_TRAMO", key: "obraTramo", width: 28 },
+      { header: personHeader, key: "persona", width: 30 },
+      { header: "ENTRADA", key: "entrada", width: 12 },
+      { header: "SALIDA", key: "salida", width: 12 },
+      { header: "HR. COL", key: "hrCol", width: 10 },
+      { header: "TOTAL HORAS", key: "totalHoras", width: 12 },
+      { header: "HORAS 50%", key: "horas50", width: 12 },
+      { header: "HORAS 100%", key: "horas100", width: 12 },
+      { header: "HORAS VIERNES", key: "horasViernes", width: 14 },
+      { header: "VALOR HR. 50%", key: "valor50", width: 14 },
+      { header: "VALOR HR. 100%", key: "valor100", width: 14 },
+      { header: "VALOR HR. VIER", key: "valorVier", width: 14 },
+      { header: "SABADOS", key: "sabados", width: 14 },
+      { header: "DOMINGOS Y FESTIVOS", key: "domingosFestivos", width: 20 },
+      { header: "TOTAL", key: "total", width: 14 },
+      { header: "OBSERVACIONES", key: "observaciones", width: 24 },
+    ];
+
+    const headerColor =
+      sheetName.toUpperCase() === "RIGGER"
+        ? "FF2F5597"
+        : "FF595959";
+
+    this.styleExcelHeader(sheet.getRow(1), headerColor);
+
+    return sheet;
+  }
+
+  private addExcelDataRow(params: {
+    sheet: ExcelJS.Worksheet;
+    item: any;
+    personName: string;
+    personType: "OPERADOR" | "RIGGER";
+  }) {
+    const { sheet, item, personName, personType } = params;
+
+    const wr = safeParseWorkerReport(item.workerReport);
+    const detalleHoras = wr?.detalleHoras || {};
+
+    const fecha = this.parseExcelDateOnly(item.createdAt);
+    const estado = "Firmada";
+    const ot = `OT-${String(item.id).slice(0, 6).toUpperCase()}`;
+    const empresa = cleanStr(item.cliente) || "";
+    const obraTramo =
+      cleanStr(item.direccionFaena) || cleanStr(item.lugar) || "";
+
+    const entrada = this.parseExcelHour(detalleHoras?.salidaPlanta);
+    const salida = this.parseExcelHour(detalleHoras?.llegadaPlanta);
+    const hrCol = this.parseColacionHours(detalleHoras?.colacion);
+
+    const row = sheet.addRow({
+      fecha,
+      estado,
+      ot,
+      empresa,
+      obraTramo,
+      persona: cleanStr(personName) || "",
+      entrada,
+      salida,
+      hrCol,
+      horas50: 0,
+      horas100: 0,
+      horasViernes: 0,
+      valor50: 0,
+      valor100: 0,
+      valorVier: 0,
+      sabados: 0,
+      domingosFestivos: 0,
+      total: 0,
+      observaciones: "",
+    });
+
+    const rowNumber = row.number;
+
+    row.getCell("A").numFmt = "dd-mm-yyyy";
+    row.getCell("G").numFmt = "hh:mm";
+    row.getCell("H").numFmt = "hh:mm";
+    row.getCell("I").numFmt = "0.0";
+    row.getCell("J").numFmt = "0.0";
+    row.getCell("K").numFmt = "0.0";
+    row.getCell("L").numFmt = "0.0";
+    row.getCell("M").numFmt = "0.0";
+    row.getCell("N").numFmt = "#,##0";
+    row.getCell("O").numFmt = "#,##0";
+    row.getCell("P").numFmt = "#,##0";
+    row.getCell("Q").numFmt = "#,##0";
+    row.getCell("R").numFmt = "#,##0";
+    row.getCell("S").numFmt = "#,##0";
+
+    row.getCell("J").value = {
+      formula: `IFERROR((H${rowNumber}-G${rowNumber})*24-I${rowNumber},0)`,
+    };
+
+    row.getCell("K").value = {
+      formula: `IFERROR(MAX(J${rowNumber}-9,0),0)`,
+    };
+
+    row.getCell("L").value = {
+      formula: `0`,
+    };
+
+    row.getCell("M").value = {
+      formula: `0`,
+    };
+
+    row.getCell("N").value = {
+      formula: `K${rowNumber}*5000`,
+    };
+
+    row.getCell("O").value = {
+      formula:
+        personType === "RIGGER"
+          ? `L${rowNumber}*5303`
+          : `L${rowNumber}*7000`,
+    };
+
+    row.getCell("P").value = {
+      formula: `M${rowNumber}*5000`,
+    };
+
+    row.getCell("S").value = {
+      formula: `R${rowNumber}+Q${rowNumber}+P${rowNumber}+O${rowNumber}+N${rowNumber}`,
+    };
+
+    this.styleExcelBodyRow(row);
+  }
+
+  async exportPdfZipByFilters(
+    filters: {
+      from?: string;
+      to?: string;
+      operatorId?: string;
+      operatorName?: string;
+      riggerName?: string;
+    },
+    actor?: any
+  ): Promise<{ buffer: Buffer; filename: string; total: number }> {
+    if (!this.isOtAdminRole(actor)) {
+      throw new ForbiddenException("No autorizado.");
+    }
+
+    const from = cleanStr(filters?.from);
+    const to = cleanStr(filters?.to);
+    const operatorId = cleanStr(filters?.operatorId);
+    const operatorName = cleanStr(filters?.operatorName);
+    const riggerName = cleanStr(filters?.riggerName);
+
+    const createdAt: any = {};
+    const gte = this.parseStartDate(from);
+    const lt = this.parseEndExclusiveDate(to);
+
+    if (from && !gte) {
+      throw new BadRequestException("Fecha desde inválida. Usa YYYY-MM-DD.");
+    }
+    if (to && !lt) {
+      throw new BadRequestException("Fecha hasta inválida. Usa YYYY-MM-DD.");
+    }
+
+    if (gte) createdAt.gte = gte;
+    if (lt) createdAt.lt = lt;
+
+    if (gte && lt && gte >= lt) {
+      throw new BadRequestException("El rango de fechas es inválido.");
+    }
+
+    const whereEmpresa = await this.empresaWhereByActor(actor);
+
+    const andWhere: any[] = [
+      whereEmpresa,
+      this.whereActivosOnly(),
+      { status: WorkOrderStatus.APROBADA },
+    ];
+
+    if (Object.keys(createdAt).length > 0) {
+      andWhere.push({ createdAt });
+    }
+
+    if (operatorId) {
+      andWhere.push({
+        assignedToId: operatorId,
+      });
+    }
+
+    if (operatorName) {
+      andWhere.push({
+        OR: [
+          { operador: { contains: operatorName, mode: "insensitive" } },
+          { conductor: { contains: operatorName, mode: "insensitive" } },
+        ],
+      });
+    }
+
+    if (riggerName) {
+      andWhere.push({
+        rigger: { contains: riggerName, mode: "insensitive" },
+      });
+    }
+
+    const items = await this.prisma.workOrder.findMany({
+      where: {
+        AND: andWhere,
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        createdAt: true,
+        status: true,
+      },
+    });
+
+    if (!items.length) {
+      throw new NotFoundException("No se encontraron OTs APROBADAS con esos filtros.");
+    }
+
+    const zipName = await this.buildZipFileName({
+      from,
+      to,
+      operatorId,
+      operatorName,
+      riggerName,
+    });
+
+    const archive = archiver("zip", { zlib: { level: 9 } });
+    const zipPromise = zipBufferFromArchiver(archive);
+
+    let index = 1;
+    for (const item of items) {
+      const { buffer } = await this.generatePdf(item.id, actor);
+      const seq = String(index).padStart(3, "0");
+      const datePart = fmtIsoDateOnly(item.createdAt) || "SIN_FECHA";
+      const otNum = `OT-${String(item.id).slice(0, 6).toUpperCase()}`;
+      const entryName = `${seq}_${safeFilePart(otNum)}_${datePart}.pdf`;
+      archive.append(buffer, { name: entryName });
+      index += 1;
+    }
+
+    await archive.finalize();
+    const buffer = await zipPromise;
+
+    return {
+      buffer,
+      filename: zipName,
+      total: items.length,
+    };
+  }
+
+  async exportApprovedExcel(
+    filters: {
+      from?: string;
+      to?: string;
+    },
+    actor?: any
+  ): Promise<{ buffer: Buffer; filename: string; total: number }> {
+    if (!this.isOtAdminRole(actor)) {
+      throw new ForbiddenException("No autorizado.");
+    }
+
+    const from = cleanStr(filters?.from);
+    const to = cleanStr(filters?.to);
+
+    const createdAt: any = {};
+    const gte = this.parseStartDate(from);
+    const lt = this.parseEndExclusiveDate(to);
+
+    if (from && !gte) {
+      throw new BadRequestException("Fecha desde inválida. Usa YYYY-MM-DD.");
+    }
+    if (to && !lt) {
+      throw new BadRequestException("Fecha hasta inválida. Usa YYYY-MM-DD.");
+    }
+
+    if (gte) createdAt.gte = gte;
+    if (lt) createdAt.lt = lt;
+
+    if (gte && lt && gte >= lt) {
+      throw new BadRequestException("El rango de fechas es inválido.");
+    }
+
+    const whereEmpresa = await this.empresaWhereByActor(actor);
+
+    const andWhere: any[] = [
+      whereEmpresa,
+      this.whereActivosOnly(),
+      { status: WorkOrderStatus.APROBADA },
+    ];
+
+    if (Object.keys(createdAt).length > 0) {
+      andWhere.push({ createdAt });
+    }
+
+    const items = await this.prisma.workOrder.findMany({
+      where: {
+        AND: andWhere,
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        createdAt: true,
+        status: true,
+        cliente: true,
+        direccionFaena: true,
+        lugar: true,
+        operador: true,
+        conductor: true,
+        rigger: true,
+        workerReport: true,
+      },
+    });
+
+    if (!items.length) {
+      throw new NotFoundException("No se encontraron OTs APROBADAS con esos filtros.");
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "Sistema Grúas Thomas";
+    workbook.lastModifiedBy = "Sistema Grúas Thomas";
+    workbook.created = new Date();
+    workbook.modified = new Date();
+
+    const operadoresSheet = this.addExcelTemplateSheet(
+      workbook,
+      "OPERADORES",
+      "OPERADOR"
+    );
+    const riggersSheet = this.addExcelTemplateSheet(
+      workbook,
+      "RIGGER",
+      "RIGGER"
+    );
+
+    let operadoresCount = 0;
+    let riggersCount = 0;
+
+    for (const item of items) {
+      const operador =
+        cleanStr(item.operador) || cleanStr(item.conductor) || "";
+      const rigger = cleanStr(item.rigger) || "";
+
+      if (operador) {
+        this.addExcelDataRow({
+          sheet: operadoresSheet,
+          item,
+          personName: operador,
+          personType: "OPERADOR",
+        });
+        operadoresCount += 1;
+      }
+
+      if (rigger) {
+        this.addExcelDataRow({
+          sheet: riggersSheet,
+          item,
+          personName: rigger,
+          personType: "RIGGER",
+        });
+        riggersCount += 1;
+      }
+    }
+
+    if (operadoresCount === 0) {
+      const row = operadoresSheet.addRow({
+        observaciones: "Sin registros para el período seleccionado",
+      });
+      this.styleExcelBodyRow(row);
+    }
+
+    if (riggersCount === 0) {
+      const row = riggersSheet.addRow({
+        observaciones: "Sin registros para el período seleccionado",
+      });
+      this.styleExcelBodyRow(row);
+    }
+
+    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+    const filename = this.buildExcelFileName({ from, to });
+
+    return {
+      buffer,
+      filename,
+      total: items.length,
+    };
+  }
+
   async searchClients(search: string, actor?: any) {
     const q = cleanStr(search);
     if (!q) return { items: [] };
@@ -484,9 +1127,6 @@ export class WorkOrdersService {
     return client.id;
   }
 
-  // =========================
-  // ✅ FOTOS
-  // =========================
   private listPhotosByWorkOrderId(id: string) {
     const dir = join(process.cwd(), "uploads", "work-orders", id);
     if (!existsSync(dir)) return [];
@@ -518,9 +1158,6 @@ export class WorkOrdersService {
     return { ok: true, photos };
   }
 
-  // =========================
-  // ✅ ADMIN: CREATE / LIST / GET / UPDATE / DELETE
-  // =========================
   async create(dto: CreateWorkOrderDto, createdById?: string) {
     const cliente = cleanStr((dto as any).cliente);
     const lugar = cleanStr((dto as any).lugar);
@@ -786,7 +1423,6 @@ export class WorkOrdersService {
       nota: cleanStr((dto as any).nota),
     };
 
-    // ✅ NUEVO (CALENDARIO): si viene diasProgramados, lo actualizamos. Si no viene, NO lo tocamos.
     if ("diasProgramados" in (dto as any)) {
       data.diasProgramados = cleanDiasProgramados((dto as any).diasProgramados);
     }
@@ -1069,11 +1705,9 @@ export class WorkOrdersService {
       throw new BadRequestException("workerReport es obligatorio.");
     }
 
-    // ✅ mezcla borrador previo + envío final
     const currentWorkerReport = safeParseWorkerReport(exists.workerReport) || {};
     const workerReport = this.deepMergeObjects(currentWorkerReport, incomingWorkerReport);
 
-    // ✅ NUEVO (OBRA): validar HH:MM sobre el reporte final ya fusionado
     const dh = (workerReport as any)?.detalleHoras || {};
     const iniObra = cleanStr((dh as any)?.inicioServicioObra);
     const finObra = cleanStr((dh as any)?.terminoServicioObra);
@@ -1281,10 +1915,6 @@ export class WorkOrdersService {
     return after;
   }
 
-  // =========================
-  // ✅ CALENDARIO (ADMIN)  ✅✅✅
-  // =========================
-
   private parseISODateOnly(s: any): string | null {
     const v = cleanStr(s);
     if (!v) return null;
@@ -1313,7 +1943,6 @@ export class WorkOrdersService {
     return out;
   }
 
-  // GET /work-orders/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD
   async listCalendar(actor?: any, range?: { from?: string; to?: string }) {
     if (!this.isOtAdminRole(actor)) throw new ForbiddenException("No autorizado.");
 
@@ -1362,7 +1991,6 @@ export class WorkOrdersService {
     return { from, to, items };
   }
 
-  // PATCH /work-orders/:id/schedule  body: { diasProgramados: ["YYYY-MM-DD", ...] }
   async updateSchedule(id: string, diasProgramadosRaw: any, actor?: any) {
     if (!id) throw new BadRequestException("Falta id");
     if (!this.isOtAdminRole(actor)) throw new ForbiddenException("No autorizado.");
@@ -1406,9 +2034,6 @@ export class WorkOrdersService {
     return after;
   }
 
-  // =========================
-  // ✅ PDF
-  // =========================
   async generatePdf(id: string, actor?: any): Promise<{ buffer: Buffer; filename: string }> {
     if (!id) throw new BadRequestException("Falta id");
 
@@ -1648,7 +2273,7 @@ export class WorkOrdersService {
         doc.font("Helvetica").fontSize(9).fillColor("#111");
         doc.text(r.hora, left + c1, cy + 4, { width: c2, align: "center" });
 
-        const kmText = r.showKm === false ? "—" : (r.km || "—");
+        const kmText = r.showKm === false ? "—" : r.km || "—";
         doc.text(kmText, left + c1 + c2, cy + 4, { width: c3, align: "center" });
 
         cy += rowH;
@@ -1703,7 +2328,7 @@ export class WorkOrdersService {
     y += 10;
 
     y = twoColRow(y, "Operador", operador, "Patente", equipo);
-    y = twoColRow(y, "Dereccion Faena", obraTramo, "Rigger Thomas", rigger);
+    y = twoColRow(y, "Obra/Tramo", obraTramo, "Rigger Thomas", rigger);
     y += 4;
 
     fullLine(y);
