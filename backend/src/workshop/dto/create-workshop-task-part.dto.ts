@@ -41,4 +41,16 @@ export class CreateWorkshopTaskPartDto {
   @IsString()
   @MaxLength(500)
   observacion?: string;
+
+  // ✅ NUEVO: foto en base64
+  @IsOptional()
+  @IsString()
+  @MaxLength(15_000_000)
+  fotoDataUrl?: string;
+
+  // ✅ NUEVO: nombre original archivo
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  fotoNombre?: string;
 }

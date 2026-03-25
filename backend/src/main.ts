@@ -2,11 +2,18 @@ import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
 import { NestExpressApplication } from "@nestjs/platform-express";
+import { json, urlencoded } from "express";
 import { join } from "path";
 import { existsSync, mkdirSync } from "fs";
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // ============================
+  // BODY LIMIT (FOTOS BASE64)
+  // ============================
+  app.use(json({ limit: "15mb" }));
+  app.use(urlencoded({ limit: "15mb", extended: true }));
 
   // ============================
   // VALIDACIÓN GLOBAL
@@ -38,7 +45,7 @@ async function bootstrap() {
   });
 
   // ============================
-  // Carpetas necesarias
+  // CARPETAS NECESARIAS
   // ============================
   const uploadsBase = join(process.cwd(), "uploads");
 
@@ -48,7 +55,7 @@ async function bootstrap() {
     "vehicle-maint",
     "work-orders",
     "branding",
-    "workshop-parts", // ✅ NUEVO
+    "workshop-parts",
   ];
 
   for (const folder of folders) {
@@ -59,7 +66,7 @@ async function bootstrap() {
   }
 
   // ============================
-  // Servir archivos estáticos
+  // SERVIR ARCHIVOS ESTÁTICOS
   // ============================
   app.useStaticAssets(uploadsBase, {
     prefix: "/uploads/",
