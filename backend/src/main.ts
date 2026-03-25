@@ -48,6 +48,7 @@ async function bootstrap() {
     "vehicle-maint",
     "work-orders",
     "branding",
+    "workshop-parts", // ✅ NUEVO
   ];
 
   for (const folder of folders) {

@@ -1,8 +1,12 @@
-// ✅ Archivo: src/pages/Admin.jsx (COMPLETO - RESPONSIVE PRO)
+// ✅ Archivo: src/pages/Admin.jsx (COMPLETO - RESPONSIVE PRO + PERMISOS AJUSTADOS)
 // ✅ Menú "Clientes" SOLO SUPERADMIN
 // ✅ Sidebar responsive (toggle, ESC, lock scroll, close on route change)
-// ✅ NUEVO: Menú "Incidentes / Taller" para SUPERADMIN + CONTROL_FLOTA + JEFE_TALLER
-// ✅ NUEVO: Menú "Repuestos / Solicitudes" SOLO SUPERADMIN + TRABAJADOR ADQUISICIONES
+// ✅ AJUSTE: CONTROL_FLOTA YA NO VE:
+//    - Órdenes de trabajo
+//    - Incidentes / Taller
+//    - Horas Extras
+// ✅ Menú "Repuestos / Solicitudes" SOLO SUPERADMIN + TRABAJADOR ADQUISICIONES
+// ✅ Menú "Horas Extras (PDF)" para ADMINISTRADORA + SUPERADMIN
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useNavigate, useLocation, Link } from "react-router-dom";
@@ -85,7 +89,10 @@ export default function Admin() {
 
   const canSeeDashboard = isSuperadmin;
   const canSeeCamiones = isSuperadmin || isControlFlota;
-  const canSeeWorkOrders = isSuperadmin || isControlFlota || isAdministradora;
+
+  // ✅ CONTROL_FLOTA YA NO VE ÓRDENES
+  const canSeeWorkOrders = isSuperadmin || isAdministradora;
+
   const canSeeTrabajadores = isSuperadmin;
   const canSeeAuditoria = isSuperadmin;
   const canSeeConfiguracion = isSuperadmin;
@@ -93,11 +100,17 @@ export default function Admin() {
   const canSeePapeleraOt = isSuperadmin;
   const canSeeClientes = isSuperadmin;
 
-  // ✅ JEFE_TALLER también ve este módulo
-  const canSeeIncidentes = isSuperadmin || isControlFlota || isJefeTaller;
+  // ✅ CONTROL_FLOTA YA NO VE INCIDENTES / TALLER
+  const canSeeIncidentes = isSuperadmin || isJefeTaller;
 
   // ✅ SOLO SUPERADMIN + ADQUISICIONES
   const canSeeRepuestos = isSuperadmin || isAdquisiciones;
+
+  // ✅ CONTROL_FLOTA YA NO VE HORAS EXTRAS
+  const canSeeExtraHours = isSuperadmin || role === "TRABAJADOR";
+
+  // ✅ Horas Extras PDF (administración)
+  const canSeeExtraHoursAdmin = isSuperadmin || isAdministradora;
 
   const isDashboard = path === "/admin";
 
@@ -111,6 +124,13 @@ export default function Admin() {
 
   const isIncidentes = path.startsWith("/admin/incidentes");
   const isRepuestos = path.startsWith("/admin/repuestos");
+
+  const isExtraHours =
+    path === "/admin/horas-extras" ||
+    (path.startsWith("/admin/horas-extras/") &&
+      !path.startsWith("/admin/horas-extras-admin"));
+
+  const isExtraHoursAdmin = path.startsWith("/admin/horas-extras-admin");
 
   const isTrabajadores = path.startsWith("/admin/trabajadores");
   const isAuditoria = path.startsWith("/admin/auditoria");
@@ -205,6 +225,8 @@ export default function Admin() {
 
     if (isIncidentes) return "Incidentes / Taller";
     if (isRepuestos) return "Repuestos / Solicitudes";
+    if (isExtraHoursAdmin) return "Horas Extras (Administración PDF)";
+    if (isExtraHours) return "Firmar Horas Extras";
 
     if (isClientes) return "Clientes";
     if (isTrabajadores) return "Trabajadores";
@@ -374,6 +396,36 @@ export default function Admin() {
             </button>
           ) : null}
 
+          {canSeeExtraHours ? (
+            <button
+              className={`sb-item ${isExtraHours ? "active" : ""}`}
+              type="button"
+              onClick={() => {
+                setSidebarOpen(false);
+                navigate("/admin/horas-extras");
+              }}
+              title="Horas extras de taller"
+            >
+              <span className="sb-ico" aria-hidden="true">⏱️</span>
+              <span>Firmar Horas Extras</span>
+            </button>
+          ) : null}
+
+          {canSeeExtraHoursAdmin ? (
+            <button
+              className={`sb-item ${isExtraHoursAdmin ? "active" : ""}`}
+              type="button"
+              onClick={() => {
+                setSidebarOpen(false);
+                navigate("/admin/horas-extras-admin");
+              }}
+              title="Administración PDF de horas extras"
+            >
+              <span className="sb-ico" aria-hidden="true">📄</span>
+              <span>Horas Extras (PDF)</span>
+            </button>
+          ) : null}
+
           {canSeeClientes ? (
             <button
               className={`sb-item ${isClientes ? "active" : ""}`}
@@ -516,7 +568,6 @@ export default function Admin() {
     </div>
   );
 }
-
 
 
 

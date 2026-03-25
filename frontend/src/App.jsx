@@ -22,11 +22,15 @@ import WorkOrdersTrabajador from "./pages/WorkOrdersTrabajador";
 import VehiclesDeleted from "./pages/VehiclesDeleted";
 import WorkOrdersDeleted from "./pages/WorkOrdersDeleted";
 
-// ✅ Pantalla de incidentes asignados de taller
+// ✅ Taller
 import WorkshopTasksWorker from "./pages/WorkshopTasksWorker";
-
-// ✅ Pantalla real de tareas de taller
 import WorkshopMyTasks from "./pages/WorkshopMyTasks";
+
+// ✅ Horas Extras (trabajador / jefe)
+import ExtraHours from "./pages/ExtraHours";
+
+// ✅ NUEVO: ADMINISTRADORA
+import AdminExtraHours from "./pages/AdminExtraHours";
 
 export default function App() {
   return (
@@ -162,6 +166,30 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+
+          {/* ================= HORAS EXTRAS ================= */}
+
+          {/* ✅ Crear / Firmar */}
+          <Route
+            path="horas-extras"
+            element={
+              <ProtectedRoute
+                role={["SUPERADMIN", "CONTROL_FLOTA", "TRABAJADOR"]}
+              >
+                <ExtraHours />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ✅ ADMINISTRADORA */}
+          <Route
+            path="horas-extras-admin"
+            element={
+              <ProtectedRoute role={["ADMINISTRADORA", "SUPERADMIN"]}>
+                <AdminExtraHours />
+              </ProtectedRoute>
+            }
+          />
         </Route>
 
         {/* ================= TRABAJADOR ================= */}
@@ -197,7 +225,7 @@ export default function App() {
           }
         />
 
-        {/* ✅ Pantalla de incidentes asignados */}
+        {/* Taller trabajador */}
         <Route
           path="/trabajador/tareas-taller"
           element={
@@ -207,12 +235,21 @@ export default function App() {
           }
         />
 
-        {/* ✅ Pantalla real de tareas de taller */}
         <Route
           path="/trabajador/mis-tareas-taller"
           element={
             <ProtectedRoute role={["TRABAJADOR"]}>
               <WorkshopMyTasks />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Horas extras trabajador */}
+        <Route
+          path="/trabajador/horas-extras"
+          element={
+            <ProtectedRoute role={["TRABAJADOR"]}>
+              <ExtraHours />
             </ProtectedRoute>
           }
         />
@@ -227,7 +264,6 @@ export default function App() {
     </BrowserRouter>
   );
 }
-
 
 
 

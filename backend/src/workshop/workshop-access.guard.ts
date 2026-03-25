@@ -30,6 +30,16 @@ function isWorkshopWorker(workerType: string) {
   ].includes(norm(workerType));
 }
 
+function isExtraHoursWorker(workerType: string) {
+  return [
+    'JEFE_TALLER',
+    'MECANICO',
+    'MECANICO_HIDRAULICO',
+    'AYUDANTE_DE_MECANICO',
+    'AYUDANTE_MECANICO',
+  ].includes(norm(workerType));
+}
+
 @Injectable()
 export class WorkshopAccessGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
@@ -66,26 +76,48 @@ export class WorkshopAccessGuard implements CanActivate {
     const isTasksRoute = originalUrl.includes('/workshop/tasks');
     const isPartsRoute = originalUrl.includes('/workshop/parts');
 
+    const isExtraHoursRoute = originalUrl.includes('/workshop/extra-hours');
+    const isExtraHoursMineRoute =
+      method === 'GET' &&
+      /\/workshop\/extra-hours\/mine(?:\?.*)?$/.test(originalUrl);
+
+    const isExtraHoursJefeRoute =
+      method === 'GET' &&
+      /\/workshop\/extra-hours\/jefe(?:\?.*)?$/.test(originalUrl);
+
+    const isExtraHoursAdminRoute =
+      method === 'GET' &&
+      /\/workshop\/extra-hours\/administracion(?:\?.*)?$/.test(originalUrl);
+
+    const isExtraHoursPdfRoute =
+      method === 'GET' &&
+      /\/workshop\/extra-hours\/pdf\/[^/]+(?:\?.*)?$/.test(originalUrl);
+
     const isRequestedPartsRoute =
       originalUrl.includes('/workshop/tasks/requested-parts');
 
     const isTaskStartRoute =
-      method === 'PATCH' && /\/workshop\/tasks\/[^/]+\/start(?:\?.*)?$/.test(originalUrl);
+      method === 'PATCH' &&
+      /\/workshop\/tasks\/[^/]+\/start(?:\?.*)?$/.test(originalUrl);
 
     const isTaskFinishRoute =
-      method === 'PATCH' && /\/workshop\/tasks\/[^/]+\/finish(?:\?.*)?$/.test(originalUrl);
+      method === 'PATCH' &&
+      /\/workshop\/tasks\/[^/]+\/finish(?:\?.*)?$/.test(originalUrl);
 
     const isTaskCloseRoute =
-      method === 'PATCH' && /\/workshop\/tasks\/[^/]+\/close(?:\?.*)?$/.test(originalUrl);
+      method === 'PATCH' &&
+      /\/workshop\/tasks\/[^/]+\/close(?:\?.*)?$/.test(originalUrl);
 
     const isTaskRequestPartRoute =
-      method === 'POST' && /\/workshop\/tasks\/request-part(?:\?.*)?$/.test(originalUrl);
+      method === 'POST' &&
+      /\/workshop\/tasks\/request-part(?:\?.*)?$/.test(originalUrl);
 
     const isBaseTasksPostRoute =
       method === 'POST' && /\/workshop\/tasks(?:\?.*)?$/.test(originalUrl);
 
     const isBaseTasksPatchRoute =
-      method === 'PATCH' && /\/workshop\/tasks\/[^/]+(?:\?.*)?$/.test(originalUrl);
+      method === 'PATCH' &&
+      /\/workshop\/tasks\/[^/]+(?:\?.*)?$/.test(originalUrl);
 
     const isAdquisiciones =
       role === 'TRABAJADOR' && workerType === 'ADQUISICIONES';
@@ -93,11 +125,87 @@ export class WorkshopAccessGuard implements CanActivate {
     const isJefeTaller =
       role === 'TRABAJADOR' && workerType === 'JEFE_TALLER';
 
+    const isControlFlota = role === 'CONTROL_FLOTA';
+    const isAdministradora = role === 'ADMINISTRADORA';
+
     const adquisicionesAllowedStatuses = [
       'EN_COMPRA',
       'COMPRADO',
       'ENTREGADO',
     ];
+
+    // ============================
+    // HORAS EXTRAS
+    // ============================
+
+    // GET /workshop/extra-hours/mine
+    // MECANICO + AYUDANTE_DE_MECANICO + JEFE_TALLER
+    if (isExtraHoursMineRoute) {
+      if (role === 'TRABAJADOR' && isExtraHoursWorker(workerType)) {
+        return true;
+      }
+
+      if (isControlFlota) {
+        return true;
+      }
+
+      throw new ForbiddenException(
+        'No tienes permisos para visualizar tus horas extras',
+      );
+    }
+
+    // GET /workshop/extra-hours/jefe
+    // JEFE_TALLER + CONTROL_FLOTA
+    if (isExtraHoursJefeRoute) {
+      if (isJefeTaller || isControlFlota) {
+        return true;
+      }
+
+      throw new ForbiddenException(
+        'No tienes permisos para visualizar horas extras del taller',
+      );
+    }
+
+    // GET /workshop/extra-hours/administracion
+    // ADMINISTRADORA
+    if (isExtraHoursAdminRoute) {
+      if (isAdministradora) {
+        return true;
+      }
+
+      throw new ForbiddenException(
+        'No tienes permisos para visualizar horas extras firmadas',
+      );
+    }
+
+    // GET /workshop/extra-hours/pdf/:workerId
+    // ADMINISTRADORA
+    if (isExtraHoursPdfRoute) {
+      if (isAdministradora) {
+        return true;
+      }
+
+      throw new ForbiddenException(
+        'No tienes permisos para descargar el PDF de horas extras',
+      );
+    }
+
+    // Resto de /workshop/extra-hours
+    // GET / POST / PATCH / DELETE
+    // JEFE_TALLER + CONTROL_FLOTA + trabajadores de taller
+    if (isExtraHoursRoute) {
+      if (isControlFlota) return true;
+
+      if (isJefeTaller) return true;
+
+      if (role === 'TRABAJADOR' && isExtraHoursWorker(workerType)) {
+        return true;
+      }
+
+      throw new ForbiddenException(
+        'No tienes permisos para acceder a horas extras',
+      );
+    }
 
     // ============================
     // CREAR INCIDENTE

@@ -14,8 +14,10 @@
 // - Tareas terminadas/canceladas quedan como historial
 // - Se ocultan acciones operativas cuando ya están cerradas
 // - PERO se mantiene visible el botón Eliminar incluso en historial
+// - Botón volver al portal
 
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import "./Admin.css";
 import "./Incidents.css";
 import IncidentModal from "./IncidentModal";
@@ -245,6 +247,8 @@ function statusTone(status) {
 }
 
 export default function Incidents() {
+  const navigate = useNavigate();
+
   const [items, setItems] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -302,6 +306,10 @@ export default function Incidents() {
     role === "SUPERADMIN" ||
     role === "CONTROL_FLOTA" ||
     isJefeTaller;
+
+  function goBackToPortal() {
+    navigate("/trabajador");
+  }
 
   function authHeaders(extra = {}) {
     return {
@@ -591,6 +599,16 @@ export default function Incidents() {
   return (
     <div className="page-shell">
       <div className="page-card inc-page-card">
+        <div className="eh-nav-row">
+          <button
+            type="button"
+            onClick={goBackToPortal}
+            className="eh-nav-btn eh-nav-btn--back"
+          >
+            ← Volver al portal
+          </button>
+        </div>
+
         <div className="inc-header">
           <div className="inc-header__intro">
             <h1 className="inc-page-title">Incidentes / Taller</h1>

@@ -1,4 +1,4 @@
-// ✅ Archivo: src/workshop/workshop.controller.ts
+// ✅ Archivo: src/workshop/workshop.controller.ts (COMPLETO + EXCEL GLOBAL)
 
 import {
   Body,
@@ -9,6 +9,7 @@ import {
   Patch,
   Post,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -24,6 +25,120 @@ import { WorkshopAccessGuard } from './workshop-access.guard';
 @UseGuards(JwtAuthGuard, WorkshopAccessGuard)
 export class WorkshopController {
   constructor(private readonly workshopService: WorkshopService) {}
+
+  // ============================
+  // HORAS EXTRAS
+  // ============================
+
+  @Post('extra-hours')
+  createExtraHourReport(@Body() dto: any, @Req() req: any) {
+    const userId = req?.user?.id || req?.user?.sub;
+    return this.workshopService.createExtraHourReport(userId, dto);
+  }
+
+  @Get('extra-hours/mine')
+  getMyExtraHourReports(@Req() req: any) {
+    const userId = req?.user?.id || req?.user?.sub;
+    return this.workshopService.getMyExtraHourReports(userId);
+  }
+
+  @Get('extra-hours/jefe')
+  getExtraHourReportsForJefe(@Req() req: any) {
+    const userId = req?.user?.id || req?.user?.sub;
+    return this.workshopService.getExtraHourReportsForJefe(userId);
+  }
+
+  // 🔥 IMPORTANTE: ahora soporta query params from/to
+  @Get('extra-hours/administracion')
+  getExtraHoursForAdmin(@Req() req: any) {
+    const userId = req?.user?.id || req?.user?.sub;
+
+    const from =
+      typeof req?.query?.from === 'string' ? req.query.from.trim() : undefined;
+    const to =
+      typeof req?.query?.to === 'string' ? req.query.to.trim() : undefined;
+
+    return this.workshopService.getExtraHoursForAdmin(userId, from, to);
+  }
+
+  // ============================
+  // ✅ PDF POR TRABAJADOR
+  // ============================
+
+  @Get('extra-hours/pdf/:workerId')
+  generatePdf(
+    @Param('workerId') workerId: string,
+    @Req() req: any,
+    @Res() res: any,
+  ) {
+    const userId = req?.user?.id || req?.user?.sub;
+
+    const from =
+      typeof req?.query?.from === 'string' ? req.query.from.trim() : undefined;
+    const to =
+      typeof req?.query?.to === 'string' ? req.query.to.trim() : undefined;
+
+    return this.workshopService.generateExtraHoursPdfForWorker(
+      userId,
+      workerId,
+      res,
+      from,
+      to,
+    );
+  }
+
+  // ============================
+  // 🆕 EXCEL GLOBAL
+  // ============================
+
+  @Get('extra-hours/excel')
+  generateExcel(@Req() req: any, @Res() res: any) {
+    const userId = req?.user?.id || req?.user?.sub;
+
+    const from =
+      typeof req?.query?.from === 'string' ? req.query.from.trim() : undefined;
+    const to =
+      typeof req?.query?.to === 'string' ? req.query.to.trim() : undefined;
+
+    return this.workshopService.generateExtraHoursExcel(
+      userId,
+      res,
+      from,
+      to,
+    );
+  }
+
+  @Get('extra-hours/:id')
+  getExtraHourReportById(@Param('id') id: string, @Req() req: any) {
+    const userId = req?.user?.id || req?.user?.sub;
+    return this.workshopService.getExtraHourReportById(id, userId);
+  }
+
+  @Patch('extra-hours/:id/sign')
+  signExtraHourReport(@Param('id') id: string, @Body() dto: any, @Req() req: any) {
+    const userId = req?.user?.id || req?.user?.sub;
+
+    return this.workshopService.signExtraHourReport(
+      id,
+      userId,
+      dto?.firmaDataUrl,
+    );
+  }
+
+  @Patch('extra-hours/:id/reject')
+  rejectExtraHourReport(
+    @Param('id') id: string,
+    @Body() dto: any,
+    @Req() req: any,
+  ) {
+    const userId = req?.user?.id || req?.user?.sub;
+
+    return this.workshopService.rejectExtraHourReport(
+      id,
+      userId,
+      dto?.observacionRechazo,
+    );
+  }
 
   // ============================
   // INCIDENTES
@@ -55,16 +170,7 @@ export class WorkshopController {
   }
 
   @Patch('incidents/:id/assign')
-  assignIncident(
-    @Param('id') id: string,
-    @Body()
-    dto: {
-      workerId: string;
-      helperIds?: string[];
-      note?: string;
-      status?: string;
-    },
-  ) {
+  assignIncident(@Param('id') id: string, @Body() dto: any) {
     return this.workshopService.assignIncident(id, dto);
   }
 
@@ -74,7 +180,7 @@ export class WorkshopController {
   }
 
   // ============================
-  // TAREAS DE TALLER
+  // TAREAS
   // ============================
 
   @Post('tasks')
@@ -116,8 +222,7 @@ export class WorkshopController {
   }
 
   // ============================
-  // ACCIONES DE TRABAJADOR
-  // SOLO RESPONSABLE
+  // TRABAJADOR
   // ============================
 
   @Patch('tasks/:id/start')

@@ -8,6 +8,12 @@
 // - WorkerType incluye ADQUISICIONES
 // - WorkshopTaskStatus incluye EN_COMPRA, COMPRADO, ENTREGADO
 // ✅ pensado para funcionar en local y producción
+//
+// ✅ NUEVO AHORA:
+// - WorkshopExtraHourStatus
+// - WorkshopExtraHourReport
+// - relación en User para reportes de horas extras creados
+// - relación en User para reportes firmados por JEFE_TALLER
 
 datasource db {
   provider = "postgresql"
@@ -164,6 +170,17 @@ enum WorkshopTaskAssignmentRole {
   APOYO
 }
 
+// =========================
+// ✅ HORAS EXTRAS TALLER
+// =========================
+
+enum WorkshopExtraHourStatus {
+  BORRADOR
+  ENVIADO
+  FIRMADO
+  RECHAZADO
+}
+
 model User {
   id       String  @id @default(uuid())
   email    String  @unique
@@ -200,6 +217,9 @@ model User {
   workshopTasksAssigned   WorkshopTask[]            @relation("WorkshopTaskAssignedTo")
   workshopTasksClosed     WorkshopTask[]            @relation("WorkshopTaskClosedBy")
   workshopTaskAssignments WorkshopTaskAssignment[]
+
+  extraHourReports       WorkshopExtraHourReport[] @relation("WorkshopExtraHourTrabajador")
+  signedExtraHourReports WorkshopExtraHourReport[] @relation("WorkshopExtraHourSignedBy")
 
   @@index([empresa])
   @@index([workerType])
@@ -765,4 +785,52 @@ model WorkshopTaskPart {
 
   @@index([workshopTaskId])
   @@index([nombre])
+}
+
+// =========================
+// HORAS EXTRAS TALLER
+// =========================
+
+model WorkshopExtraHourReport {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  empresa Empresa
+
+  trabajadorId String
+  trabajador   User @relation("WorkshopExtraHourTrabajador", fields: [trabajadorId], references: [id], onDelete: Cascade)
+
+  trabajadorNombre   String
+  trabajadorApellido String
+  trabajadorRut      String?
+  trabajadorEmail    String
+  workerType         WorkerType
+
+  fecha DateTime
+
+  descripcionTrabajo String
+
+  horaEntrada String
+  horaSalida  String
+
+  totalHoras Float
+
+  estado WorkshopExtraHourStatus @default(ENVIADO)
+
+  firmadoPorId String?
+  firmadoPor   User? @relation("WorkshopExtraHourSignedBy", fields: [firmadoPorId], references: [id], onDelete: SetNull)
+
+  firmadoAt DateTime?
+
+  firmaDataUrl String? @db.Text
+
+  observacionRechazo String?
+
+  @@index([empresa])
+  @@index([trabajadorId])
+  @@index([workerType])
+  @@index([fecha])
+  @@index([estado])
+  @@index([firmadoPorId])
 }

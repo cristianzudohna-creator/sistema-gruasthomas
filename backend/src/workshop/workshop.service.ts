@@ -1,4 +1,4 @@
-// ✅ Archivo: src/workshop/workshop.service.ts
+// ✅ Archivo: src/workshop/workshop.service.ts (COMPLETO + FOTO EN SOLICITUD DE REPUESTO + EXCEL GLOBAL)
 
 import {
   Injectable,
@@ -11,12 +11,21 @@ import {
   VehicleIncidentStatus,
   WorkshopTaskStatus,
   WorkshopTaskAssignmentRole,
+  WorkshopExtraHourStatus,
+  WorkerType,
+  Empresa,
+  Role,
 } from '@prisma/client';
 import { CreateIncidentDto } from './dto/create-incident.dto';
 import { UpdateIncidentDto } from './dto/update-incident.dto';
 import { CreateWorkshopTaskDto } from './dto/create-workshop-task.dto';
 import { UpdateWorkshopTaskDto } from './dto/update-workshop-task.dto';
 import { CreateWorkshopTaskPartDto } from './dto/create-workshop-task-part.dto';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as ExcelJS from 'exceljs';
+
+const PDFDocument = require('pdfkit');
 
 function normalizePlate(input: string) {
   return String(input || '')
@@ -140,6 +149,1110 @@ export class WorkshopService {
     }
 
     return assignment;
+  }
+
+  private isHHMM(value: any) {
+    const s = String(value || '').trim();
+    return /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
+  }
+
+  private calcExtraHours(horaEntrada: string, horaSalida: string) {
+    if (!this.isHHMM(horaEntrada)) {
+      throw new BadRequestException(
+        'Hora entrada inválida. Formato requerido: HH:MM',
+      );
+    }
+
+    if (!this.isHHMM(horaSalida)) {
+      throw new BadRequestException(
+        'Hora salida inválida. Formato requerido: HH:MM',
+      );
+    }
+
+    const [h1, m1] = horaEntrada.split(':').map(Number);
+    const [h2, m2] = horaSalida.split(':').map(Number);
+
+    const startMinutes = h1 * 60 + m1;
+    const endMinutes = h2 * 60 + m2;
+
+    if (endMinutes <= startMinutes) {
+      throw new BadRequestException(
+        'La hora salida debe ser mayor que la hora entrada',
+      );
+    }
+
+    const diffMinutes = endMinutes - startMinutes;
+    return Math.round((diffMinutes / 60) * 100) / 100;
+  }
+
+  private parseExtraHourDate(fecha: any) {
+    const raw = String(fecha || '').trim();
+    if (!raw) {
+      throw new BadRequestException('La fecha es obligatoria');
+    }
+
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) {
+      throw new BadRequestException('Fecha inválida');
+    }
+
+    return d;
+  }
+
+  private formatDateOnly(value: Date | string | null | undefined) {
+    if (!value) return '—';
+
+    const d = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(d.getTime())) return '—';
+
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+
+    return `${dd}-${mm}-${yyyy}`;
+  }
+
+  private safeText(value: any) {
+    return String(value || '').trim();
+  }
+
+  private getFullName(user: any) {
+    const full = [user?.nombre, user?.apellido].filter(Boolean).join(' ').trim();
+    return full || user?.email || '—';
+  }
+
+  private parseImageDataUrl(dataUrl?: string | null): Buffer | null {
+    const raw = String(dataUrl || '').trim();
+    if (!raw) return null;
+
+    const match = raw.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/);
+    if (!match) return null;
+
+    try {
+      return Buffer.from(match[1], 'base64');
+    } catch {
+      return null;
+    }
+  }
+
+  private drawCellTextCentered(
+    doc: any,
+    text: string,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    options?: {
+      font?: string;
+      fontSize?: number;
+      color?: string;
+      align?: 'left' | 'center' | 'right';
+      paddingX?: number;
+    },
+  ) {
+    const content = String(text || '').trim() || ' ';
+    const font = options?.font || 'Helvetica';
+    const fontSize = options?.fontSize ?? 8;
+    const color = options?.color || '#000000';
+    const align = options?.align || 'center';
+    const paddingX = options?.paddingX ?? 4;
+
+    doc.font(font).fontSize(fontSize).fillColor(color);
+
+    const textHeight = doc.heightOfString(content, {
+      width: w - paddingX * 2,
+      align,
+      lineGap: 0,
+    });
+
+    const textY = y + Math.max(0, (h - textHeight) / 2);
+
+    doc.text(content, x + paddingX, textY, {
+      width: w - paddingX * 2,
+      align,
+      lineGap: 0,
+    });
+  }
+
+  private drawExtraHoursPdfHeader(doc: any) {
+    const blue = '#2d8fbd';
+
+    doc
+      .save()
+      .fillColor('#ffffff')
+      .rect(24, 24, 547, 770)
+      .fill()
+      .restore();
+
+    doc
+      .save()
+      .fillColor(blue)
+      .rect(24, 24, 547, 34)
+      .fill()
+      .restore();
+
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(10.8)
+      .fillColor('#ffffff')
+      .text(
+        'AUTORIZACION DE TRABAJOS HORAS EXTRAS, SABADOS, DOMINGOS Y FESTIVOS',
+        32,
+        35,
+        {
+          width: 531,
+          align: 'center',
+          lineGap: 0,
+        },
+      );
+
+    const y = 64;
+    const cols = this.getPdfColumns();
+    const headerHeight = 30;
+
+    cols.forEach((col) => {
+      doc.lineWidth(0.7).rect(col.x, y, col.w, headerHeight).stroke('#000000');
+      this.drawCellTextCentered(doc, col.label, col.x, y, col.w, headerHeight, {
+        font: 'Helvetica-Bold',
+        fontSize: 7.2,
+        color: '#111111',
+        align: 'center',
+        paddingX: 3,
+      });
+    });
+
+    return y + headerHeight;
+  }
+
+  private getPdfColumns() {
+    return [
+      { key: 'trabajador', label: 'TRABAJADOR', x: 24, w: 132 },
+      { key: 'fecha', label: 'FECHA', x: 156, w: 82 },
+      {
+        key: 'descripcion',
+        label: 'DESCRIPCION DEL TRABAJO',
+        x: 238,
+        w: 176,
+      },
+      { key: 'entrada', label: 'HORA\nENTRADA', x: 414, w: 54 },
+      { key: 'salida', label: 'HORA DE\nSALIDA', x: 468, w: 54 },
+      { key: 'firma', label: 'FIRMA JEFE\nDE TALLER', x: 522, w: 49 },
+    ];
+  }
+
+  private ensurePdfPageSpace(doc: any, y: number, rowHeight: number) {
+    if (y + rowHeight <= 780) {
+      return y;
+    }
+
+    doc.addPage();
+    return this.drawExtraHoursPdfHeader(doc);
+  }
+
+  private drawPdfRow(doc: any, y: number, report: any) {
+    const cols = this.getPdfColumns();
+
+    const trabajador = this.getFullName(report?.trabajador);
+    const fecha = this.formatDateOnly(report?.fecha);
+    const descripcion = this.safeText(report?.descripcionTrabajo) || ' ';
+    const horaEntrada = this.safeText(report?.horaEntrada) || ' ';
+    const horaSalida = this.safeText(report?.horaSalida) || ' ';
+    const signatureBuffer = this.parseImageDataUrl(report?.firmaDataUrl);
+
+    const rowHeight = 40;
+
+    doc
+      .save()
+      .fillColor('#ffffff')
+      .rect(24, y, 547, rowHeight)
+      .fill()
+      .restore();
+
+    cols.forEach((col) => {
+      doc.lineWidth(0.5).rect(col.x, y, col.w, rowHeight).stroke('#000000');
+    });
+
+    this.drawCellTextCentered(
+      doc,
+      trabajador === '—' ? '—' : trabajador,
+      cols[0].x,
+      y,
+      cols[0].w,
+      rowHeight,
+      {
+        font: 'Helvetica',
+        fontSize: 8,
+        color: '#000000',
+        align: 'left',
+        paddingX: 6,
+      },
+    );
+
+    this.drawCellTextCentered(
+      doc,
+      fecha === '—' ? '—' : fecha,
+      cols[1].x,
+      y,
+      cols[1].w,
+      rowHeight,
+      {
+        font: 'Helvetica',
+        fontSize: 8,
+        color: '#000000',
+        align: 'center',
+        paddingX: 4,
+      },
+    );
+
+    this.drawCellTextCentered(
+      doc,
+      descripcion,
+      cols[2].x,
+      y,
+      cols[2].w,
+      rowHeight,
+      {
+        font: 'Helvetica',
+        fontSize: 8,
+        color: '#000000',
+        align: 'left',
+        paddingX: 6,
+      },
+    );
+
+    this.drawCellTextCentered(
+      doc,
+      horaEntrada,
+      cols[3].x,
+      y,
+      cols[3].w,
+      rowHeight,
+      {
+        font: 'Helvetica',
+        fontSize: 8,
+        color: '#000000',
+        align: 'center',
+        paddingX: 2,
+      },
+    );
+
+    this.drawCellTextCentered(
+      doc,
+      horaSalida,
+      cols[4].x,
+      y,
+      cols[4].w,
+      rowHeight,
+      {
+        font: 'Helvetica',
+        fontSize: 8,
+        color: '#000000',
+        align: 'center',
+        paddingX: 2,
+      },
+    );
+
+    if (signatureBuffer) {
+      try {
+        doc.image(signatureBuffer, cols[5].x + 4, y + 6, {
+          fit: [cols[5].w - 8, rowHeight - 12],
+          align: 'center',
+          valign: 'center',
+        });
+      } catch {
+        const firmadoPor = this.getFullName(report?.firmadoPor);
+        if (firmadoPor && firmadoPor !== '—') {
+          this.drawCellTextCentered(
+            doc,
+            firmadoPor,
+            cols[5].x,
+            y,
+            cols[5].w,
+            rowHeight,
+            {
+              font: 'Helvetica',
+              fontSize: 7,
+              color: '#000000',
+              align: 'center',
+              paddingX: 3,
+            },
+          );
+        }
+      }
+    } else {
+      const firmadoPor = this.getFullName(report?.firmadoPor);
+      if (firmadoPor && firmadoPor !== '—') {
+        this.drawCellTextCentered(
+          doc,
+          firmadoPor,
+          cols[5].x,
+          y,
+          cols[5].w,
+          rowHeight,
+          {
+            font: 'Helvetica',
+            fontSize: 7,
+            color: '#000000',
+            align: 'center',
+            paddingX: 3,
+          },
+        );
+      }
+    }
+
+    return y + rowHeight;
+  }
+
+  private async getUserForExtraHours(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        activo: true,
+        empresa: true,
+        email: true,
+        nombre: true,
+        apellido: true,
+        rut: true,
+        role: true,
+        workerType: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    if (!user.activo) {
+      throw new BadRequestException('El usuario está inactivo');
+    }
+
+    if (user.role === 'SUPERADMIN') {
+      return user;
+    }
+
+    if (user.role !== 'TRABAJADOR') {
+      throw new BadRequestException(
+        'Solo trabajadores o superadmin pueden usar este módulo',
+      );
+    }
+
+    return user;
+  }
+
+  private async ensureExtraHourReportExists(id: string) {
+    const report = await this.prisma.workshopExtraHourReport.findUnique({
+      where: { id },
+      include: {
+        trabajador: {
+          select: {
+            id: true,
+            nombre: true,
+            apellido: true,
+            email: true,
+            workerType: true,
+            empresa: true,
+            rut: true,
+          },
+        },
+        firmadoPor: {
+          select: {
+            id: true,
+            nombre: true,
+            apellido: true,
+            email: true,
+            workerType: true,
+            role: true,
+            empresa: true,
+          },
+        },
+      },
+    });
+
+    if (!report) {
+      throw new NotFoundException('Reporte de horas extras no encontrado');
+    }
+
+    return report;
+  }
+
+  private async ensureJefeTaller(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        activo: true,
+        empresa: true,
+        workerType: true,
+        role: true,
+        nombre: true,
+        apellido: true,
+        email: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    if (!user.activo) {
+      throw new BadRequestException('Usuario inactivo');
+    }
+
+    if (user.role === 'SUPERADMIN') {
+      return user;
+    }
+
+    if (
+      user.role === 'TRABAJADOR' &&
+      user.workerType === WorkerType.JEFE_TALLER
+    ) {
+      return user;
+    }
+
+    throw new BadRequestException(
+      'Solo jefe de taller o superadmin pueden firmar/revisar reportes',
+    );
+  }
+
+  private async ensureExtraHoursAdminAccess(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        activo: true,
+        empresa: true,
+        role: true,
+        workerType: true,
+        nombre: true,
+        apellido: true,
+        email: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    if (!user.activo) {
+      throw new BadRequestException('Usuario inactivo');
+    }
+
+    if (
+      user.role === Role.SUPERADMIN ||
+      user.role === Role.ADMINISTRADORA
+    ) {
+      return user;
+    }
+
+    throw new BadRequestException(
+      'Solo superadmin o administradora pueden acceder a esta vista',
+    );
+  }
+
+  // ============================
+  // HORAS EXTRAS TALLER
+  // ============================
+
+  async createExtraHourReport(
+    userId: string,
+    dto: {
+      fecha: string;
+      descripcionTrabajo: string;
+      horaEntrada: string;
+      horaSalida: string;
+    },
+  ) {
+    const user = await this.getUserForExtraHours(userId);
+
+    const allowedWorkerTypes: WorkerType[] = [
+      WorkerType.MECANICO,
+      WorkerType.AYUDANTE_DE_MECANICO,
+      WorkerType.JEFE_TALLER,
+    ];
+
+    if (user.role !== 'SUPERADMIN') {
+      if (!user.workerType || !allowedWorkerTypes.includes(user.workerType)) {
+        throw new BadRequestException(
+          'Solo mecánico, ayudante de mecánico o jefe de taller pueden crear reportes de horas extras',
+        );
+      }
+
+      if (!user.empresa) {
+        throw new BadRequestException(
+          'El trabajador no tiene empresa asignada',
+        );
+      }
+    }
+
+    const descripcionTrabajo = String(dto?.descripcionTrabajo || '').trim();
+    if (!descripcionTrabajo) {
+      throw new BadRequestException(
+        'La descripción del trabajo es obligatoria',
+      );
+    }
+
+    const fecha = this.parseExtraHourDate(dto?.fecha);
+    const horaEntrada = String(dto?.horaEntrada || '').trim();
+    const horaSalida = String(dto?.horaSalida || '').trim();
+    const totalHoras = this.calcExtraHours(horaEntrada, horaSalida);
+
+    return this.prisma.workshopExtraHourReport.create({
+      data: {
+        empresa: (user.empresa ?? Empresa.GRUAS_THOMAS) as Empresa,
+        trabajador: {
+          connect: { id: user.id },
+        },
+        trabajadorNombre: user.nombre,
+        trabajadorApellido: user.apellido,
+        trabajadorRut: user.rut,
+        trabajadorEmail: user.email,
+        workerType:
+          (user.workerType ??
+            (user.role === 'SUPERADMIN'
+              ? WorkerType.JEFE_TALLER
+              : undefined)) as WorkerType,
+        fecha,
+        descripcionTrabajo,
+        horaEntrada,
+        horaSalida,
+        totalHoras,
+        estado: WorkshopExtraHourStatus.ENVIADO,
+      },
+      include: {
+        trabajador: true,
+        firmadoPor: true,
+      },
+    });
+  }
+
+  async getMyExtraHourReports(userId: string) {
+    const user = await this.getUserForExtraHours(userId);
+
+    return this.prisma.workshopExtraHourReport.findMany({
+      where:
+        user.role === 'SUPERADMIN'
+          ? {}
+          : {
+              trabajadorId: userId,
+            },
+      include: {
+        trabajador: true,
+        firmadoPor: true,
+      },
+      orderBy: [{ fecha: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  async getExtraHourReportById(id: string, userId: string) {
+    const report = await this.ensureExtraHourReportExists(id);
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        activo: true,
+        role: true,
+        workerType: true,
+        empresa: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    if (!user.activo) {
+      throw new BadRequestException('Usuario inactivo');
+    }
+
+    if (user.role === 'SUPERADMIN') {
+      return report;
+    }
+
+    if (
+      user.role === 'TRABAJADOR' &&
+      user.workerType === WorkerType.JEFE_TALLER
+    ) {
+      if (user.empresa && report.empresa && user.empresa !== report.empresa) {
+        throw new BadRequestException(
+          'No puedes ver reportes de otra empresa',
+        );
+      }
+
+      return report;
+    }
+
+    if (report.trabajadorId !== user.id) {
+      throw new BadRequestException(
+        'No tienes permisos para ver este reporte',
+      );
+    }
+
+    return report;
+  }
+
+  async getExtraHourReportsForJefe(jefeId: string) {
+    const jefe = await this.ensureJefeTaller(jefeId);
+
+    if (jefe.role === 'SUPERADMIN') {
+      return this.prisma.workshopExtraHourReport.findMany({
+        include: {
+          trabajador: true,
+          firmadoPor: true,
+        },
+        orderBy: [{ estado: 'asc' }, { fecha: 'desc' }, { createdAt: 'desc' }],
+      });
+    }
+
+    if (!jefe.empresa) {
+      throw new BadRequestException(
+        'El jefe de taller no tiene empresa asignada',
+      );
+    }
+
+    return this.prisma.workshopExtraHourReport.findMany({
+      where: {
+        empresa: jefe.empresa,
+      },
+      include: {
+        trabajador: true,
+        firmadoPor: true,
+      },
+      orderBy: [{ estado: 'asc' }, { fecha: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  async getExtraHoursForAdmin(userId: string, from?: string, to?: string) {
+    const admin = await this.ensureExtraHoursAdminAccess(userId);
+
+    let fromDate: Date | undefined;
+    let toDate: Date | undefined;
+
+    if (from) {
+      const d = new Date(from);
+      if (!Number.isNaN(d.getTime())) {
+        d.setHours(0, 0, 0, 0);
+        fromDate = d;
+      }
+    }
+
+    if (to) {
+      const d = new Date(to);
+      if (!Number.isNaN(d.getTime())) {
+        d.setHours(23, 59, 59, 999);
+        toDate = d;
+      }
+    }
+
+    const where: Prisma.WorkshopExtraHourReportWhereInput = {
+      estado: WorkshopExtraHourStatus.FIRMADO,
+      ...(admin.role === Role.ADMINISTRADORA && admin.empresa
+        ? { empresa: admin.empresa }
+        : {}),
+      ...(fromDate || toDate
+        ? {
+            fecha: {
+              ...(fromDate ? { gte: fromDate } : {}),
+              ...(toDate ? { lte: toDate } : {}),
+            },
+          }
+        : {}),
+    };
+
+    return this.prisma.workshopExtraHourReport.findMany({
+      where,
+      include: {
+        trabajador: true,
+        firmadoPor: true,
+      },
+      orderBy: [
+        { trabajadorNombre: 'asc' },
+        { fecha: 'asc' },
+        { createdAt: 'asc' },
+      ],
+    });
+  }
+
+  async generateExtraHoursPdfForWorker(
+    requesterUserId: string,
+    workerId: string,
+    res: any,
+    from?: string,
+    to?: string,
+  ) {
+    const admin = await this.ensureExtraHoursAdminAccess(requesterUserId);
+
+    const worker = await this.prisma.user.findUnique({
+      where: { id: workerId },
+      select: {
+        id: true,
+        nombre: true,
+        apellido: true,
+        email: true,
+        rut: true,
+        empresa: true,
+        workerType: true,
+        activo: true,
+      },
+    });
+
+    if (!worker) {
+      throw new NotFoundException('Trabajador no encontrado');
+    }
+
+    if (!worker.activo) {
+      throw new BadRequestException('El trabajador está inactivo');
+    }
+
+    if (
+      admin.role === Role.ADMINISTRADORA &&
+      admin.empresa &&
+      worker.empresa &&
+      admin.empresa !== worker.empresa
+    ) {
+      throw new BadRequestException(
+        'No puedes generar PDF de trabajadores de otra empresa',
+      );
+    }
+
+    let fromDate: Date | undefined;
+    let toDate: Date | undefined;
+
+    if (from) {
+      const d = new Date(from);
+      if (!Number.isNaN(d.getTime())) {
+        d.setHours(0, 0, 0, 0);
+        fromDate = d;
+      }
+    }
+
+    if (to) {
+      const d = new Date(to);
+      if (!Number.isNaN(d.getTime())) {
+        d.setHours(23, 59, 59, 999);
+        toDate = d;
+      }
+    }
+
+    const where: Prisma.WorkshopExtraHourReportWhereInput = {
+      trabajadorId: workerId,
+      estado: WorkshopExtraHourStatus.FIRMADO,
+      ...(admin.role === Role.ADMINISTRADORA && admin.empresa
+        ? { empresa: admin.empresa }
+        : {}),
+      ...(fromDate || toDate
+        ? {
+            fecha: {
+              ...(fromDate ? { gte: fromDate } : {}),
+              ...(toDate ? { lte: toDate } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const reports = await this.prisma.workshopExtraHourReport.findMany({
+      where,
+      include: {
+        trabajador: true,
+        firmadoPor: true,
+      },
+      orderBy: [{ fecha: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    if (!reports.length) {
+      throw new BadRequestException(
+        'No hay horas extras firmadas en este rango',
+      );
+    }
+
+    const safeName = this
+      .getFullName(worker)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/gi, '_')
+      .replace(/^_+|_+$/g, '');
+
+    const formatFileDate = (val?: string) => {
+      if (!val) return '';
+      const [y, m, d] = String(val).split('-');
+      if (!y || !m || !d) return val;
+      return `${d}-${m}-${y}`;
+    };
+
+    const fromLabel = formatFileDate(from);
+    const toLabel = formatFileDate(to);
+
+    const fileName =
+      from && to
+        ? `horas_extras_${safeName}_${fromLabel}_al_${toLabel}.pdf`
+        : `horas_extras_${safeName}.pdf`;
+
+    const doc = new PDFDocument({
+      size: 'A4',
+      margin: 24,
+      layout: 'portrait',
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
+
+    doc.pipe(res);
+
+    let y = this.drawExtraHoursPdfHeader(doc);
+
+    for (const report of reports) {
+      const rowHeight = 40;
+      y = this.ensurePdfPageSpace(doc, y, rowHeight);
+      y = this.drawPdfRow(doc, y, report);
+    }
+
+    const minRowsPerSheet = 15;
+    if (reports.length < minRowsPerSheet) {
+      for (let i = reports.length; i < minRowsPerSheet; i++) {
+        const rowHeight = 40;
+        y = this.ensurePdfPageSpace(doc, y, rowHeight);
+        y = this.drawPdfRow(doc, y, {});
+      }
+    }
+
+    doc.end();
+  }
+
+  async generateExtraHoursExcel(
+    requesterUserId: string,
+    res: any,
+    from?: string,
+    to?: string,
+  ) {
+    const admin = await this.ensureExtraHoursAdminAccess(requesterUserId);
+
+    let fromDate: Date | undefined;
+    let toDate: Date | undefined;
+
+    if (from) {
+      const d = new Date(from);
+      if (!Number.isNaN(d.getTime())) {
+        d.setHours(0, 0, 0, 0);
+        fromDate = d;
+      }
+    }
+
+    if (to) {
+      const d = new Date(to);
+      if (!Number.isNaN(d.getTime())) {
+        d.setHours(23, 59, 59, 999);
+        toDate = d;
+      }
+    }
+
+    const where: Prisma.WorkshopExtraHourReportWhereInput = {
+      estado: WorkshopExtraHourStatus.FIRMADO,
+      ...(admin.role === Role.ADMINISTRADORA && admin.empresa
+        ? { empresa: admin.empresa }
+        : {}),
+      ...(fromDate || toDate
+        ? {
+            fecha: {
+              ...(fromDate ? { gte: fromDate } : {}),
+              ...(toDate ? { lte: toDate } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const reports = await this.prisma.workshopExtraHourReport.findMany({
+      where,
+      include: {
+        trabajador: true,
+        firmadoPor: true,
+      },
+      orderBy: [
+        { trabajadorNombre: 'asc' },
+        { fecha: 'asc' },
+        { createdAt: 'asc' },
+      ],
+    });
+
+    if (!reports.length) {
+      throw new BadRequestException(
+        'No hay horas extras firmadas en este rango',
+      );
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Horas Extras');
+
+    sheet.columns = [
+      { header: 'Trabajador', key: 'trabajador', width: 30 },
+      { header: 'RUT', key: 'rut', width: 18 },
+      { header: 'Fecha', key: 'fecha', width: 15 },
+      { header: 'Descripción', key: 'descripcion', width: 40 },
+      { header: 'Hora Entrada', key: 'entrada', width: 15 },
+      { header: 'Hora Salida', key: 'salida', width: 15 },
+      { header: 'Total Horas', key: 'total', width: 15 },
+      { header: 'Firmado Por', key: 'firmado', width: 30 },
+    ];
+
+    const headerRow = sheet.getRow(1);
+    headerRow.font = { bold: true };
+
+    headerRow.eachCell((cell) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF2D8FBD' },
+      };
+      cell.font = {
+        bold: true,
+        color: { argb: 'FFFFFFFF' },
+      };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    });
+
+    for (const r of reports) {
+      sheet.addRow({
+        trabajador: this.getFullName(r.trabajador),
+        rut: r.trabajador?.rut || '',
+        fecha: this.formatDateOnly(r.fecha),
+        descripcion: r.descripcionTrabajo || '',
+        entrada: r.horaEntrada || '',
+        salida: r.horaSalida || '',
+        total: r.totalHoras || '',
+        firmado: this.getFullName(r.firmadoPor),
+      });
+    }
+
+    sheet.eachRow((row) => {
+      row.eachCell((cell) => {
+        cell.alignment = { vertical: 'middle', horizontal: 'left' };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFD9D9D9' } },
+          left: { style: 'thin', color: { argb: 'FFD9D9D9' } },
+          bottom: { style: 'thin', color: { argb: 'FFD9D9D9' } },
+          right: { style: 'thin', color: { argb: 'FFD9D9D9' } },
+        };
+      });
+    });
+
+    const formatFileDate = (val?: string) => {
+      if (!val) return '';
+      const [y, m, d] = String(val).split('-');
+      if (!y || !m || !d) return val;
+      return `${d}-${m}-${y}`;
+    };
+
+    const fromLabel = formatFileDate(from) || 'inicio';
+    const toLabel = formatFileDate(to) || 'fin';
+    const fileName = `horas_extras_${fromLabel}_al_${toLabel}.xlsx`;
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=${fileName}`,
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+  }
+
+  async signExtraHourReport(
+    reportId: string,
+    jefeId: string,
+    firmaDataUrl: string,
+  ) {
+    const jefe = await this.ensureJefeTaller(jefeId);
+    const report = await this.ensureExtraHourReportExists(reportId);
+
+    const firma = String(firmaDataUrl || '').trim();
+    if (!firma) {
+      throw new BadRequestException('La firma es obligatoria');
+    }
+
+    if (!/^data:image\/\w+;base64,/i.test(firma) && firma.length < 50) {
+      throw new BadRequestException('La firma enviada no es válida');
+    }
+
+    if (
+      jefe.role !== 'SUPERADMIN' &&
+      jefe.empresa &&
+      report.empresa &&
+      jefe.empresa !== report.empresa
+    ) {
+      throw new BadRequestException(
+        'No puedes firmar reportes de otra empresa',
+      );
+    }
+
+    if (report.estado === WorkshopExtraHourStatus.FIRMADO) {
+      throw new BadRequestException('Este reporte ya fue firmado');
+    }
+
+    return this.prisma.workshopExtraHourReport.update({
+      where: { id: reportId },
+      data: {
+        estado: WorkshopExtraHourStatus.FIRMADO,
+        firmadoPor: {
+          connect: { id: jefe.id },
+        },
+        firmadoAt: new Date(),
+        firmaDataUrl: firma,
+        observacionRechazo: null,
+      },
+      include: {
+        trabajador: true,
+        firmadoPor: true,
+      },
+    });
+  }
+
+  async rejectExtraHourReport(
+    reportId: string,
+    jefeId: string,
+    observacionRechazo: string,
+  ) {
+    const jefe = await this.ensureJefeTaller(jefeId);
+    const report = await this.ensureExtraHourReportExists(reportId);
+
+    const motivo = String(observacionRechazo || '').trim();
+    if (!motivo) {
+      throw new BadRequestException('La observación de rechazo es obligatoria');
+    }
+
+    if (
+      jefe.role !== 'SUPERADMIN' &&
+      jefe.empresa &&
+      report.empresa &&
+      jefe.empresa !== report.empresa
+    ) {
+      throw new BadRequestException(
+        'No puedes rechazar reportes de otra empresa',
+      );
+    }
+
+    if (report.estado === WorkshopExtraHourStatus.FIRMADO) {
+      throw new BadRequestException(
+        'No se puede rechazar un reporte que ya fue firmado',
+      );
+    }
+
+    return this.prisma.workshopExtraHourReport.update({
+      where: { id: reportId },
+      data: {
+        estado: WorkshopExtraHourStatus.RECHAZADO,
+        firmadoPor: {
+          connect: { id: jefe.id },
+        },
+        firmadoAt: new Date(),
+        observacionRechazo: motivo,
+      },
+      include: {
+        trabajador: true,
+        firmadoPor: true,
+      },
+    });
   }
 
   // ============================
@@ -1134,7 +2247,10 @@ export class WorkshopService {
 
   async requestPartForTaskByWorker(
     userId: string,
-    dto: CreateWorkshopTaskPartDto,
+    dto: CreateWorkshopTaskPartDto & {
+      fotoDataUrl?: string;
+      fotoNombre?: string;
+    },
   ) {
     if (!dto.workshopTaskId) {
       throw new BadRequestException('La tarea de taller es obligatoria');
@@ -1150,6 +2266,42 @@ export class WorkshopService {
       throw new BadRequestException(
         'No se puede pedir repuesto para una tarea terminada o cancelada',
       );
+    }
+
+    let imagePath: string | null = null;
+
+    if (dto.fotoDataUrl) {
+      const buffer = this.parseImageDataUrl(dto.fotoDataUrl);
+
+      if (buffer) {
+        const uploadDir = path.join(process.cwd(), 'uploads/workshop-parts');
+
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+
+        const safeOriginalName = String(dto.fotoNombre || '')
+          .trim()
+          .toLowerCase();
+        const originalExt = safeOriginalName.includes('.')
+          ? safeOriginalName.split('.').pop()
+          : '';
+
+        const allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
+        const ext = allowedExts.includes(String(originalExt))
+          ? String(originalExt)
+          : 'jpg';
+
+        const fileName = `part_${Date.now()}_${Math.random()
+          .toString(36)
+          .substring(2, 8)}.${ext}`;
+
+        const fullPath = path.join(uploadDir, fileName);
+
+        fs.writeFileSync(fullPath, buffer);
+
+        imagePath = `/uploads/workshop-parts/${fileName}`;
+      }
     }
 
     const result = await this.prisma.$transaction(async (tx) => {
@@ -1178,9 +2330,13 @@ export class WorkshopService {
         },
       });
 
-      const extraObservation = dto.observacion?.trim()
+      const extraObservationBase = dto.observacion?.trim()
         ? `REQUIERE REPUESTO: ${dto.observacion.trim()}`
         : `REQUIERE REPUESTO: ${dto.nombre}`;
+
+      const extraObservation = imagePath
+        ? `${extraObservationBase}\n📸 Foto: ${imagePath}`
+        : extraObservationBase;
 
       const mergedObservaciones = previousTask?.observaciones?.trim()
         ? `${previousTask.observaciones}\n${extraObservation}`

@@ -8,6 +8,7 @@
 // - Al editar, carga responsable y apoyos ya asignados
 // - Garantiza payload correcto: workerId + helperIds
 // - Evita duplicar responsable dentro de apoyos
+// - FIX: ahora también aparecen los JEFE_TALLER
 
 import { useEffect, useMemo, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -92,7 +93,8 @@ function isAllowedWorkshopWorker(worker) {
     wt === "MECANICO" ||
     wt === "AYUDANTE_MECANICO" ||
     wt === "AYUDANTE_DE_MECANICO" ||
-    wt === "MECANICO_HIDRAULICO"
+    wt === "MECANICO_HIDRAULICO" ||
+    wt === "JEFE_TALLER"
   );
 }
 
@@ -428,6 +430,7 @@ export default function AssignIncidentModal({
               <option value="MECANICO">Mecánico</option>
               <option value="AYUDANTE_MECANICO">Ayudante mecánico</option>
               <option value="MECANICO_HIDRAULICO">Mecánico hidráulico</option>
+              <option value="JEFE_TALLER">Jefe de taller</option>
             </select>
           </div>
 

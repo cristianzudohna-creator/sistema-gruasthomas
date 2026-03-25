@@ -213,6 +213,27 @@ async function readErrorResponse(res) {
   }
 }
 
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) {
+      resolve("");
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      resolve(typeof reader.result === "string" ? reader.result : "");
+    };
+
+    reader.onerror = () => {
+      reject(new Error("No se pudo leer la imagen seleccionada."));
+    };
+
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function WorkshopTasksWorker() {
   const token = useMemo(() => getToken(), []);
   const user = useMemo(() => getUser(), []);
@@ -228,6 +249,8 @@ export default function WorkshopTasksWorker() {
   const [spareModalOpen, setSpareModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [requestedPart, setRequestedPart] = useState("");
+  const [sparePhotoFile, setSparePhotoFile] = useState(null);
+  const [sparePhotoPreview, setSparePhotoPreview] = useState("");
 
   function goPortal() {
     navigate("/trabajador");
@@ -375,6 +398,8 @@ export default function WorkshopTasksWorker() {
 
     setSelectedTask(task || null);
     setRequestedPart("");
+    setSparePhotoFile(null);
+    setSparePhotoPreview("");
     setSpareModalOpen(true);
   }
 
@@ -383,6 +408,39 @@ export default function WorkshopTasksWorker() {
     setSpareModalOpen(false);
     setSelectedTask(null);
     setRequestedPart("");
+    setSparePhotoFile(null);
+    setSparePhotoPreview("");
+  }
+
+  async function handlePhotoChange(event) {
+    const file = event?.target?.files?.[0] || null;
+
+    if (!file) {
+      setSparePhotoFile(null);
+      setSparePhotoPreview("");
+      return;
+    }
+
+    if (!String(file.type || "").startsWith("image/")) {
+      setActionError("Debes seleccionar una imagen válida.");
+      return;
+    }
+
+    try {
+      const preview = await fileToDataUrl(file);
+      setSparePhotoFile(file);
+      setSparePhotoPreview(preview);
+      setActionError("");
+    } catch (err) {
+      setActionError(err?.message || "No se pudo cargar la imagen.");
+      setSparePhotoFile(null);
+      setSparePhotoPreview("");
+    }
+  }
+
+  function removePhoto() {
+    setSparePhotoFile(null);
+    setSparePhotoPreview("");
   }
 
   async function submitSparePartRequest() {
@@ -416,6 +474,14 @@ export default function WorkshopTasksWorker() {
     setSavingTaskId(selectedTask.id);
 
     try {
+      let fotoDataUrl = "";
+      let fotoNombre = "";
+
+      if (sparePhotoFile) {
+        fotoDataUrl = await fileToDataUrl(sparePhotoFile);
+        fotoNombre = String(sparePhotoFile.name || "").trim();
+      }
+
       const res = await fetch(`${API_URL}/workshop/tasks/request-part`, {
         method: "POST",
         headers: authHeaders({
@@ -427,6 +493,8 @@ export default function WorkshopTasksWorker() {
           nombre: cleanPart,
           cantidad: 1,
           observacion: cleanPart,
+          fotoDataUrl: fotoDataUrl || undefined,
+          fotoNombre: fotoNombre || undefined,
         }),
       });
 
@@ -663,8 +731,12 @@ export default function WorkshopTasksWorker() {
                   </div>
 
                   {spareAlreadyRequested && !isHistoryTask ? (
-                    <div className="wtw-history-box" style={{ marginBottom: "12px" }}>
-                      Ya existe una solicitud de repuesto registrada para esta tarea.
+                    <div
+                      className="wtw-history-box"
+                      style={{ marginBottom: "12px" }}
+                    >
+                      Ya existe una solicitud de repuesto registrada para esta
+                      tarea.
                     </div>
                   ) : null}
 
@@ -742,6 +814,126 @@ export default function WorkshopTasksWorker() {
                 placeholder="Ej: manguera hidráulica 1/2, kit de sello, abrazadera, aceite, etc."
                 disabled={!!savingTaskId}
               />
+            </div>
+          </div>
+
+          <div className="modal-form">
+            <div>
+              <label>Foto del repuesto o daño (opcional)</label>
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: 10,
+                  marginTop: 8,
+                }}
+              >
+                <label
+                  style={{
+                    display: "inline-block",
+                    padding: "12px 14px",
+                    background: "#f1f5f9",
+                    border: "1px solid rgba(15,23,42,.08)",
+                    borderRadius: 12,
+                    cursor: savingTaskId ? "not-allowed" : "pointer",
+                    fontWeight: 600,
+                    textAlign: "center",
+                    color: "#0f172a",
+                  }}
+                >
+                  📸 Tomar foto
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handlePhotoChange}
+                    style={{ display: "none" }}
+                    disabled={!!savingTaskId}
+                  />
+                </label>
+
+                <label
+                  style={{
+                    display: "inline-block",
+                    padding: "12px 14px",
+                    background: "#ffffff",
+                    border: "1px solid rgba(15,23,42,.08)",
+                    borderRadius: 12,
+                    cursor: savingTaskId ? "not-allowed" : "pointer",
+                    fontWeight: 500,
+                    textAlign: "center",
+                    color: "#0f172a",
+                  }}
+                >
+                  🖼️ Elegir desde galería
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoChange}
+                    style={{ display: "none" }}
+                    disabled={!!savingTaskId}
+                  />
+                </label>
+              </div>
+
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 13,
+                  color: "#64748b",
+                  lineHeight: 1.35,
+                }}
+              >
+                En celular puedes tomar la foto directamente o elegir una imagen
+                guardada.
+              </div>
+
+              {sparePhotoPreview ? (
+                <div
+                  style={{
+                    marginTop: 12,
+                    border: "1px solid rgba(15,23,42,.08)",
+                    borderRadius: 14,
+                    padding: 12,
+                    background: "#fff",
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
+                  <img
+                    src={sparePhotoPreview}
+                    alt="Vista previa del repuesto"
+                    style={{
+                      width: "100%",
+                      maxHeight: 260,
+                      objectFit: "contain",
+                      borderRadius: 12,
+                      background: "#f8fafc",
+                    }}
+                  />
+
+                  <div
+                    style={{
+                      fontSize: 13,
+                      color: "#475569",
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {sparePhotoFile?.name || "Imagen seleccionada"}
+                  </div>
+
+                  <div>
+                    <button
+                      type="button"
+                      onClick={removePhoto}
+                      className="btn-secondary"
+                      disabled={!!savingTaskId}
+                    >
+                      Quitar foto
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
 

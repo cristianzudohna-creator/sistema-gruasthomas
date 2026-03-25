@@ -5,6 +5,7 @@
 // ✅ Guarda con POST /workshop/tasks
 // ✅ Envía empresa, createdById y helperIds
 // ✅ Ajustado al backend actual
+// ✅ FIX: ahora también incluye JEFE_TALLER
 
 import { useEffect, useMemo, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -124,7 +125,8 @@ export default function CreateWorkshopTaskModal({
         type === "MECANICO" ||
         type === "AYUDANTE_MECANICO" ||
         type === "AYUDANTE_DE_MECANICO" ||
-        type === "MECANICO_HIDRAULICO"
+        type === "MECANICO_HIDRAULICO" ||
+        type === "JEFE_TALLER"
       );
     });
   }, [workers]);
@@ -136,7 +138,9 @@ export default function CreateWorkshopTaskModal({
   }, [vehicles]);
 
   const selectedVehicle = useMemo(() => {
-    return availableVehicles.find((v) => String(v?.id) === String(vehicleId)) || null;
+    return (
+      availableVehicles.find((v) => String(v?.id) === String(vehicleId)) || null
+    );
   }, [availableVehicles, vehicleId]);
 
   async function loadOptions() {
