@@ -49,6 +49,10 @@ async function bootstrap() {
   // ============================
   const uploadsBase = join(process.cwd(), "uploads");
 
+  if (!existsSync(uploadsBase)) {
+    mkdirSync(uploadsBase, { recursive: true });
+  }
+
   const folders = [
     "horometer",
     "vehicle-docs",
@@ -56,6 +60,7 @@ async function bootstrap() {
     "work-orders",
     "branding",
     "workshop-parts",
+    "workshop-evidence",
   ];
 
   for (const folder of folders) {

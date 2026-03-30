@@ -15,12 +15,13 @@
 // - Se ocultan acciones operativas cuando ya están cerradas
 // - PERO se mantiene visible el botón Eliminar incluso en historial
 // - Botón volver al portal
-// ✅ FIX NUEVO:
+// ✅ FIX PRODUCCIÓN:
 // - Si observaciones trae /uploads/... ya no muestra la ruta cruda
 // - Muestra botón "📷 Ver foto"
-// - Abre la foto usando la URL real del backend
+// - Abre la foto usando la URL real del backend/proxy
 // - La foto se muestra en modal preview
 // - Incidentes ahora también muestran su foto si existe incident.fotoUrl
+// - NO usa localhost en producción
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -137,6 +138,7 @@ function prettyWorkerType(value) {
   if (v === "MECANICO_HIDRAULICO") return "Mecánico hidráulico";
   if (v === "JEFE_TALLER") return "Jefe de taller";
   if (v === "ADQUISICIONES") return "Adquisiciones";
+  if (v === "SUPERVISOR") return "Supervisor";
 
   return value || "Sin especialidad";
 }
@@ -218,6 +220,7 @@ function getTaskObservations(task) {
 
 function parseObservationWithImage(text) {
   const raw = String(text || "").trim();
+
   if (!raw) {
     return {
       cleanText: "",
@@ -229,6 +232,7 @@ function parseObservationWithImage(text) {
   const imageUrl = match?.[1] || "";
 
   let cleanText = raw;
+
   if (imageUrl) {
     cleanText = cleanText.replace(imageUrl, "").trim();
   }
@@ -249,18 +253,17 @@ function parseObservationWithImage(text) {
 function getBackendOrigin() {
   const api = String(API_URL || "").trim();
 
-  if (!api || api === "/api") {
-    return "http://localhost:3000";
+  // ✅ Producción con proxy nginx: /api
+  if (api === "/api") {
+    return window.location.origin;
   }
 
+  // ✅ API absoluta
   if (api.startsWith("http://") || api.startsWith("https://")) {
     return api.replace(/\/api\/?$/, "");
   }
 
-  if (api.startsWith("/")) {
-    return window.location.origin;
-  }
-
+  // ✅ Otros casos relativos
   return window.location.origin;
 }
 
@@ -303,6 +306,7 @@ function statusTone(status) {
   const s = String(status || "").toUpperCase();
 
   if (s === "ABIERTO") return "red";
+
   if (
     s === "EN_PROCESO" ||
     s === "EN_REVISION" ||
@@ -312,6 +316,7 @@ function statusTone(status) {
   ) {
     return "yellow";
   }
+
   if (s === "RESUELTO" || s === "TERMINADA" || s === "COMPRADO") return "blue";
   if (s === "CERRADO" || s === "CANCELADA" || s === "ENTREGADO") return "green";
 
@@ -423,6 +428,7 @@ export default function Incidents() {
       const incidentsText = !incidentsRes.ok
         ? await incidentsRes.text().catch(() => "")
         : "";
+
       const tasksText = !tasksRes.ok
         ? await tasksRes.text().catch(() => "")
         : "";
@@ -910,7 +916,8 @@ export default function Incidents() {
 
                         {canManageIncidents && isClosed ? (
                           <div className="inc-history-box">
-                            Este incidente ya está cerrado y se muestra solo como historial.
+                            Este incidente ya está cerrado y se muestra solo como
+                            historial.
                           </div>
                         ) : null}
                       </article>
@@ -1048,7 +1055,8 @@ export default function Incidents() {
 
                         {canDeleteWorkshopTask && isHistoryTask ? (
                           <div className="inc-history-box">
-                            Esta tarea ya está cerrada y se muestra solo como historial.
+                            Esta tarea ya está cerrada y se muestra solo como
+                            historial.
                           </div>
                         ) : null}
                       </article>
@@ -1120,6 +1128,9 @@ export default function Incidents() {
             <img
               src={selectedImage}
               alt="Evidencia"
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+              }}
               style={{
                 maxWidth: "100%",
                 maxHeight: "70vh",
