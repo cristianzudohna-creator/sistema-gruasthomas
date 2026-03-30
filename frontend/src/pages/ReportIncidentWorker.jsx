@@ -4,6 +4,10 @@
 // - valida user.id
 // - muestra mensaje real del backend
 // - navegación segura
+// ✅ NUEVO:
+// - permite tomar/subir foto desde celular o PC
+// - preview y eliminar foto
+// - envía foto en base64 al backend
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -77,6 +81,9 @@ export default function ReportIncidentWorker() {
   const [vehicles, setVehicles] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
+  const [fotoBase64, setFotoBase64] = useState("");
+  const [fotoPreview, setFotoPreview] = useState("");
+
   const [form, setForm] = useState({
     patente: "",
     descripcion: "",
@@ -99,6 +106,7 @@ export default function ReportIncidentWorker() {
     }
 
     loadVehicles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadVehicles() {
@@ -144,6 +152,30 @@ export default function ReportIncidentWorker() {
     setShowSuggestions(false);
   }
 
+  function handleFotoChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      setFotoBase64(result);
+      setFotoPreview(result);
+    };
+
+    reader.onerror = () => {
+      alert("No se pudo leer la foto seleccionada");
+    };
+
+    reader.readAsDataURL(file);
+  }
+
+  function removeFoto() {
+    setFotoBase64("");
+    setFotoPreview("");
+  }
+
   async function submit(e) {
     e.preventDefault();
 
@@ -178,6 +210,7 @@ export default function ReportIncidentWorker() {
         ubicacionTexto: ubicacionTexto || undefined,
         reportedById,
         empresa,
+        foto: fotoBase64 || undefined,
       };
 
       const res = await fetch(`${API_URL}/workshop/incidents`, {
@@ -260,12 +293,16 @@ export default function ReportIncidentWorker() {
 
             {showSuggestions && filteredVehicles.length > 0 && (
               <div className="riw-suggestions">
-                {filteredVehicles.map((v) => (
+                {filteredVehicles.map((v, idx) => (
                   <button
                     key={v.id}
                     type="button"
                     onClick={() => selectVehicle(v)}
-                    className="riw-suggestion"
+                    className={`riw-suggestion ${
+                      idx === filteredVehicles.length - 1
+                        ? "riw-suggestion--last"
+                        : ""
+                    }`}
                   >
                     {vehicleLabel(v)}
                   </button>
@@ -292,7 +329,43 @@ export default function ReportIncidentWorker() {
           </div>
 
           <div className="riw-field">
-            <label className="riw-label">Ubicación (opcional)</label>
+            <label className="riw-label">Foto</label>
+
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleFotoChange}
+              className="riw-file"
+            />
+
+            <div className="riw-help">
+              En celular podrás sacar la foto con la cámara o elegirla desde la
+              galería.
+            </div>
+
+            {fotoPreview ? (
+              <div className="riw-photo-card">
+                <img
+                  src={fotoPreview}
+                  alt="Vista previa"
+                  className="riw-photo-preview"
+                />
+
+                <button
+                  type="button"
+                  className="btn-secondary riw-remove-photo-btn"
+                  onClick={removeFoto}
+                  disabled={saving}
+                >
+                  Quitar foto
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="riw-field">
+            <label className="riw-label">Ubicación</label>
 
             <input
               value={form.ubicacionTexto}
