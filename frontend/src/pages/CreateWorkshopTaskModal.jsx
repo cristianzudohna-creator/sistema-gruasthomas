@@ -7,6 +7,7 @@
 // ✅ Ajustado al backend actual
 // ✅ FIX: ahora también incluye JEFE_TALLER
 // ✅ FIX NUEVO: ahora también incluye SUPERVISOR
+// ✅ NUEVO: buscador de vehículo por patente / marca-modelo
 
 import { useEffect, useMemo, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -99,6 +100,7 @@ export default function CreateWorkshopTaskModal({
 
   const [descripcion, setDescripcion] = useState("");
   const [vehicleId, setVehicleId] = useState("");
+  const [vehicleQuery, setVehicleQuery] = useState("");
   const [responsableId, setResponsableId] = useState("");
   const [helperIds, setHelperIds] = useState([]);
 
@@ -112,6 +114,7 @@ export default function CreateWorkshopTaskModal({
   function resetForm() {
     setDescripcion("");
     setVehicleId("");
+    setVehicleQuery("");
     setResponsableId("");
     setHelperIds([]);
     setError("");
@@ -145,6 +148,28 @@ export default function CreateWorkshopTaskModal({
       availableVehicles.find((v) => String(v?.id) === String(vehicleId)) || null
     );
   }, [availableVehicles, vehicleId]);
+
+  const filteredVehicles = useMemo(() => {
+    const q = String(vehicleQuery || "").trim().toLowerCase();
+
+    if (!q) {
+      return availableVehicles.slice(0, 12);
+    }
+
+    return availableVehicles
+      .filter((vehicle) => {
+        const patente = String(vehicle?.patente || "").toLowerCase();
+        const marcaModelo = String(vehicle?.marcaModelo || "").toLowerCase();
+        const empresa = String(vehicle?.empresa || "").toLowerCase();
+
+        return (
+          patente.includes(q) ||
+          marcaModelo.includes(q) ||
+          empresa.includes(q)
+        );
+      })
+      .slice(0, 20);
+  }, [availableVehicles, vehicleQuery]);
 
   async function loadOptions() {
     setLoadingOptions(true);
@@ -210,6 +235,12 @@ export default function CreateWorkshopTaskModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  useEffect(() => {
+    if (selectedVehicle) {
+      setVehicleQuery(fmtVehicle(selectedVehicle));
+    }
+  }, [selectedVehicle]);
+
   function toggleHelper(id) {
     setHelperIds((prev) => {
       const sid = String(id);
@@ -218,6 +249,11 @@ export default function CreateWorkshopTaskModal({
       if (exists) return prev.filter((x) => String(x) !== sid);
       return [...prev, sid];
     });
+  }
+
+  function handleSelectVehicle(vehicle) {
+    setVehicleId(String(vehicle.id));
+    setVehicleQuery(fmtVehicle(vehicle));
   }
 
   async function handleSubmit(e) {
@@ -301,6 +337,9 @@ export default function CreateWorkshopTaskModal({
     (w) => String(w?.id) !== String(responsableId)
   );
 
+  const showVehicleResults =
+    !selectedVehicle || vehicleQuery !== fmtVehicle(selectedVehicle);
+
   return (
     <Modal
       open={open}
@@ -347,20 +386,81 @@ export default function CreateWorkshopTaskModal({
             </div>
 
             <div className="modal-form">
-              <div>
-                <label htmlFor="vehicleIdTarea">Vehículo</label>
-                <select
-                  id="vehicleIdTarea"
-                  value={vehicleId}
-                  onChange={(e) => setVehicleId(e.target.value)}
-                >
-                  <option value="">Seleccionar vehículo</option>
-                  {availableVehicles.map((vehicle) => (
-                    <option key={vehicle.id} value={vehicle.id}>
-                      {fmtVehicle(vehicle)}
-                    </option>
-                  ))}
-                </select>
+              <div style={{ position: "relative" }}>
+                <label htmlFor="vehicleSearchTarea">Vehículo</label>
+                <input
+                  id="vehicleSearchTarea"
+                  type="text"
+                  value={vehicleQuery}
+                  onChange={(e) => {
+                    setVehicleQuery(e.target.value);
+                    setVehicleId("");
+                  }}
+                  placeholder="Escribe patente o marca/modelo"
+                  autoComplete="off"
+                />
+
+                {showVehicleResults ? (
+                  <div
+                    style={{
+                      marginTop: 8,
+                      maxHeight: 220,
+                      overflowY: "auto",
+                      border: "1px solid rgba(15,23,42,.10)",
+                      borderRadius: 14,
+                      background: "#fff",
+                      boxShadow: "0 12px 30px rgba(0,0,0,.08)",
+                    }}
+                  >
+                    {filteredVehicles.length === 0 ? (
+                      <div
+                        style={{
+                          padding: 12,
+                          color: "#64748b",
+                          fontSize: 14,
+                        }}
+                      >
+                        No se encontraron vehículos.
+                      </div>
+                    ) : (
+                      filteredVehicles.map((vehicle, index) => (
+                        <button
+                          key={vehicle.id}
+                          type="button"
+                          onClick={() => handleSelectVehicle(vehicle)}
+                          style={{
+                            width: "100%",
+                            textAlign: "left",
+                            padding: "12px 14px",
+                            border: "none",
+                            background: "transparent",
+                            cursor: "pointer",
+                            borderBottom:
+                              index === filteredVehicles.length - 1
+                                ? "none"
+                                : "1px solid rgba(15,23,42,.08)",
+                            fontSize: 14,
+                          }}
+                        >
+                          {fmtVehicle(vehicle)}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                ) : null}
+
+                {selectedVehicle ? (
+                  <div
+                    style={{
+                      marginTop: 8,
+                      fontSize: 13,
+                      color: "#0f766e",
+                      fontWeight: 700,
+                    }}
+                  >
+                    Vehículo seleccionado: {fmtVehicle(selectedVehicle)}
+                  </div>
+                ) : null}
               </div>
             </div>
 

@@ -5,6 +5,7 @@
 // ✅ NUEVO: permite tomar/subir foto desde celular o PC
 // ✅ NUEVO: preview y eliminar foto
 // ✅ NUEVO: envía foto en base64 al backend
+// ✅ NUEVO: buscador de vehículo por patente / marca-modelo
 
 import { useEffect, useMemo, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -46,6 +47,15 @@ function pickEmpresa(value) {
   return "";
 }
 
+function fmtVehicle(vehicle) {
+  if (!vehicle) return "—";
+
+  const patente = vehicle?.patente || "Sin patente";
+  const marcaModelo = vehicle?.marcaModelo || "";
+
+  return marcaModelo ? `${patente} · ${marcaModelo}` : patente;
+}
+
 export default function IncidentModal({ open, onClose, onCreated }) {
   const token = useMemo(() => getToken(), []);
   const currentUser = useMemo(() => getUserFromStorage(), []);
@@ -61,6 +71,7 @@ export default function IncidentModal({ open, onClose, onCreated }) {
     ubicacionTexto: "",
   });
 
+  const [vehicleQuery, setVehicleQuery] = useState("");
   const [photoBase64, setPhotoBase64] = useState("");
   const [photoPreview, setPhotoPreview] = useState("");
 
@@ -70,6 +81,7 @@ export default function IncidentModal({ open, onClose, onCreated }) {
       descripcion: "",
       ubicacionTexto: "",
     });
+    setVehicleQuery("");
     setPhotoBase64("");
     setPhotoPreview("");
     setError("");
@@ -88,12 +100,40 @@ export default function IncidentModal({ open, onClose, onCreated }) {
     );
   }, [availableVehicles, form.vehicleId]);
 
+  const filteredVehicles = useMemo(() => {
+    const q = String(vehicleQuery || "").trim().toLowerCase();
+
+    if (!q) {
+      return availableVehicles.slice(0, 12);
+    }
+
+    return availableVehicles
+      .filter((vehicle) => {
+        const patente = String(vehicle?.patente || "").toLowerCase();
+        const marcaModelo = String(vehicle?.marcaModelo || "").toLowerCase();
+        const empresa = String(vehicle?.empresa || "").toLowerCase();
+
+        return (
+          patente.includes(q) ||
+          marcaModelo.includes(q) ||
+          empresa.includes(q)
+        );
+      })
+      .slice(0, 20);
+  }, [availableVehicles, vehicleQuery]);
+
   useEffect(() => {
     if (!open) return;
     resetForm();
     loadVehicles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  useEffect(() => {
+    if (selectedVehicle) {
+      setVehicleQuery(fmtVehicle(selectedVehicle));
+    }
+  }, [selectedVehicle]);
 
   async function loadVehicles() {
     try {
@@ -131,6 +171,14 @@ export default function IncidentModal({ open, onClose, onCreated }) {
 
   function updateField(name, value) {
     setForm((prev) => ({ ...prev, [name]: value }));
+  }
+
+  function handleSelectVehicle(vehicle) {
+    setForm((prev) => ({
+      ...prev,
+      vehicleId: String(vehicle.id),
+    }));
+    setVehicleQuery(fmtVehicle(vehicle));
   }
 
   function handlePhotoChange(e) {
@@ -219,6 +267,9 @@ export default function IncidentModal({ open, onClose, onCreated }) {
     }
   }
 
+  const showVehicleResults =
+    !selectedVehicle || vehicleQuery !== fmtVehicle(selectedVehicle);
+
   return (
     <Modal
       open={open}
@@ -252,20 +303,81 @@ export default function IncidentModal({ open, onClose, onCreated }) {
         ) : (
           <>
             <div className="modal-form">
-              <div>
-                <label htmlFor="incidentVehicle">Vehículo</label>
-                <select
-                  id="incidentVehicle"
-                  value={form.vehicleId}
-                  onChange={(e) => updateField("vehicleId", e.target.value)}
-                >
-                  <option value="">Seleccione vehículo</option>
-                  {availableVehicles.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.patente} · {v.marcaModelo}
-                    </option>
-                  ))}
-                </select>
+              <div style={{ position: "relative" }}>
+                <label htmlFor="incidentVehicleSearch">Vehículo</label>
+                <input
+                  id="incidentVehicleSearch"
+                  type="text"
+                  value={vehicleQuery}
+                  onChange={(e) => {
+                    setVehicleQuery(e.target.value);
+                    setForm((prev) => ({ ...prev, vehicleId: "" }));
+                  }}
+                  placeholder="Escribe patente o marca/modelo"
+                  autoComplete="off"
+                />
+
+                {showVehicleResults ? (
+                  <div
+                    style={{
+                      marginTop: 8,
+                      maxHeight: 220,
+                      overflowY: "auto",
+                      border: "1px solid rgba(15,23,42,.10)",
+                      borderRadius: 14,
+                      background: "#fff",
+                      boxShadow: "0 12px 30px rgba(0,0,0,.08)",
+                    }}
+                  >
+                    {filteredVehicles.length === 0 ? (
+                      <div
+                        style={{
+                          padding: 12,
+                          color: "#64748b",
+                          fontSize: 14,
+                        }}
+                      >
+                        No se encontraron vehículos.
+                      </div>
+                    ) : (
+                      filteredVehicles.map((vehicle, index) => (
+                        <button
+                          key={vehicle.id}
+                          type="button"
+                          onClick={() => handleSelectVehicle(vehicle)}
+                          style={{
+                            width: "100%",
+                            textAlign: "left",
+                            padding: "12px 14px",
+                            border: "none",
+                            background: "transparent",
+                            cursor: "pointer",
+                            borderBottom:
+                              index === filteredVehicles.length - 1
+                                ? "none"
+                                : "1px solid rgba(15,23,42,.08)",
+                            fontSize: 14,
+                          }}
+                        >
+                          {fmtVehicle(vehicle)}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                ) : null}
+
+                {selectedVehicle ? (
+                  <div
+                    style={{
+                      marginTop: 8,
+                      fontSize: 13,
+                      color: "#0f766e",
+                      fontWeight: 700,
+                    }}
+                  >
+                    Vehículo seleccionado: {fmtVehicle(selectedVehicle)}
+                  </div>
+                ) : null}
               </div>
             </div>
 
