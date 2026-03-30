@@ -1,9 +1,12 @@
 // ✅ Archivo: src/workshop/dto/create-incident.dto.ts
-// ✅ Simplificado para OPERADOR / RIGGER
+// ✅ Simplificado para OPERADOR / RIGGER / PREVENCION
+// ✅ NUEVO: foto opcional en base64
 // - patente
 // - descripción
 // - ubicación opcional
-// - type se asignará automáticamente en backend como OTRO
+// - empresa
+// - reportedById
+// - foto opcional
 
 import {
   IsEnum,
@@ -33,4 +36,9 @@ export class CreateIncidentDto {
   @IsString()
   @MaxLength(255)
   ubicacionTexto?: string;
+
+  // ✅ NUEVO: foto en base64
+  @IsOptional()
+  @IsString()
+  foto?: string;
 }

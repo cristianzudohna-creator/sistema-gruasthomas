@@ -69,11 +69,16 @@ export class RolesGuard implements CanActivate {
     // ✅ SUPERADMIN siempre pasa
     if (userRole === "SUPERADMIN") return true;
 
-    // 🔥 FIX CLAVE: permitir JEFE_TALLER en módulos admin
+    // ✅ JEFE_TALLER y SUPERVISOR pueden entrar a módulos admin protegidos
+    // cuando el endpoint exige roles administrativos.
     if (
       userRole === "TRABAJADOR" &&
-      workerType === "JEFE_TALLER" &&
-      required.includes("SUPERADMIN")
+      (workerType === "JEFE_TALLER" || workerType === "SUPERVISOR") &&
+      (
+        required.includes("SUPERADMIN") ||
+        required.includes("CONTROL_FLOTA") ||
+        required.includes("ADMINISTRADORA")
+      )
     ) {
       return true;
     }

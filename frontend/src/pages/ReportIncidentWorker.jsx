@@ -1,5 +1,9 @@
 // ✅ Archivo: src/pages/ReportIncidentWorker.jsx
-// ✅ Con botones de navegación (volver + logout)
+// ✅ FIX 400 Bad Request
+// - envía empresa
+// - valida user.id
+// - muestra mensaje real del backend
+// - navegación segura
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -25,10 +29,27 @@ function getUser() {
       localStorage.getItem("profile");
 
     if (!raw) return null;
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
   } catch {
     return null;
   }
+}
+
+function norm(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function getUserEmpresa(user) {
+  return (
+    user?.empresa ||
+    user?.company ||
+    user?.companyName ||
+    user?.empresaNombre ||
+    user?.empresa_name ||
+    user?.businessUnit ||
+    ""
+  );
 }
 
 function normalizePlate(value) {
@@ -63,7 +84,7 @@ export default function ReportIncidentWorker() {
   });
 
   function goPortal() {
-    navigate("/trabajador");
+    navigate("/trabajador", { replace: true });
   }
 
   function handleLogout() {
@@ -72,6 +93,11 @@ export default function ReportIncidentWorker() {
   }
 
   useEffect(() => {
+    if (!token) {
+      window.location.href = "/login";
+      return;
+    }
+
     loadVehicles();
   }, []);
 
@@ -121,32 +147,67 @@ export default function ReportIncidentWorker() {
   async function submit(e) {
     e.preventDefault();
 
-    if (!form.patente || !form.descripcion) {
+    const patente = normalizePlate(form.patente);
+    const descripcion = String(form.descripcion || "").trim();
+    const ubicacionTexto = String(form.ubicacionTexto || "").trim();
+
+    const reportedById = user?.id || user?.userId || user?.sub || "";
+    const empresa = norm(getUserEmpresa(user));
+
+    if (!patente || !descripcion) {
       alert("Completa los campos obligatorios");
+      return;
+    }
+
+    if (!reportedById) {
+      alert("No se encontró el ID del usuario logueado");
+      return;
+    }
+
+    if (!empresa) {
+      alert("No se encontró la empresa del usuario logueado");
       return;
     }
 
     try {
       setSaving(true);
 
-      await fetch(`${API_URL}/workshop/incidents`, {
+      const payload = {
+        patente,
+        descripcion,
+        ubicacionTexto: ubicacionTexto || undefined,
+        reportedById,
+        empresa,
+      };
+
+      const res = await fetch(`${API_URL}/workshop/incidents`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: token ? `Bearer ${token}` : "",
         },
-        body: JSON.stringify({
-          patente: normalizePlate(form.patente),
-          descripcion: form.descripcion,
-          ubicacionTexto: form.ubicacionTexto,
-          reportedById: user?.id,
-        }),
+        credentials: "include",
+        body: JSON.stringify(payload),
       });
 
+      let data = null;
+      try {
+        data = await res.json();
+      } catch {
+        data = null;
+      }
+
+      if (!res.ok) {
+        const backendMessage = Array.isArray(data?.message)
+          ? data.message.join(", ")
+          : data?.message || "Error al reportar incidente";
+        throw new Error(backendMessage);
+      }
+
       alert("Incidente reportado");
-      navigate("/trabajador");
+      navigate("/trabajador", { replace: true });
     } catch (err) {
-      alert("Error al reportar");
+      alert(err?.message || "Error al reportar");
     } finally {
       setSaving(false);
     }
@@ -155,8 +216,6 @@ export default function ReportIncidentWorker() {
   return (
     <div className="riw-page">
       <div className="riw-card">
-
-        {/* 🔥 HEADER NUEVO */}
         <div className="riw-toolbar">
           <button
             type="button"
@@ -179,13 +238,12 @@ export default function ReportIncidentWorker() {
           <h1 className="riw-title">🚨 Reportar incidente</h1>
 
           <p className="riw-subtitle">
-            Informa lo que pasó con el vehículo para que lo revise el jefe de taller.
+            Informa lo que pasó con el vehículo para que lo revise el jefe de
+            taller.
           </p>
         </div>
 
         <form onSubmit={submit} className="riw-form">
-
-          {/* PATENTE */}
           <div className="riw-field riw-field--autocomplete">
             <label className="riw-label">Patente</label>
 
@@ -216,11 +274,12 @@ export default function ReportIncidentWorker() {
             )}
 
             <div className="riw-help">
-              Escribe la patente y selecciona el vehículo.
+              {loadingVehicles
+                ? "Cargando vehículos..."
+                : "Escribe la patente y selecciona el vehículo."}
             </div>
           </div>
 
-          {/* DESCRIPCIÓN */}
           <div className="riw-field">
             <label className="riw-label">¿Qué pasó?</label>
 
@@ -232,20 +291,16 @@ export default function ReportIncidentWorker() {
             />
           </div>
 
-          {/* UBICACIÓN */}
           <div className="riw-field">
             <label className="riw-label">Ubicación (opcional)</label>
 
             <input
               value={form.ubicacionTexto}
-              onChange={(e) =>
-                updateField("ubicacionTexto", e.target.value)
-              }
+              onChange={(e) => updateField("ubicacionTexto", e.target.value)}
               className="riw-input"
             />
           </div>
 
-          {/* BOTONES */}
           <div className="riw-actions">
             <button
               type="button"

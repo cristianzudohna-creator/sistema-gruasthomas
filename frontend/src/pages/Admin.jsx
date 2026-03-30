@@ -7,6 +7,7 @@
 //    - Horas Extras
 // ✅ Menú "Repuestos / Solicitudes" SOLO SUPERADMIN + TRABAJADOR ADQUISICIONES
 // ✅ Menú "Horas Extras (PDF)" para ADMINISTRADORA + SUPERADMIN
+// ✅ FIX: ADQUISICIONES YA NO VE "Firmar Horas Extras"
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useNavigate, useLocation, Link } from "react-router-dom";
@@ -85,7 +86,8 @@ export default function Admin() {
   const isAdquisiciones =
     role === "TRABAJADOR" && workerType === "ADQUISICIONES";
   const isJefeTaller =
-    role === "TRABAJADOR" && workerType === "JEFE_TALLER";
+  role === "TRABAJADOR" &&
+  (workerType === "JEFE_TALLER" || workerType === "SUPERVISOR");
 
   const canSeeDashboard = isSuperadmin;
   const canSeeCamiones = isSuperadmin || isControlFlota;
@@ -106,8 +108,13 @@ export default function Admin() {
   // ✅ SOLO SUPERADMIN + ADQUISICIONES
   const canSeeRepuestos = isSuperadmin || isAdquisiciones;
 
-  // ✅ CONTROL_FLOTA YA NO VE HORAS EXTRAS
-  const canSeeExtraHours = isSuperadmin || role === "TRABAJADOR";
+  // ✅ FIX: ADQUISICIONES YA NO VE HORAS EXTRAS
+  // ✅ SUPERADMIN sí ve
+  // ✅ otros trabajadores sí ven
+  // ✅ ADQUISICIONES no ve
+  const canSeeExtraHours =
+    isSuperadmin ||
+    (role === "TRABAJADOR" && workerType !== "ADQUISICIONES");
 
   // ✅ Horas Extras PDF (administración)
   const canSeeExtraHoursAdmin = isSuperadmin || isAdministradora;
@@ -142,7 +149,8 @@ export default function Admin() {
     if (isControlFlota) return "CONTROL DE FLOTA";
     if (isAdministradora) return "ADMINISTRADORA";
     if (isAdquisiciones) return "ADQUISICIONES";
-    if (isJefeTaller) return "JEFE DE TALLER";
+    if (workerType === "JEFE_TALLER") return "JEFE DE TALLER";
+if (workerType === "SUPERVISOR") return "SUPERVISOR";
     if (role) return role;
     return "Usuario";
   }, [

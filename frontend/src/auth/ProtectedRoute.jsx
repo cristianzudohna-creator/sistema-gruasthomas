@@ -1,7 +1,9 @@
 // ✅ Archivo: frontend/src/auth/ProtectedRoute.jsx (COMPLETO)
 // ✅ NUEVO: si user.mustChangePassword === true => obliga a /cambiar-contrasena
 // ✅ FIX: JEFE_TALLER puede entrar a /admin/incidentes
+// ✅ FIX: JEFE_TALLER / SUPERVISOR puede entrar a /admin/horas-extras
 // ✅ FIX: ADQUISICIONES puede entrar a /admin/repuestos
+// ✅ FIX NUEVO: TRABAJADOR normal NO puede entrar a /admin y se redirige a su módulo
 
 import { Navigate, useLocation, Link } from "react-router-dom";
 import { getToken, getUser } from "./auth";
@@ -29,7 +31,10 @@ function defaultHomeByRole(user) {
     return "/admin/repuestos";
   }
 
-  if (role === "TRABAJADOR" && workerType === "JEFE_TALLER") {
+  if (
+    role === "TRABAJADOR" &&
+    (workerType === "JEFE_TALLER" || workerType === "SUPERVISOR")
+  ) {
     return "/admin/incidentes";
   }
 
@@ -48,14 +53,25 @@ function canAccessSpecialRoute(user, pathname) {
 
   if (role === "SUPERADMIN") return true;
 
+  // 🔥 JEFE_TALLER + SUPERVISOR → Incidentes
   if (
     role === "TRABAJADOR" &&
-    workerType === "JEFE_TALLER" &&
+    (workerType === "JEFE_TALLER" || workerType === "SUPERVISOR") &&
     path.startsWith("/admin/incidentes")
   ) {
     return true;
   }
 
+  // 🔥 JEFE_TALLER + SUPERVISOR → Firmar horas extras
+  if (
+    role === "TRABAJADOR" &&
+    (workerType === "JEFE_TALLER" || workerType === "SUPERVISOR") &&
+    path.startsWith("/admin/horas-extras")
+  ) {
+    return true;
+  }
+
+  // ADQUISICIONES
   if (
     role === "TRABAJADOR" &&
     workerType === "ADQUISICIONES" &&
@@ -221,9 +237,26 @@ export default function ProtectedRoute({ children, role }) {
   const allowed = allowedRoles ? allowedRoles.map(norm) : null;
 
   const userRole = norm(user?.role);
+  const currentPath = String(location.pathname || "").toLowerCase();
 
-  if (canAccessSpecialRoute(user, location.pathname)) {
+  // ✅ Permisos especiales primero
+  if (canAccessSpecialRoute(user, currentPath)) {
     return children;
+  }
+
+  // ✅ TRABAJADOR normal no entra a /admin
+  if (
+    userRole === "TRABAJADOR" &&
+    currentPath.startsWith("/admin") &&
+    !canAccessSpecialRoute(user, currentPath)
+  ) {
+    return (
+      <Navigate
+        to={defaultHomeByRole(user)}
+        replace
+        state={{ from: location.pathname }}
+      />
+    );
   }
 
   if (allowed && !allowed.includes(userRole)) {
@@ -232,7 +265,6 @@ export default function ProtectedRoute({ children, role }) {
 
   return children;
 }
-
 
 
 

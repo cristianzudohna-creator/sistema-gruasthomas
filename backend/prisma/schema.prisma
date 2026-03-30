@@ -14,6 +14,8 @@
 // - WorkshopExtraHourReport
 // - relación en User para reportes de horas extras creados
 // - relación en User para reportes firmados por JEFE_TALLER
+// ✅ FIX NUEVO:
+// - VehicleIncident.fotoUrl para guardar evidencia/foto del incidente
 
 datasource db {
   provider = "postgresql"
@@ -666,6 +668,8 @@ model VehicleIncident {
   horometro   Int?
 
   estadoOperativoReportado VehicleOperationalStatus?
+
+  fotoUrl String?
 
   reportadoEn DateTime @default(now())
   cerradoEn   DateTime?

@@ -9,6 +9,8 @@
 // - Garantiza payload correcto: workerId + helperIds
 // - Evita duplicar responsable dentro de apoyos
 // - FIX: ahora también aparecen los JEFE_TALLER
+// - FIX NUEVO: ahora también aparecen los SUPERVISOR
+// - FIX NUEVO: pide más usuarios al backend para no quedarse solo con 10
 
 import { useEffect, useMemo, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -37,6 +39,7 @@ function prettyWorkerType(value) {
   }
   if (v === "MECANICO_HIDRAULICO") return "Mecánico hidráulico";
   if (v === "JEFE_TALLER") return "Jefe de taller";
+  if (v === "SUPERVISOR") return "Supervisor";
 
   return value || "Sin especialidad";
 }
@@ -94,7 +97,8 @@ function isAllowedWorkshopWorker(worker) {
     wt === "AYUDANTE_MECANICO" ||
     wt === "AYUDANTE_DE_MECANICO" ||
     wt === "MECANICO_HIDRAULICO" ||
-    wt === "JEFE_TALLER"
+    wt === "JEFE_TALLER" ||
+    wt === "SUPERVISOR"
   );
 }
 
@@ -191,9 +195,12 @@ export default function AssignIncidentModal({
     setWorkers([]);
 
     try {
-      const data = await fetchJson(`${API_URL}/users?role=TRABAJADOR`, {
-        headers: authHeaders(),
-      });
+      const data = await fetchJson(
+        `${API_URL}/users?role=TRABAJADOR&activo=true&limit=100`,
+        {
+          headers: authHeaders(),
+        }
+      );
 
       const arr = extractArray(data)
         .map(normalizeWorker)
@@ -218,7 +225,9 @@ export default function AssignIncidentModal({
     setWorkerTypeFilter("");
     setSelectedWorkerId(existingResponsibleId);
     setHelperIds(
-      existingHelperIds.filter((id) => String(id) !== String(existingResponsibleId))
+      existingHelperIds.filter(
+        (id) => String(id) !== String(existingResponsibleId)
+      )
     );
     setHelperSearch("");
     setNote("");
@@ -431,6 +440,7 @@ export default function AssignIncidentModal({
               <option value="AYUDANTE_MECANICO">Ayudante mecánico</option>
               <option value="MECANICO_HIDRAULICO">Mecánico hidráulico</option>
               <option value="JEFE_TALLER">Jefe de taller</option>
+              <option value="SUPERVISOR">Supervisor</option>
             </select>
           </div>
 

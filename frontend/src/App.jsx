@@ -59,7 +59,6 @@ export default function App() {
                 "CONTROL_FLOTA",
                 "ADMINISTRADORA",
                 "SUPERADMIN",
-                "TRABAJADOR",
               ]}
             >
               <Admin />

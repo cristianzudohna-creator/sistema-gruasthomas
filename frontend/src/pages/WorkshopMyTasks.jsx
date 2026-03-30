@@ -1,3 +1,5 @@
+// ✅ Archivo: src/pages/WorkshopMyTasks.jsx
+
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Modal from "../components/ui/Modal";
@@ -97,6 +99,9 @@ function prettifyTaskStatus(value) {
   if (v === "EN_REVISION") return "En revisión";
   if (v === "EN_REPARACION") return "En reparación";
   if (v === "ESPERANDO_REPUESTO") return "Esperando repuesto";
+  if (v === "EN_COMPRA") return "En compra";
+  if (v === "COMPRADO") return "Comprado";
+  if (v === "ENTREGADO") return "Entregado";
   if (v === "TERMINADA") return "Terminada";
   if (v === "CANCELADA") return "Cancelada";
   return value || "—";
@@ -108,12 +113,14 @@ function statusTone(status) {
   if (
     s === "EN_REVISION" ||
     s === "EN_REPARACION" ||
-    s === "ESPERANDO_REPUESTO"
+    s === "ESPERANDO_REPUESTO" ||
+    s === "EN_COMPRA" ||
+    s === "COMPRADO"
   ) {
     return "yellow";
   }
   if (s === "TERMINADA") return "blue";
-  if (s === "CANCELADA") return "green";
+  if (s === "ENTREGADO" || s === "CANCELADA") return "green";
 
   return "default";
 }
@@ -221,14 +228,94 @@ function getTaskObservations(task) {
   );
 }
 
+function parseObservation(observations) {
+  const raw = String(observations || "");
+
+  const spareImageMatch = raw.match(
+    /(?:^|\n)\s*(?:[^\w\n\r]*\s*)?Foto:\s*(\/uploads\/workshop-parts\/[^\s]+)/i
+  );
+
+  const evidenceImageMatch = raw.match(
+    /(?:^|\n)\s*(?:[^\w\n\r]*\s*)?Evidencia:\s*(\/uploads\/workshop-evidence\/[^\s]+)/i
+  );
+
+  const spareImage = spareImageMatch ? spareImageMatch[1] : null;
+  const evidenceImage = evidenceImageMatch ? evidenceImageMatch[1] : null;
+
+  const cleanText = raw
+    .replace(
+      /(?:^|\n)\s*(?:[^\w\n\r]*\s*)?Foto:\s*\/uploads\/workshop-parts\/[^\s]+/gi,
+      ""
+    )
+    .replace(
+      /(?:^|\n)\s*(?:[^\w\n\r]*\s*)?Evidencia:\s*\/uploads\/workshop-evidence\/[^\s]+/gi,
+      ""
+    )
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+
+  return {
+    text: cleanText,
+    spareImage,
+    evidenceImage,
+  };
+}
+
 function hasSparePartRequest(task) {
   const status = norm(task?.status);
-  const observations = getTaskObservations(task);
 
-  if (status === "ESPERANDO_REPUESTO") return true;
-  if (/REQUIERE\s+REPUESTO/i.test(String(observations || ""))) return true;
+  if (
+    status === "ESPERANDO_REPUESTO" ||
+    status === "EN_COMPRA" ||
+    status === "COMPRADO" ||
+    status === "ENTREGADO"
+  ) {
+    return true;
+  }
 
   return false;
+}
+
+function hasAnySpareRequestHistory(task) {
+  const observations = String(getTaskObservations(task) || "");
+  return /REQUIERE\s+REPUESTO/i.test(observations);
+}
+
+function getSparePartStatus(task) {
+  const status = norm(task?.status);
+
+  if (status === "ESPERANDO_REPUESTO") return "PENDIENTE";
+  if (status === "EN_COMPRA") return "EN_COMPRA";
+  if (status === "COMPRADO") return "COMPRADO";
+  if (status === "ENTREGADO") return "ENTREGADO";
+
+  if (hasAnySpareRequestHistory(task)) {
+    return "ENTREGADO";
+  }
+
+  return null;
+}
+
+function prettifySparePartStatus(value) {
+  const v = norm(value);
+
+  if (v === "PENDIENTE") return "Pendiente";
+  if (v === "EN_COMPRA") return "En compra";
+  if (v === "COMPRADO") return "Comprado";
+  if (v === "ENTREGADO") return "Entregado";
+
+  return value || "—";
+}
+
+function spareStatusTone(value) {
+  const v = norm(value);
+
+  if (v === "PENDIENTE") return "yellow";
+  if (v === "EN_COMPRA") return "yellow";
+  if (v === "COMPRADO") return "blue";
+  if (v === "ENTREGADO") return "green";
+
+  return "default";
 }
 
 function getLoggedUserLabel(user) {
@@ -259,6 +346,27 @@ async function readErrorResponse(res) {
   }
 }
 
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) {
+      resolve("");
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      resolve(typeof reader.result === "string" ? reader.result : "");
+    };
+
+    reader.onerror = () => {
+      reject(new Error("No se pudo leer la imagen seleccionada."));
+    };
+
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function WorkshopMyTasks() {
   const token = useMemo(() => getToken(), []);
   const user = useMemo(() => getUser(), []);
@@ -274,6 +382,18 @@ export default function WorkshopMyTasks() {
   const [spareModalOpen, setSpareModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [requestedPart, setRequestedPart] = useState("");
+  const [sparePhotoFile, setSparePhotoFile] = useState(null);
+  const [sparePhotoPreview, setSparePhotoPreview] = useState("");
+
+  const [finishModalOpen, setFinishModalOpen] = useState(false);
+  const [finishTaskSelected, setFinishTaskSelected] = useState(null);
+  const [finishDescription, setFinishDescription] = useState("");
+  const [finishPhotoFile, setFinishPhotoFile] = useState(null);
+  const [finishPhotoPreview, setFinishPhotoPreview] = useState("");
+
+  const [imageViewerOpen, setImageViewerOpen] = useState(false);
+  const [imageViewerSrc, setImageViewerSrc] = useState("");
+  const [imageViewerTitle, setImageViewerTitle] = useState("");
 
   function goPortal() {
     navigate("/trabajador");
@@ -289,6 +409,18 @@ export default function WorkshopMyTasks() {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...extra,
     };
+  }
+
+  function openImageViewer(src, title) {
+    setImageViewerSrc(src);
+    setImageViewerTitle(title);
+    setImageViewerOpen(true);
+  }
+
+  function closeImageViewer() {
+    setImageViewerOpen(false);
+    setImageViewerSrc("");
+    setImageViewerTitle("");
   }
 
   async function loadTasks() {
@@ -368,41 +500,121 @@ export default function WorkshopMyTasks() {
     }
   }
 
-  async function finishTask(task) {
-    if (!task?.id) return { ok: false };
-
+  function openFinishModal(task) {
     const userId = user?.id;
     const amResponsible = isResponsibleUser(task, userId);
+
+    setActionError("");
+    setActionMessage("");
 
     if (!amResponsible) {
       setActionError(
         "Solo el responsable de la tarea puede iniciar reparación, pedir repuesto o terminarla."
       );
-      setActionMessage("");
-      return { ok: false };
+      return;
     }
 
-    setSavingTaskId(task.id);
+    setFinishTaskSelected(task || null);
+    setFinishDescription(String(task?.trabajoRealizado || ""));
+    setFinishPhotoFile(null);
+    setFinishPhotoPreview("");
+    setFinishModalOpen(true);
+  }
+
+  function closeFinishModal() {
+    if (savingTaskId) return;
+
+    setFinishModalOpen(false);
+    setFinishTaskSelected(null);
+    setFinishDescription("");
+    setFinishPhotoFile(null);
+    setFinishPhotoPreview("");
+  }
+
+  async function handleFinishPhotoChange(event) {
+    const file = event?.target?.files?.[0] || null;
+
+    if (!file) {
+      setFinishPhotoFile(null);
+      setFinishPhotoPreview("");
+      return;
+    }
+
+    if (!String(file.type || "").startsWith("image/")) {
+      setActionError("Debes seleccionar una imagen válida.");
+      return;
+    }
+
+    try {
+      const preview = await fileToDataUrl(file);
+      setFinishPhotoFile(file);
+      setFinishPhotoPreview(preview);
+      setActionError("");
+    } catch (err) {
+      setActionError(err?.message || "No se pudo cargar la imagen.");
+      setFinishPhotoFile(null);
+      setFinishPhotoPreview("");
+    }
+  }
+
+  function removeFinishPhoto() {
+    setFinishPhotoFile(null);
+    setFinishPhotoPreview("");
+  }
+
+  async function submitFinishTask() {
+    if (!finishTaskSelected?.id) return;
+
+    const cleanDesc = String(finishDescription || "").trim();
+
     setActionError("");
     setActionMessage("");
 
+    if (!isResponsibleUser(finishTaskSelected, user?.id)) {
+      setActionError(
+        "Solo el responsable de la tarea puede iniciar reparación, pedir repuesto o terminarla."
+      );
+      return;
+    }
+
+    if (!cleanDesc) {
+      setActionError("Debes escribir lo que hiciste.");
+      return;
+    }
+
+    setSavingTaskId(finishTaskSelected.id);
+
     try {
-      const res = await fetch(`${API_URL}/workshop/tasks/${task.id}/finish`, {
-        method: "PATCH",
-        headers: authHeaders(),
-        credentials: "include",
-      });
+      let fotoEvidencia = "";
+
+      if (finishPhotoFile) {
+        fotoEvidencia = await fileToDataUrl(finishPhotoFile);
+      }
+
+      const res = await fetch(
+        `${API_URL}/workshop/tasks/${finishTaskSelected.id}/finish`,
+        {
+          method: "PATCH",
+          headers: authHeaders({
+            "Content-Type": "application/json",
+          }),
+          credentials: "include",
+          body: JSON.stringify({
+            trabajoRealizado: cleanDesc,
+            fotoEvidencia: fotoEvidencia || undefined,
+          }),
+        }
+      );
 
       if (!res.ok) {
         throw new Error(await readErrorResponse(res));
       }
 
       setActionMessage(`Tarea terminada el ${fmtNow()}.`);
+      closeFinishModal();
       await loadTasks();
-      return { ok: true };
     } catch (err) {
       setActionError(err?.message || "No se pudo terminar la tarea");
-      return { ok: false };
     } finally {
       setSavingTaskId("");
     }
@@ -429,6 +641,8 @@ export default function WorkshopMyTasks() {
 
     setSelectedTask(task || null);
     setRequestedPart("");
+    setSparePhotoFile(null);
+    setSparePhotoPreview("");
     setSpareModalOpen(true);
   }
 
@@ -437,6 +651,39 @@ export default function WorkshopMyTasks() {
     setSpareModalOpen(false);
     setSelectedTask(null);
     setRequestedPart("");
+    setSparePhotoFile(null);
+    setSparePhotoPreview("");
+  }
+
+  async function handlePhotoChange(event) {
+    const file = event?.target?.files?.[0] || null;
+
+    if (!file) {
+      setSparePhotoFile(null);
+      setSparePhotoPreview("");
+      return;
+    }
+
+    if (!String(file.type || "").startsWith("image/")) {
+      setActionError("Debes seleccionar una imagen válida.");
+      return;
+    }
+
+    try {
+      const preview = await fileToDataUrl(file);
+      setSparePhotoFile(file);
+      setSparePhotoPreview(preview);
+      setActionError("");
+    } catch (err) {
+      setActionError(err?.message || "No se pudo cargar la imagen.");
+      setSparePhotoFile(null);
+      setSparePhotoPreview("");
+    }
+  }
+
+  function removePhoto() {
+    setSparePhotoFile(null);
+    setSparePhotoPreview("");
   }
 
   async function submitSparePartRequest() {
@@ -468,6 +715,14 @@ export default function WorkshopMyTasks() {
     setSavingTaskId(selectedTask.id);
 
     try {
+      let fotoDataUrl = "";
+      let fotoNombre = "";
+
+      if (sparePhotoFile) {
+        fotoDataUrl = await fileToDataUrl(sparePhotoFile);
+        fotoNombre = String(sparePhotoFile.name || "").trim();
+      }
+
       const res = await fetch(`${API_URL}/workshop/tasks/request-part`, {
         method: "POST",
         headers: authHeaders({
@@ -479,6 +734,8 @@ export default function WorkshopMyTasks() {
           nombre: cleanPart,
           cantidad: 1,
           observacion: cleanPart,
+          fotoDataUrl: fotoDataUrl || undefined,
+          fotoNombre: fotoNombre || undefined,
         }),
       });
 
@@ -583,6 +840,10 @@ export default function WorkshopMyTasks() {
               const myRole = getMyRoleInTask(task, user?.id);
               const amResponsible = myRole === "RESPONSABLE";
               const spareAlreadyRequested = hasSparePartRequest(task);
+              const sparePartStatus = getSparePartStatus(task);
+              const parsedObservation = parseObservation(
+                getTaskObservations(task)
+              );
 
               const isHistoryTask =
                 taskStatus === "TERMINADA" || taskStatus === "CANCELADA";
@@ -607,11 +868,9 @@ export default function WorkshopMyTasks() {
                 !isSaving &&
                 !isHistoryTask;
 
-              const showActions = amResponsible && (
-                canStartRepair ||
-                canRequestSpare ||
-                canFinishTask
-              );
+              const showActions =
+                amResponsible &&
+                (canStartRepair || canRequestSpare || canFinishTask);
 
               return (
                 <article key={task.id} className="wmt-card">
@@ -630,6 +889,12 @@ export default function WorkshopMyTasks() {
                       <Pill tone={statusTone(task.status)}>
                         Tarea: {prettifyTaskStatus(task.status)}
                       </Pill>
+
+                      {sparePartStatus ? (
+                        <Pill tone={spareStatusTone(sparePartStatus)}>
+                          Repuesto: {prettifySparePartStatus(sparePartStatus)}
+                        </Pill>
+                      ) : null}
                     </div>
                   </div>
 
@@ -682,9 +947,13 @@ export default function WorkshopMyTasks() {
                     </div>
 
                     <div className="wmt-field">
-                      <div className="wmt-field__label">ÚLTIMA ACTUALIZACIÓN</div>
+                      <div className="wmt-field__label">
+                        ÚLTIMA ACTUALIZACIÓN
+                      </div>
                       <div className="wmt-field__value">
-                        {fmtDate(task?.updatedAt || task?.createdAt || task?.fecha)}
+                        {fmtDate(
+                          task?.updatedAt || task?.createdAt || task?.fecha
+                        )}
                       </div>
                     </div>
 
@@ -710,19 +979,77 @@ export default function WorkshopMyTasks() {
                       </div>
                     </div>
 
+                    {task?.trabajoRealizado ? (
+                      <div className="wmt-field wmt-field--wide">
+                        <div className="wmt-field__label">TRABAJO REALIZADO</div>
+                        <div
+                          className="wmt-observation-box"
+                          style={{ whiteSpace: "pre-line" }}
+                        >
+                          {task.trabajoRealizado}
+                        </div>
+                      </div>
+                    ) : null}
+
                     {getTaskObservations(task) ? (
                       <div className="wmt-field wmt-field--wide">
                         <div className="wmt-field__label">OBSERVACIONES</div>
-                        <div className="wmt-observation-box">
-                          {getTaskObservations(task)}
-                        </div>
+
+                        {parsedObservation.text ? (
+                          <div className="wmt-observation-box">
+                            <div style={{ whiteSpace: "pre-line" }}>
+                              {parsedObservation.text}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {parsedObservation.spareImage ? (
+                          <div style={{ marginTop: 12 }}>
+                            <div className="wmt-field__label">FOTO REPUESTO</div>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={() =>
+                                openImageViewer(
+                                  `${API_URL}${parsedObservation.spareImage}`,
+                                  "Foto repuesto"
+                                )
+                              }
+                            >
+                              Ver imagen
+                            </button>
+                          </div>
+                        ) : null}
+
+                        {parsedObservation.evidenceImage ? (
+                          <div style={{ marginTop: 12 }}>
+                            <div className="wmt-field__label">EVIDENCIA FINAL</div>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={() =>
+                                openImageViewer(
+                                  `${API_URL}${parsedObservation.evidenceImage}`,
+                                  "Evidencia final"
+                                )
+                              }
+                            >
+                              Ver imagen
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>
 
-                  {spareAlreadyRequested && !isHistoryTask ? (
-                    <div className="wmt-history-box" style={{ marginBottom: "12px" }}>
-                      Ya existe una solicitud de repuesto registrada para esta tarea.
+                  {sparePartStatus && !isHistoryTask ? (
+                    <div
+                      className="wmt-history-box"
+                      style={{ marginBottom: "12px" }}
+                    >
+                      {norm(sparePartStatus) === "ENTREGADO"
+                        ? "El repuesto ya fue entregado. Puedes continuar la reparación."
+                        : "Solicitud de repuesto enviada. Esperando entrega."}
                     </div>
                   ) : null}
 
@@ -754,7 +1081,7 @@ export default function WorkshopMyTasks() {
                         <button
                           type="button"
                           className="btn-secondary wmt-action-btn"
-                          onClick={() => finishTask(task)}
+                          onClick={() => openFinishModal(task)}
                           disabled={isSaving}
                         >
                           Terminar tarea
@@ -803,6 +1130,126 @@ export default function WorkshopMyTasks() {
             </div>
           </div>
 
+          <div className="modal-form">
+            <div>
+              <label>Foto del repuesto o daño (opcional)</label>
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: 10,
+                  marginTop: 8,
+                }}
+              >
+                <label
+                  style={{
+                    display: "inline-block",
+                    padding: "12px 14px",
+                    background: "#f1f5f9",
+                    border: "1px solid rgba(15,23,42,.08)",
+                    borderRadius: 12,
+                    cursor: savingTaskId ? "not-allowed" : "pointer",
+                    fontWeight: 600,
+                    textAlign: "center",
+                    color: "#0f172a",
+                  }}
+                >
+                  📸 Tomar foto
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handlePhotoChange}
+                    style={{ display: "none" }}
+                    disabled={!!savingTaskId}
+                  />
+                </label>
+
+                <label
+                  style={{
+                    display: "inline-block",
+                    padding: "12px 14px",
+                    background: "#ffffff",
+                    border: "1px solid rgba(15,23,42,.08)",
+                    borderRadius: 12,
+                    cursor: savingTaskId ? "not-allowed" : "pointer",
+                    fontWeight: 500,
+                    textAlign: "center",
+                    color: "#0f172a",
+                  }}
+                >
+                  🖼️ Elegir desde galería
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoChange}
+                    style={{ display: "none" }}
+                    disabled={!!savingTaskId}
+                  />
+                </label>
+              </div>
+
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 13,
+                  color: "#64748b",
+                  lineHeight: 1.35,
+                }}
+              >
+                En celular puedes tomar la foto directamente o elegir una imagen
+                guardada.
+              </div>
+
+              {sparePhotoPreview ? (
+                <div
+                  style={{
+                    marginTop: 12,
+                    border: "1px solid rgba(15,23,42,.08)",
+                    borderRadius: 14,
+                    padding: 12,
+                    background: "#fff",
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
+                  <img
+                    src={sparePhotoPreview}
+                    alt="Vista previa del repuesto"
+                    style={{
+                      width: "100%",
+                      maxHeight: 260,
+                      objectFit: "contain",
+                      borderRadius: 12,
+                      background: "#f8fafc",
+                    }}
+                  />
+
+                  <div
+                    style={{
+                      fontSize: 13,
+                      color: "#475569",
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {sparePhotoFile?.name || "Imagen seleccionada"}
+                  </div>
+
+                  <div>
+                    <button
+                      type="button"
+                      onClick={removePhoto}
+                      className="btn-secondary"
+                      disabled={!!savingTaskId}
+                    >
+                      Quitar foto
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
           <div className="modal-actions">
             <button
               type="button"
@@ -822,6 +1269,201 @@ export default function WorkshopMyTasks() {
               {savingTaskId ? "Guardando..." : "Guardar solicitud"}
             </button>
           </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={finishModalOpen}
+        onClose={closeFinishModal}
+        title="Finalizar tarea"
+        size="md"
+      >
+        <div className="wmt-modal-body">
+          <div className="wmt-modal-text">
+            Describe claramente el trabajo realizado y adjunta una foto como
+            evidencia.
+          </div>
+
+          <div className="modal-form">
+            <div>
+              <label htmlFor="finishDescription">Trabajo realizado</label>
+              <textarea
+                id="finishDescription"
+                rows={5}
+                value={finishDescription}
+                onChange={(e) => setFinishDescription(e.target.value)}
+                placeholder="Ej: Se cambió bomba hidráulica, se probaron conexiones, equipo funcionando correctamente..."
+                disabled={!!savingTaskId}
+              />
+            </div>
+          </div>
+
+          <div className="modal-form">
+            <div>
+              <label>Foto evidencia (opcional)</label>
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: 10,
+                  marginTop: 8,
+                }}
+              >
+                <label
+                  style={{
+                    display: "inline-block",
+                    padding: "12px 14px",
+                    background: "#f1f5f9",
+                    border: "1px solid rgba(15,23,42,.08)",
+                    borderRadius: 12,
+                    cursor: savingTaskId ? "not-allowed" : "pointer",
+                    fontWeight: 600,
+                    textAlign: "center",
+                    color: "#0f172a",
+                  }}
+                >
+                  📸 Tomar foto
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleFinishPhotoChange}
+                    style={{ display: "none" }}
+                    disabled={!!savingTaskId}
+                  />
+                </label>
+
+                <label
+                  style={{
+                    display: "inline-block",
+                    padding: "12px 14px",
+                    background: "#ffffff",
+                    border: "1px solid rgba(15,23,42,.08)",
+                    borderRadius: 12,
+                    cursor: savingTaskId ? "not-allowed" : "pointer",
+                    fontWeight: 500,
+                    textAlign: "center",
+                    color: "#0f172a",
+                  }}
+                >
+                  🖼️ Elegir desde galería
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFinishPhotoChange}
+                    style={{ display: "none" }}
+                    disabled={!!savingTaskId}
+                  />
+                </label>
+              </div>
+
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 13,
+                  color: "#64748b",
+                  lineHeight: 1.35,
+                }}
+              >
+                En celular puedes tomar la foto directamente o elegir una imagen
+                guardada.
+              </div>
+
+              {finishPhotoPreview ? (
+                <div
+                  style={{
+                    marginTop: 12,
+                    border: "1px solid rgba(15,23,42,.08)",
+                    borderRadius: 14,
+                    padding: 12,
+                    background: "#fff",
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
+                  <img
+                    src={finishPhotoPreview}
+                    alt="Vista previa de evidencia"
+                    style={{
+                      width: "100%",
+                      maxHeight: 260,
+                      objectFit: "contain",
+                      borderRadius: 12,
+                      background: "#f8fafc",
+                    }}
+                  />
+
+                  <div
+                    style={{
+                      fontSize: 13,
+                      color: "#475569",
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {finishPhotoFile?.name || "Imagen seleccionada"}
+                  </div>
+
+                  <div>
+                    <button
+                      type="button"
+                      onClick={removeFinishPhoto}
+                      className="btn-secondary"
+                      disabled={!!savingTaskId}
+                    >
+                      Quitar foto
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="modal-actions">
+            <button
+              type="button"
+              onClick={closeFinishModal}
+              className="btn-secondary"
+              disabled={!!savingTaskId}
+            >
+              Cancelar
+            </button>
+
+            <button
+              type="button"
+              onClick={submitFinishTask}
+              className="btn-primary"
+              disabled={!!savingTaskId || !String(finishDescription || "").trim()}
+            >
+              {savingTaskId ? "Guardando..." : "Finalizar tarea"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={imageViewerOpen}
+        onClose={closeImageViewer}
+        title={imageViewerTitle}
+        size="lg"
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: "10px",
+          }}
+        >
+          <img
+            src={imageViewerSrc}
+            alt={imageViewerTitle}
+            style={{
+              maxWidth: "100%",
+              maxHeight: "70vh",
+              borderRadius: "12px",
+              objectFit: "contain",
+            }}
+          />
         </div>
       </Modal>
     </div>

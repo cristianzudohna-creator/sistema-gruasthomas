@@ -1,5 +1,10 @@
 // ✅ Archivo: src/pages/WorkOrdersTrabajador.jsx (COMPLETO)
 // ✅ Ajustado para flujo BORRADOR / EN_PROCESO / COMPLETADA
+// ✅ NUEVO:
+// - LUGAR clickeable a Google Maps
+// - se elimina columna GENERADA
+// - se elimina botón Descargar PDF
+
 import { useEffect, useMemo, useState } from "react";
 import "./Admin.css";
 import WorkOrderDetailModal from "./WorkOrderDetailModal";
@@ -47,43 +52,6 @@ async function apiGet(path) {
   return res.json();
 }
 
-// ✅ extrae filename desde Content-Disposition si viene
-function getFilenameFromContentDisposition(cd) {
-  if (!cd) return null;
-  const m1 = /filename="([^"]+)"/i.exec(cd);
-  if (m1?.[1]) return m1[1];
-  const m2 = /filename=([^;]+)/i.exec(cd);
-  if (m2?.[1]) return m2[1].trim();
-  return null;
-}
-
-// ✅ descarga PDF como blob y fuerza "Guardar como"
-async function apiDownloadPdf(id) {
-  const res = await fetch(`${API_URL}/work-orders/${id}/pdf`, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${getToken()}` },
-    credentials: "include",
-  });
-
-  if (!res.ok) {
-    const msg = await readError(res);
-    throw new Error(msg || `PDF -> ${res.status}`);
-  }
-
-  const blob = await res.blob();
-  const cd = res.headers.get("content-disposition") || "";
-  const filename = getFilenameFromContentDisposition(cd) || `OT-${id}.pdf`;
-
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  window.URL.revokeObjectURL(url);
-}
-
 function fmtDate(v) {
   if (!v) return "-";
   const d = new Date(v);
@@ -93,16 +61,6 @@ function fmtDate(v) {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const yy = String(d.getFullYear());
   return `${dd}/${mm}/${yy}`;
-}
-
-function timeAgo(v) {
-  if (!v) return "";
-  const d = new Date(v).getTime();
-  const diff = Math.floor((Date.now() - d) / 1000);
-  if (diff < 60) return "recién";
-  if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`;
-  if (diff < 86400) return `hace ${Math.floor(diff / 3600)} h`;
-  return `hace ${Math.floor(diff / 86400)} días`;
 }
 
 function isNew(v) {
@@ -208,15 +166,25 @@ function isActiva(status) {
   return st === "ABIERTA" || st === "EN_PROCESO" || st === "RECHAZADA" || st === "COMPLETADA";
 }
 
+// ✅ NUEVO: construye link de maps
+function buildMapsUrl(rawLink, fallbackText) {
+  const link = String(rawLink || "").trim();
+  const text = String(fallbackText || "").trim();
+
+  // ✅ si ya viene un link real, usarlo
+  if (/^https?:\/\//i.test(link)) return link;
+
+  // ✅ fallback: búsqueda por dirección/texto
+  if (!text || text === "—") return "";
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(text)}`;
+}
+
 export default function WorkOrdersTrabajador() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
   const [tab, setTab] = useState("activas");
-
-  const [downloadingId, setDownloadingId] = useState(null);
-  const [downloadErr, setDownloadErr] = useState("");
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -278,21 +246,6 @@ export default function WorkOrdersTrabajador() {
     }
   }
 
-  async function downloadPdfById(id) {
-    if (!id) return;
-    if (downloadingId) return;
-
-    setDownloadErr("");
-    setDownloadingId(id);
-    try {
-      await apiDownloadPdf(id);
-    } catch (e) {
-      setDownloadErr(e.message || "Error descargando PDF");
-    } finally {
-      setDownloadingId(null);
-    }
-  }
-
   function logout() {
     localStorage.removeItem("access_token");
     window.location.href = "/login";
@@ -337,6 +290,15 @@ export default function WorkOrdersTrabajador() {
             line-height: 1.25;
             max-height: calc(1.25em * 2);
             word-break: break-word;
+          }
+          .maps-link{
+            color:#0f172a;
+            font-weight:700;
+            text-decoration:none;
+            border-bottom:1px dashed rgba(15,23,42,.25);
+          }
+          .maps-link:hover{
+            opacity:.8;
           }
         `}
       </style>
@@ -442,7 +404,6 @@ export default function WorkOrdersTrabajador() {
         </div>
 
         {err ? <div style={{ padding: "12px 14px", color: "#b00020", fontWeight: 900 }}>{err}</div> : null}
-        {downloadErr ? <div style={{ padding: "12px 14px", color: "#b00020", fontWeight: 900 }}>{downloadErr}</div> : null}
 
         <div className="table-wrap">
           <table className="table" style={{ minWidth: 1120 }}>
@@ -454,7 +415,6 @@ export default function WorkOrdersTrabajador() {
                 <th>CLIENTE</th>
                 <th>SOLICITADO POR</th>
                 <th>LUGAR</th>
-                <th>GENERADA</th>
                 <th style={{ textAlign: "right" }}>ACCIONES</th>
               </tr>
             </thead>
@@ -462,7 +422,7 @@ export default function WorkOrdersTrabajador() {
             <tbody>
               {!loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ padding: 14, opacity: 0.75 }}>
+                  <td colSpan={7} style={{ padding: 14, opacity: 0.75 }}>
                     {tab === "finalizadas"
                       ? "No hay órdenes finalizadas (Aprobadas/Cerradas) para mostrar."
                       : "No hay órdenes activas."}
@@ -476,8 +436,6 @@ export default function WorkOrdersTrabajador() {
 
                 const readOnlyTab = tab === "finalizadas";
 
-                // ✅ COMPLETADA / APROBADA / CERRADA = bloqueadas
-                // ✅ ABIERTA / EN_PROCESO / RECHAZADA = se puede abrir para seguir
                 const blockComplete =
                   readOnlyTab ||
                   st === "COMPLETADA" ||
@@ -485,7 +443,22 @@ export default function WorkOrdersTrabajador() {
                   st === "CERRADA";
 
                 const rejectReason = String(x.rejectReason || "").trim();
-                const isDownloading = downloadingId === x.id;
+
+                const lugar = x.direccionFaena || x.lugar || x.direccion || "—";
+
+// ✅ probar primero los campos donde podría venir el link real
+const rawMapsLink =
+  x.linkMaps ||
+  x.linkMapa ||
+  x.mapsLink ||
+  x.mapsUrl ||
+  x.googleMapsUrl ||
+  x.googleMapsLink ||
+  x.ubicacionUrl ||
+  x.urlMaps ||
+  "";
+
+const mapsUrl = buildMapsUrl(rawMapsLink, lugar);
 
                 return (
                   <tr key={x.id} style={nueva ? { background: "rgba(245,179,1,.06)" } : undefined}>
@@ -547,29 +520,45 @@ export default function WorkOrdersTrabajador() {
                     </td>
 
                     <td style={{ fontWeight: 900 }}>{formatSolicitadoPor(x)}</td>
-                    <td>{x.direccionFaena || x.lugar || x.direccion || "—"}</td>
-                    <td>{timeAgo(x.createdAt)}</td>
+
+                    <td>
+  {mapsUrl ? (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      
+      {/* BOTÓN BONITO */}
+      <a
+        href={mapsUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          display: "inline-block",
+          padding: "6px 10px",
+          borderRadius: 8,
+          background: "#0f172a",
+          color: "#fff",
+          fontWeight: 800,
+          fontSize: 12,
+          textDecoration: "none",
+          width: "fit-content",
+        }}
+      >
+        📍 Ver ubicación
+      </a>
+
+      {/* TEXTO CHICO OPCIONAL */}
+      <span style={{ fontSize: 12, opacity: 0.7 }}>
+        {lugar}
+      </span>
+    </div>
+  ) : (
+    "—"
+  )}
+</td>
 
                     <td style={{ textAlign: "right" }}>
                       <div style={{ display: "inline-flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
                         <button className="btn ghost" type="button" onClick={() => openDetailById(x.id)} style={{ height: 36, minWidth: 140 }}>
                           👁 Ver detalle
-                        </button>
-
-                        <button
-                          className="btn ghost"
-                          type="button"
-                          onClick={() => downloadPdfById(x.id)}
-                          disabled={!!downloadingId}
-                          style={{
-                            height: 36,
-                            minWidth: 170,
-                            opacity: !!downloadingId && !isDownloading ? 0.6 : 1,
-                            cursor: !!downloadingId && !isDownloading ? "not-allowed" : "pointer",
-                          }}
-                          title="Descargar PDF de esta OT"
-                        >
-                          {isDownloading ? "⏳ Descargando..." : "📄 Descargar PDF"}
                         </button>
 
                         <button

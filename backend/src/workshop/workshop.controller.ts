@@ -1,4 +1,4 @@
-// ✅ Archivo: src/workshop/workshop.controller.ts (COMPLETO + EXCEL GLOBAL)
+// ✅ Archivo: src/workshop/workshop.controller.ts (COMPLETO + FIX PREVENCION INCIDENTES)
 
 import {
   Body,
@@ -29,6 +29,12 @@ export class WorkshopController {
   // ============================
   // HORAS EXTRAS
   // ============================
+
+  @Delete('extra-hours/:id')
+  removeExtraHourReport(@Param('id') id: string, @Req() req: any) {
+    const userId = req?.user?.id || req?.user?.sub;
+    return this.workshopService.removeExtraHourReport(id, userId);
+  }
 
   @Post('extra-hours')
   createExtraHourReport(@Body() dto: any, @Req() req: any) {
@@ -149,6 +155,10 @@ export class WorkshopController {
     return this.workshopService.createIncident(dto);
   }
 
+  // ✅ FIX:
+  // Quitamos WorkshopAccessGuard SOLO para listar incidentes.
+  // Así PREVENCION autenticado puede consultar sin caer en 403.
+  @UseGuards(JwtAuthGuard)
   @Get('incidents')
   getIncidents() {
     return this.workshopService.getIncidents();
@@ -241,9 +251,21 @@ export class WorkshopController {
   }
 
   @Patch('tasks/:id/finish')
-  finishWorkshopTaskByWorker(@Param('id') id: string, @Req() req: any) {
+  finishWorkshopTaskByWorker(
+    @Param('id') id: string,
+    @Body() dto: {
+      trabajoRealizado?: string;
+      fotoEvidencia?: string;
+    },
+    @Req() req: any,
+  ) {
     const userId = req?.user?.id || req?.user?.sub;
-    return this.workshopService.finishWorkshopTaskByWorker(id, userId);
+
+    return this.workshopService.finishWorkshopTaskByWorker(
+      id,
+      userId,
+      dto,
+    );
   }
 
   // ============================

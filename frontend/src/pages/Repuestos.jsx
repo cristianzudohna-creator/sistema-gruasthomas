@@ -4,13 +4,34 @@
 // ✅ SOLO SUPERADMIN + trabajador ADQUISICIONES
 // ✅ Lee solicitudes desde backend
 // ✅ Permite cambiar estado: EN_COMPRA / COMPRADO / ENTREGADO
-// ✅ Muestra solo el repuesto pedido, sin prefijo técnico
+// ✅ Muestra texto limpio del repuesto pedido
+// ✅ Muestra foto del repuesto con botón "Ver imagen"
+// ✅ Compatible con local y producción
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Modal from "../components/ui/Modal";
 import "./Admin.css";
 import "./Repuestos.css";
 
-const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
+const RAW_API_URL = import.meta.env.VITE_API_URL || "/api";
+const API_URL = RAW_API_URL.replace(/\/+$/, "");
+
+// ✅ Base real para archivos
+function getFilesBaseUrl() {
+  if (/^https?:\/\//i.test(API_URL)) {
+    return API_URL.replace(/\/api$/, "");
+  }
+
+  // local con Vite
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname || "localhost";
+    return `http://${host}:3000`;
+  }
+
+  return "";
+}
+
+const FILES_URL = getFilesBaseUrl();
 
 function getToken() {
   return (
@@ -71,28 +92,6 @@ function getRequesterName(item) {
   );
 }
 
-function extractRequestedPart(item) {
-  const obs = String(item?.observaciones || "").trim();
-  if (!obs) return "-";
-
-  const lines = obs
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  const partLines = lines.filter((line) =>
-    /^REQUIERE REPUESTO\s*\(/i.test(line)
-  );
-
-  const target = partLines.length > 0 ? partLines[partLines.length - 1] : obs;
-
-  const cleaned = target
-    .replace(/^REQUIERE REPUESTO\s*\([^)]*\)\s*:\s*/i, "")
-    .trim();
-
-  return cleaned || target;
-}
-
 function getStatusLabel(status) {
   const s = norm(status);
   if (s === "ESPERANDO_REPUESTO") return "Esperando repuesto";
@@ -123,12 +122,218 @@ function canMoveToEntregado(status) {
   return norm(status) === "COMPRADO";
 }
 
+function buildFileUrl(path) {
+  const clean = String(path || "").trim();
+  if (!clean) return "";
+
+  if (/^data:image\//i.test(clean)) return clean;
+  if (/^https?:\/\//i.test(clean)) return clean;
+
+  if (clean.startsWith("/")) {
+    return `${FILES_URL}${clean}`;
+  }
+
+  return `${FILES_URL}/${clean}`;
+}
+
+function isImageLike(value) {
+  const s = String(value || "").trim();
+  if (!s) return false;
+
+  return (
+    /^data:image\//i.test(s) ||
+    /^https?:\/\/.+\.(png|jpg|jpeg|webp|gif)(\?.*)?$/i.test(s) ||
+    /^\/uploads\/.+\.(png|jpg|jpeg|webp|gif)(\?.*)?$/i.test(s) ||
+    /^uploads\/.+\.(png|jpg|jpeg|webp|gif)(\?.*)?$/i.test(s) ||
+    /^\/uploads\//i.test(s) ||
+    /^uploads\//i.test(s)
+  );
+}
+
+function pickFirstImageCandidate(candidates = []) {
+  for (const candidate of candidates) {
+    const value = String(candidate || "").trim();
+    if (!value) continue;
+    if (isImageLike(value)) return buildFileUrl(value);
+  }
+  return "";
+}
+
+function extractImageFromText(text) {
+  const content = String(text || "");
+  if (!content) return "";
+
+  const base64Match = content.match(
+    /(data:image\/(?:png|jpg|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+)/i
+  );
+  if (base64Match?.[1]) {
+    return base64Match[1];
+  }
+
+  const uploadMatch =
+    content.match(/Foto:\s*(\/uploads\/[^\s]+)/i) ||
+    content.match(/(\/uploads\/[^\s]+\.(?:png|jpg|jpeg|webp|gif))/i) ||
+    content.match(/(uploads\/[^\s]+\.(?:png|jpg|jpeg|webp|gif))/i) ||
+    content.match(/(\/uploads\/[^\s]+)/i) ||
+    content.match(/(uploads\/[^\s]+)/i);
+
+  if (uploadMatch?.[1]) {
+    return buildFileUrl(uploadMatch[1]);
+  }
+
+  const httpMatch = content.match(
+    /(https?:\/\/[^\s]+\.(?:png|jpg|jpeg|webp|gif)(?:\?[^\s]*)?)/i
+  );
+  if (httpMatch?.[1]) {
+    return httpMatch[1];
+  }
+
+  return "";
+}
+
+function cleanPartText(rawText) {
+  const obs = String(rawText || "").trim();
+  if (!obs) return "-";
+
+  let cleaned = obs
+    .replace(/data:image\/(?:png|jpg|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+/gi, "")
+    .replace(/Foto:\s*\/uploads\/[^\s]+/gi, "")
+    .replace(/Foto:\s*uploads\/[^\s]+/gi, "")
+    .replace(/\/uploads\/[^\s]+\.(?:png|jpg|jpeg|webp|gif)/gi, "")
+    .replace(/uploads\/[^\s]+\.(?:png|jpg|jpeg|webp|gif)/gi, "")
+    .replace(/^.*?REQUIERE\s+REPUESTO\s*\([^)]*\)\s*:\s*/i, "")
+    .replace(/^.*?REQUIERE\s+REPUESTO\s*:\s*/i, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  if (!cleaned) return "-";
+  return cleaned;
+}
+
+function extractRequestedPartData(item) {
+  const obs = String(item?.observaciones || "").trim();
+
+  const possibleImageCandidates = [
+    item?.photo,
+    item?.foto,
+    item?.image,
+    item?.imageUrl,
+    item?.photoUrl,
+    item?.requestedPartPhoto,
+    item?.requestedPartImage,
+    item?.requestedPartImageUrl,
+    item?.requestedPart?.photo,
+    item?.requestedPart?.foto,
+    item?.requestedPart?.image,
+    item?.requestedPart?.imageUrl,
+    item?.part?.photo,
+    item?.part?.foto,
+    item?.part?.image,
+    item?.part?.imageUrl,
+    item?.repuesto?.photo,
+    item?.repuesto?.foto,
+    item?.repuesto?.image,
+    item?.repuesto?.imageUrl,
+  ];
+
+  let imageUrl = pickFirstImageCandidate(possibleImageCandidates);
+
+  if (!imageUrl) {
+    imageUrl = extractImageFromText(obs);
+  }
+
+  const lines = obs
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const partLines = lines.filter((line) =>
+    /REQUIERE\s+REPUESTO/i.test(line)
+  );
+
+  const textSource =
+    partLines.length > 0
+      ? partLines[partLines.length - 1]
+      : lines.find(
+          (line) =>
+            !isImageLike(line) &&
+            !/^Foto:\s*/i.test(line) &&
+            !/^data:image\//i.test(line)
+        ) || obs;
+
+  let cleaned = cleanPartText(textSource);
+
+  if (!cleaned || cleaned === "-") {
+    cleaned = cleanPartText(obs);
+  }
+
+  return {
+    text: cleaned || "-",
+    imageUrl: imageUrl || "",
+  };
+}
+
+function RequestedPartContent({
+  item,
+  compact = false,
+  onOpenImage,
+}) {
+  const { text, imageUrl } = extractRequestedPartData(item);
+  const [imgError, setImgError] = useState(false);
+
+  const showImageButton = Boolean(imageUrl) && !imgError;
+
+  return (
+    <div className={`rep-part-block ${compact ? "rep-part-block--compact" : ""}`}>
+      <div className="rep-part-text">{text}</div>
+
+      {showImageButton ? (
+        <div style={{ marginTop: 10 }}>
+          <button
+            type="button"
+            className="btn-secondary rep-view-image-btn"
+            onClick={() => onOpenImage?.(imageUrl, "Foto del repuesto")}
+          >
+            Ver imagen
+          </button>
+        </div>
+      ) : null}
+
+      {imageUrl && imgError ? (
+        <div style={{ fontSize: 12, color: "#b91c1c", marginTop: 6 }}>
+          No se pudo cargar la foto.
+          <br />
+          <span style={{ wordBreak: "break-all" }}>{imageUrl}</span>
+        </div>
+      ) : null}
+
+      {/* pre-carga silenciosa */}
+      {imageUrl && !imgError ? (
+        <img
+          src={imageUrl}
+          alt=""
+          loading="lazy"
+          style={{ display: "none" }}
+          onError={() => {
+            console.error("Error cargando imagen:", imageUrl);
+            setImgError(true);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 export default function Repuestos() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  const [imageViewerOpen, setImageViewerOpen] = useState(false);
+  const [imageViewerSrc, setImageViewerSrc] = useState("");
+  const [imageViewerTitle, setImageViewerTitle] = useState("");
 
   const user = getUser();
 
@@ -146,10 +351,23 @@ export default function Repuestos() {
   const isAdquisiciones =
     role === "TRABAJADOR" && workerType === "ADQUISICIONES";
 
+  function openImageViewer(src, title = "Imagen") {
+    setImageViewerSrc(src || "");
+    setImageViewerTitle(title || "Imagen");
+    setImageViewerOpen(true);
+  }
+
+  function closeImageViewer() {
+    setImageViewerOpen(false);
+    setImageViewerSrc("");
+    setImageViewerTitle("");
+  }
+
   async function loadData() {
     try {
       setLoading(true);
       setError("");
+      setMessage("");
 
       const res = await fetch(`${API_URL}/workshop/tasks/requested-parts`, {
         headers: {
@@ -268,7 +486,9 @@ export default function Repuestos() {
         </div>
       </div>
 
-      {message ? <div className="rep-alert rep-alert--success">{message}</div> : null}
+      {message ? (
+        <div className="rep-alert rep-alert--success">{message}</div>
+      ) : null}
 
       {error ? <div className="rep-alert rep-alert--error">{error}</div> : null}
 
@@ -306,9 +526,15 @@ export default function Repuestos() {
                       </div>
 
                       <div className="rep-item__field rep-item__field--wide">
-                        <span className="rep-item__label">Repuesto solicitado</span>
-                        <span className="rep-item__value">
-                          {extractRequestedPart(item)}
+                        <span className="rep-item__label">
+                          Repuesto solicitado
+                        </span>
+                        <span className="rep-item__value rep-item__value--block">
+                          <RequestedPartContent
+                            item={item}
+                            compact
+                            onOpenImage={openImageViewer}
+                          />
                         </span>
                       </div>
 
@@ -396,7 +622,12 @@ export default function Repuestos() {
                       <tr key={item.id}>
                         <td>{item?.vehicle?.patente || "-"}</td>
                         <td>{getRequesterName(item)}</td>
-                        <td className="rep-part-cell">{extractRequestedPart(item)}</td>
+                        <td className="rep-part-cell">
+                          <RequestedPartContent
+                            item={item}
+                            onOpenImage={openImageViewer}
+                          />
+                        </td>
                         <td>{formatDate(requestDate)}</td>
                         <td>{formatTime(requestDate)}</td>
                         <td>
@@ -455,6 +686,33 @@ export default function Repuestos() {
           </>
         )}
       </div>
+
+      <Modal
+        open={imageViewerOpen}
+        onClose={closeImageViewer}
+        title={imageViewerTitle}
+        size="lg"
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: "10px",
+          }}
+        >
+          <img
+            src={imageViewerSrc}
+            alt={imageViewerTitle}
+            style={{
+              maxWidth: "100%",
+              maxHeight: "70vh",
+              borderRadius: "12px",
+              objectFit: "contain",
+            }}
+          />
+        </div>
+      </Modal>
     </div>
   );
 }

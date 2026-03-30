@@ -6,6 +6,7 @@
 // ✅ Envía empresa, createdById y helperIds
 // ✅ Ajustado al backend actual
 // ✅ FIX: ahora también incluye JEFE_TALLER
+// ✅ FIX NUEVO: ahora también incluye SUPERVISOR
 
 import { useEffect, useMemo, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -50,6 +51,7 @@ function prettyWorkerType(value) {
   }
   if (v === "MECANICO_HIDRAULICO") return "Mecánico hidráulico";
   if (v === "JEFE_TALLER") return "Jefe de taller";
+  if (v === "SUPERVISOR") return "Supervisor";
 
   return value || "Sin especialidad";
 }
@@ -126,7 +128,8 @@ export default function CreateWorkshopTaskModal({
         type === "AYUDANTE_MECANICO" ||
         type === "AYUDANTE_DE_MECANICO" ||
         type === "MECANICO_HIDRAULICO" ||
-        type === "JEFE_TALLER"
+        type === "JEFE_TALLER" ||
+        type === "SUPERVISOR"
       );
     });
   }, [workers]);
@@ -149,7 +152,7 @@ export default function CreateWorkshopTaskModal({
 
     try {
       const [workersRes, vehiclesRes] = await Promise.all([
-        fetch(`${API_URL}/users`, {
+        fetch(`${API_URL}/users?limit=100&activo=true&role=TRABAJADOR`, {
           headers: authHeaders(),
           credentials: "include",
         }),

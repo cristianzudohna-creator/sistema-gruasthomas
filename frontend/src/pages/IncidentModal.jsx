@@ -2,6 +2,9 @@
 // ✅ Modal para crear incidentes
 // ✅ Corregido para usar el componente Modal real
 // ✅ Simplificado: sin tipo, título, severidad, kilometraje ni horómetro
+// ✅ NUEVO: permite tomar/subir foto desde celular o PC
+// ✅ NUEVO: preview y eliminar foto
+// ✅ NUEVO: envía foto en base64 al backend
 
 import { useEffect, useMemo, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -58,12 +61,17 @@ export default function IncidentModal({ open, onClose, onCreated }) {
     ubicacionTexto: "",
   });
 
+  const [photoBase64, setPhotoBase64] = useState("");
+  const [photoPreview, setPhotoPreview] = useState("");
+
   function resetForm() {
     setForm({
       vehicleId: "",
       descripcion: "",
       ubicacionTexto: "",
     });
+    setPhotoBase64("");
+    setPhotoPreview("");
     setError("");
   }
 
@@ -125,6 +133,30 @@ export default function IncidentModal({ open, onClose, onCreated }) {
     setForm((prev) => ({ ...prev, [name]: value }));
   }
 
+  function handlePhotoChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      setPhotoBase64(result);
+      setPhotoPreview(result);
+    };
+
+    reader.onerror = () => {
+      setError("No se pudo leer la foto seleccionada.");
+    };
+
+    reader.readAsDataURL(file);
+  }
+
+  function removePhoto() {
+    setPhotoBase64("");
+    setPhotoPreview("");
+  }
+
   async function submit(e) {
     if (e?.preventDefault) e.preventDefault();
 
@@ -159,6 +191,7 @@ export default function IncidentModal({ open, onClose, onCreated }) {
         empresa,
         descripcion: String(form.descripcion || "").trim(),
         ubicacionTexto: String(form.ubicacionTexto || "").trim() || null,
+        foto: photoBase64 || null,
       };
 
       const res = await fetch(`${API_URL}/workshop/incidents`, {
@@ -191,7 +224,7 @@ export default function IncidentModal({ open, onClose, onCreated }) {
       open={open}
       onClose={onClose}
       title="Reportar incidente"
-      size="lg"
+      width={640}
     >
       <form onSubmit={submit} style={{ display: "grid", gap: 16 }}>
         {error ? (
@@ -258,6 +291,66 @@ export default function IncidentModal({ open, onClose, onCreated }) {
                   onChange={(e) => updateField("ubicacionTexto", e.target.value)}
                   placeholder="Ej: Lo Errázuriz 7080"
                 />
+              </div>
+            </div>
+
+            <div className="modal-form">
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label htmlFor="incidentPhoto">Foto del incidente</label>
+
+                <input
+                  id="incidentPhoto"
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handlePhotoChange}
+                />
+
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 13,
+                    opacity: 0.75,
+                  }}
+                >
+                  En celular podrás sacar la foto con la cámara o elegirla desde
+                  la galería.
+                </div>
+
+                {photoPreview ? (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      border: "1px solid rgba(0,0,0,.08)",
+                      borderRadius: 14,
+                      padding: 12,
+                      background: "#fff",
+                    }}
+                  >
+                    <img
+                      src={photoPreview}
+                      alt="Vista previa"
+                      style={{
+                        width: "100%",
+                        maxHeight: 240,
+                        objectFit: "cover",
+                        borderRadius: 12,
+                        display: "block",
+                      }}
+                    />
+
+                    <div style={{ marginTop: 10 }}>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={removePhoto}
+                        disabled={saving}
+                      >
+                        Quitar foto
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           </>

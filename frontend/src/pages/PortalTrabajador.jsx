@@ -1,4 +1,4 @@
-// ✅ Archivo: src/pages/PortalTrabajador.jsx (COMPLETO FINAL PRO + GESTIÓN TALLER)
+// ✅ Archivo: src/pages/PortalTrabajador.jsx (COMPLETO FINAL PRO + PREVENCION FIX)
 
 import { useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
@@ -56,26 +56,42 @@ export default function PortalTrabajador() {
   const isAdquisiciones =
     role === "TRABAJADOR" && workerType === "ADQUISICIONES";
 
-  const isJefeTaller = workerType === "JEFE_TALLER";
+  const isPrevencion =
+    role === "TRABAJADOR" && workerType === "PREVENCION";
 
+  // 🔥 FIX: SUPERVISOR incluido como jefe de taller
+  const isJefeTaller =
+    workerType === "JEFE_TALLER" || workerType === "SUPERVISOR";
+
+  // 🔥 FIX: SUPERVISOR ahora es trabajador de taller
   const isWorkshopWorker =
     workerType === "JEFE_TALLER" ||
+    workerType === "SUPERVISOR" ||
     workerType === "MECANICO" ||
     workerType === "AYUDANTE_DE_MECANICO" ||
     workerType === "AYUDANTE_MECANICO" ||
     workerType === "MECANICO_HIDRAULICO";
 
+  // 🔥 FIX: SUPERVISOR puede usar horas extras
   const canUseExtraHours =
     workerType === "JEFE_TALLER" ||
+    workerType === "SUPERVISOR" ||
     workerType === "MECANICO" ||
     workerType === "AYUDANTE_DE_MECANICO" ||
     workerType === "AYUDANTE_MECANICO" ||
     workerType === "MECANICO_HIDRAULICO";
 
   const canReportIncident =
-    workerType === "OPERADOR" || workerType === "RIGGER";
+    workerType === "OPERADOR" ||
+    workerType === "RIGGER" ||
+    workerType === "PREVENCION";
 
-  const canUseWorkOrders = !isWorkshopWorker && !isAdquisiciones;
+  // 🔥 FIX CLAVE: PREVENCION NO ve OT
+  const canUseWorkOrders =
+    !isWorkshopWorker &&
+    !isAdquisiciones &&
+    !isPrevencion &&
+    workerType !== "SUPERVISOR";
 
   function onLogout() {
     logout();
@@ -104,7 +120,9 @@ export default function PortalTrabajador() {
           <div className="ptw-hero__text">
             <h1 className="ptw-title">Portal del Trabajador</h1>
             <p className="ptw-subtitle">
-              {isWorkshopWorker
+              {isPrevencion
+                ? "Acceso rápido para reportar incidentes"
+                : isWorkshopWorker
                 ? "Acceso rápido a incidentes, tareas y horas extras"
                 : "Acceso rápido a formularios"}
             </p>
@@ -132,8 +150,7 @@ export default function PortalTrabajador() {
         </section>
 
         <section className="ptw-grid">
-
-          {/* 🔥 NUEVA CARD SOLO JEFE TALLER */}
+          {/* 🔥 JEFE TALLER + SUPERVISOR */}
           {isJefeTaller && (
             <button
               className="ptw-card ptw-card--admin"
@@ -142,9 +159,7 @@ export default function PortalTrabajador() {
               <div className="ptw-card__top">
                 <div className="ptw-icon">🛠️</div>
                 <div>
-                  <div className="ptw-card__title">
-                    Gestión de Taller
-                  </div>
+                  <div className="ptw-card__title">Gestión de Taller</div>
                   <div className="ptw-card__sub">
                     Crear tareas, asignar incidentes y gestionar taller
                   </div>
@@ -158,7 +173,7 @@ export default function PortalTrabajador() {
             </button>
           )}
 
-          {/* ORDENES */}
+          {/* ✅ OT solo para trabajadores permitidos */}
           {canUseWorkOrders && (
             <button
               className="ptw-card"
@@ -179,7 +194,7 @@ export default function PortalTrabajador() {
             </button>
           )}
 
-          {/* TALLER */}
+          {/* 🔥 TALLER */}
           {isWorkshopWorker && (
             <>
               <button
@@ -192,9 +207,7 @@ export default function PortalTrabajador() {
                     <div className="ptw-card__title">
                       Mis incidentes asignados
                     </div>
-                    <div className="ptw-card__sub">
-                      Revisar incidentes
-                    </div>
+                    <div className="ptw-card__sub">Revisar incidentes</div>
                   </div>
                   <div className="ptw-badge">Disponible</div>
                 </div>
@@ -210,9 +223,7 @@ export default function PortalTrabajador() {
                   <div className="ptw-icon">🔧</div>
                   <div>
                     <div className="ptw-card__title">Mis tareas de taller</div>
-                    <div className="ptw-card__sub">
-                      Revisar trabajos
-                    </div>
+                    <div className="ptw-card__sub">Revisar trabajos</div>
                   </div>
                   <div className="ptw-badge">Disponible</div>
                 </div>
@@ -236,9 +247,7 @@ export default function PortalTrabajador() {
                     <div className="ptw-badge">Nuevo</div>
                   </div>
 
-                  <div className="ptw-card__cta">
-                    Ir a Horas Extras →
-                  </div>
+                  <div className="ptw-card__cta">Ir a Horas Extras →</div>
                 </button>
               )}
             </>
@@ -253,12 +262,8 @@ export default function PortalTrabajador() {
               <div className="ptw-card__top">
                 <div className="ptw-icon">🚨</div>
                 <div>
-                  <div className="ptw-card__title">
-                    Reportar incidente
-                  </div>
-                  <div className="ptw-card__sub">
-                    Informar falla
-                  </div>
+                  <div className="ptw-card__title">Reportar incidente</div>
+                  <div className="ptw-card__sub">Informar falla</div>
                 </div>
                 <div className="ptw-badge">Disponible</div>
               </div>
@@ -271,6 +276,5 @@ export default function PortalTrabajador() {
     </div>
   );
 }
-
 
 

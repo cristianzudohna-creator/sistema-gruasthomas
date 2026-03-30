@@ -64,6 +64,7 @@ export class UpdateWorkshopTaskDto {
   @MaxLength(2000)
   diagnostico?: string;
 
+  // ✅ YA EXISTE → LO USAREMOS COMO DESCRIPCIÓN FINAL
   @IsOptional()
   @IsString()
   @MaxLength(4000)
@@ -85,4 +86,9 @@ export class UpdateWorkshopTaskDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   actualCost?: number;
+
+  // ✅ NUEVO: FOTO EVIDENCIA (base64)
+  @IsOptional()
+  @IsString()
+  fotoEvidencia?: string;
 }

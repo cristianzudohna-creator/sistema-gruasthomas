@@ -15,6 +15,12 @@
 // - Se ocultan acciones operativas cuando ya están cerradas
 // - PERO se mantiene visible el botón Eliminar incluso en historial
 // - Botón volver al portal
+// ✅ FIX NUEVO:
+// - Si observaciones trae /uploads/... ya no muestra la ruta cruda
+// - Muestra botón "📷 Ver foto"
+// - Abre la foto usando la URL real del backend
+// - La foto se muestra en modal preview
+// - Incidentes ahora también muestran su foto si existe incident.fotoUrl
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -24,6 +30,7 @@ import IncidentModal from "./IncidentModal";
 import AssignIncidentModal from "./AssignIncidentModal";
 import CreateWorkshopTaskModal from "./CreateWorkshopTaskModal";
 import ConfirmModal from "../components/ui/ConfirmModal";
+import Modal from "../components/ui/Modal";
 
 const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
 
@@ -209,6 +216,71 @@ function getTaskObservations(task) {
   );
 }
 
+function parseObservationWithImage(text) {
+  const raw = String(text || "").trim();
+  if (!raw) {
+    return {
+      cleanText: "",
+      imageUrl: "",
+    };
+  }
+
+  const match = raw.match(/(\/uploads\/[^\s]+)/i);
+  const imageUrl = match?.[1] || "";
+
+  let cleanText = raw;
+  if (imageUrl) {
+    cleanText = cleanText.replace(imageUrl, "").trim();
+  }
+
+  cleanText = cleanText
+    .replace(/\s+📸\s*Foto:\s*$/i, "")
+    .replace(/\s+📸\s*Evidencia:\s*$/i, "")
+    .replace(/📸\s*Foto:\s*$/i, "")
+    .replace(/📸\s*Evidencia:\s*$/i, "")
+    .trim();
+
+  return {
+    cleanText,
+    imageUrl,
+  };
+}
+
+function getBackendOrigin() {
+  const api = String(API_URL || "").trim();
+
+  if (!api || api === "/api") {
+    return "http://localhost:3000";
+  }
+
+  if (api.startsWith("http://") || api.startsWith("https://")) {
+    return api.replace(/\/api\/?$/, "");
+  }
+
+  if (api.startsWith("/")) {
+    return window.location.origin;
+  }
+
+  return window.location.origin;
+}
+
+function buildUploadUrl(imagePath) {
+  const raw = String(imagePath || "").trim();
+  if (!raw) return "";
+
+  if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    return raw;
+  }
+
+  const backendOrigin = getBackendOrigin();
+
+  if (raw.startsWith("/")) {
+    return `${backendOrigin}${raw}`;
+  }
+
+  return `${backendOrigin}/${raw}`;
+}
+
 function prettifyTaskStatus(value) {
   const v = norm(value);
   if (v === "PENDIENTE") return "Pendiente";
@@ -266,8 +338,11 @@ export default function Incidents() {
   const [deletingTaskId, setDeletingTaskId] = useState(null);
 
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  const [confirmDeleteType, setConfirmDeleteType] = useState(null); // "incident" | "task"
+  const [confirmDeleteType, setConfirmDeleteType] = useState(null);
   const [confirmDeleteItem, setConfirmDeleteItem] = useState(null);
+
+  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [selectedImage, setSelectedImage] = useState("");
 
   const token = useMemo(() => getToken(), []);
   const user = useMemo(() => getUserFromStorage(), []);
@@ -283,7 +358,8 @@ export default function Incidents() {
   );
 
   const isJefeTaller =
-    role === "TRABAJADOR" && workerType === "JEFE_TALLER";
+    role === "TRABAJADOR" &&
+    (workerType === "JEFE_TALLER" || workerType === "SUPERVISOR");
 
   const canCreateIncident =
     role === "SUPERADMIN" ||
@@ -309,6 +385,16 @@ export default function Incidents() {
 
   function goBackToPortal() {
     navigate("/trabajador");
+  }
+
+  function openImageModal(url) {
+    setSelectedImage(url);
+    setImageModalOpen(true);
+  }
+
+  function closeImageModal() {
+    setSelectedImage("");
+    setImageModalOpen(false);
   }
 
   function authHeaders(extra = {}) {
@@ -700,6 +786,7 @@ export default function Incidents() {
                       canManageIncidents && !isClosed;
 
                     const canShowDeleteIncident = canManageIncidents;
+                    const incidentPhotoUrl = buildUploadUrl(incident?.fotoUrl);
 
                     return (
                       <article key={incident.id} className="inc-card">
@@ -734,6 +821,21 @@ export default function Incidents() {
                             <b>FECHA</b>{" "}
                             {fmtDate(incident.reportadoEn || incident.createdAt)}
                           </div>
+
+                          {incident?.fotoUrl ? (
+                            <div className="inc-meta__item">
+                              <b>FOTO</b>
+                              <div style={{ marginTop: 8 }}>
+                                <button
+                                  type="button"
+                                  onClick={() => openImageModal(incidentPhotoUrl)}
+                                  className="btn-secondary inc-action-btn"
+                                >
+                                  📷 Ver foto
+                                </button>
+                              </div>
+                            </div>
+                          ) : null}
 
                           <div className="inc-meta__item">
                             <b>RESPONSABLE</b>{" "}
@@ -850,6 +952,10 @@ export default function Incidents() {
                       taskStatus === "TERMINADA" || taskStatus === "CANCELADA";
 
                     const canShowDeleteTask = canDeleteWorkshopTask;
+                    const observations = getTaskObservations(task);
+                    const { cleanText, imageUrl } =
+                      parseObservationWithImage(observations);
+                    const finalImageUrl = buildUploadUrl(imageUrl);
 
                     return (
                       <article key={task.id} className="inc-card">
@@ -907,9 +1013,22 @@ export default function Incidents() {
                             )}
                           </div>
 
-                          {getTaskObservations(task) ? (
+                          {observations ? (
                             <div className="inc-meta__item">
-                              <b>OBSERVACIONES</b> {getTaskObservations(task)}
+                              <b>OBSERVACIONES</b>{" "}
+                              {cleanText ? <span>{cleanText}</span> : null}
+
+                              {finalImageUrl ? (
+                                <div style={{ marginTop: 8 }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => openImageModal(finalImageUrl)}
+                                    className="btn-secondary inc-action-btn"
+                                  >
+                                    📷 Ver foto
+                                  </button>
+                                </div>
+                              ) : null}
                             </div>
                           ) : null}
                         </div>
@@ -981,6 +1100,39 @@ export default function Incidents() {
         confirmText="Sí, eliminar"
         cancelText="Cancelar"
       />
+
+      <Modal
+        open={imageModalOpen}
+        onClose={closeImageModal}
+        title="Vista de imagen"
+        subtitle="Evidencia o foto del repuesto"
+        width={900}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            minHeight: 240,
+          }}
+        >
+          {selectedImage ? (
+            <img
+              src={selectedImage}
+              alt="Evidencia"
+              style={{
+                maxWidth: "100%",
+                maxHeight: "70vh",
+                objectFit: "contain",
+                borderRadius: 12,
+                boxShadow: "0 10px 24px rgba(0,0,0,.12)",
+              }}
+            />
+          ) : (
+            <div style={{ opacity: 0.7 }}>No hay imagen disponible</div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

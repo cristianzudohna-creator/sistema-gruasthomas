@@ -79,28 +79,30 @@ export class WorkshopService {
   }
 
   private async ensureWorkshopTaskExists(
-    id: string,
-    tx?: Prisma.TransactionClient,
-  ) {
-    const db = tx ?? this.prisma;
+  id: string,
+  tx?: Prisma.TransactionClient,
+) {
+  const db = tx ?? this.prisma;
 
-    const task = await db.workshopTask.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        incidentId: true,
-        status: true,
-        startedAt: true,
-        closedAt: true,
-      },
-    });
+  const task = await db.workshopTask.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      incidentId: true,
+      status: true,
+      startedAt: true,
+      closedAt: true,
+      observaciones: true,
+      trabajoRealizado: true,
+    },
+  });
 
-    if (!task) {
-      throw new NotFoundException('Tarea de taller no encontrada');
-    }
-
-    return task;
+  if (!task) {
+    throw new NotFoundException('Tarea de taller no encontrada');
   }
+
+  return task;
+}
 
   private async getTaskAssignmentForUser(
     workshopTaskId: string,
@@ -604,15 +606,18 @@ export class WorkshopService {
     }
 
     if (
-      user.role === 'TRABAJADOR' &&
-      user.workerType === WorkerType.JEFE_TALLER
-    ) {
-      return user;
-    }
+  user.role === 'TRABAJADOR' &&
+  (
+    user.workerType === WorkerType.JEFE_TALLER ||
+    user.workerType === WorkerType.SUPERVISOR
+  )
+) {
+  return user;
+}
 
-    throw new BadRequestException(
-      'Solo jefe de taller o superadmin pueden firmar/revisar reportes',
-    );
+throw new BadRequestException(
+  'Solo jefe de taller, supervisor o superadmin pueden firmar/revisar reportes',
+);
   }
 
   private async ensureExtraHoursAdminAccess(userId: string) {
@@ -666,24 +671,25 @@ export class WorkshopService {
     const user = await this.getUserForExtraHours(userId);
 
     const allowedWorkerTypes: WorkerType[] = [
-      WorkerType.MECANICO,
-      WorkerType.AYUDANTE_DE_MECANICO,
-      WorkerType.JEFE_TALLER,
-    ];
+  WorkerType.MECANICO,
+  WorkerType.AYUDANTE_DE_MECANICO,
+  WorkerType.JEFE_TALLER,
+  WorkerType.SUPERVISOR,
+];
 
-    if (user.role !== 'SUPERADMIN') {
-      if (!user.workerType || !allowedWorkerTypes.includes(user.workerType)) {
-        throw new BadRequestException(
-          'Solo mecánico, ayudante de mecánico o jefe de taller pueden crear reportes de horas extras',
-        );
-      }
+if (user.role !== 'SUPERADMIN') {
+  if (!user.workerType || !allowedWorkerTypes.includes(user.workerType)) {
+    throw new BadRequestException(
+      'Solo mecánico, ayudante de mecánico, jefe de taller o supervisor pueden crear reportes de horas extras',
+    );
+  }
 
-      if (!user.empresa) {
-        throw new BadRequestException(
-          'El trabajador no tiene empresa asignada',
-        );
-      }
-    }
+  if (!user.empresa) {
+    throw new BadRequestException(
+      'El trabajador no tiene empresa asignada',
+    );
+  }
+}
 
     const descripcionTrabajo = String(dto?.descripcionTrabajo || '').trim();
     if (!descripcionTrabajo) {
@@ -771,17 +777,20 @@ export class WorkshopService {
     }
 
     if (
-      user.role === 'TRABAJADOR' &&
-      user.workerType === WorkerType.JEFE_TALLER
-    ) {
-      if (user.empresa && report.empresa && user.empresa !== report.empresa) {
-        throw new BadRequestException(
-          'No puedes ver reportes de otra empresa',
-        );
-      }
+  user.role === 'TRABAJADOR' &&
+  (
+    user.workerType === WorkerType.JEFE_TALLER ||
+    user.workerType === WorkerType.SUPERVISOR
+  )
+) {
+  if (user.empresa && report.empresa && user.empresa !== report.empresa) {
+    throw new BadRequestException(
+      'No puedes ver reportes de otra empresa',
+    );
+  }
 
-      return report;
-    }
+  return report;
+}
 
     if (report.trabajadorId !== user.id) {
       throw new BadRequestException(
@@ -1255,65 +1264,162 @@ export class WorkshopService {
     });
   }
 
+  async removeExtraHourReport(id: string, userId: string) {
+  const report = await this.prisma.workshopExtraHourReport.findUnique({
+    where: { id },
+    include: {
+      trabajador: true,
+      firmadoPor: true,
+    },
+  });
+
+  if (!report) {
+    throw new NotFoundException('Reporte de horas extras no encontrado');
+  }
+
+  const user = await this.prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      activo: true,
+      role: true,
+      workerType: true,
+      empresa: true,
+    },
+  });
+
+  if (!user) {
+    throw new NotFoundException('Usuario no encontrado');
+  }
+
+  if (!user.activo) {
+    throw new BadRequestException('Usuario inactivo');
+  }
+
+  const canDeleteOwnReport = report.trabajadorId === user.id;
+
+  const canDeleteAsManager =
+    user.role === Role.SUPERADMIN ||
+    (user.role === Role.TRABAJADOR &&
+      (
+        user.workerType === WorkerType.JEFE_TALLER ||
+        user.workerType === WorkerType.SUPERVISOR
+      ));
+
+  if (!canDeleteOwnReport && !canDeleteAsManager) {
+    throw new BadRequestException(
+      'No tienes permisos para eliminar este reporte',
+    );
+  }
+
+  if (
+    user.role !== Role.SUPERADMIN &&
+    user.empresa &&
+    report.empresa &&
+    user.empresa !== report.empresa
+  ) {
+    throw new BadRequestException(
+      'No puedes eliminar reportes de otra empresa',
+    );
+  }
+
+  await this.prisma.workshopExtraHourReport.delete({
+    where: { id },
+  });
+
+  return { message: 'Reporte eliminado correctamente' };
+}
+
   // ============================
   // INCIDENTES
   // ============================
 
   async createIncident(dto: CreateIncidentDto) {
-    const patente = normalizePlate(dto.patente);
+  const patente = normalizePlate(dto.patente);
 
-    if (!patente) {
-      throw new BadRequestException('La patente es obligatoria');
+  if (!patente) {
+    throw new BadRequestException('La patente es obligatoria');
+  }
+
+  const vehicles = await this.prisma.vehicle.findMany({
+    where: {
+      activo: true,
+    },
+    select: {
+      id: true,
+      patente: true,
+    },
+  });
+
+  const vehicle = vehicles.find(
+    (v) => normalizePlate(v.patente) === patente,
+  );
+
+  if (!vehicle) {
+    throw new NotFoundException('No se encontró un vehículo con esa patente');
+  }
+
+  // ============================
+  // 🔥 FOTO (NUEVO)
+  // ============================
+  let fotoUrl: string | null = null;
+
+  if (dto.foto) {
+    const buffer = this.parseImageDataUrl(dto.foto);
+
+    if (buffer) {
+      const uploadDir = path.join(
+        process.cwd(),
+        'uploads',
+        'incidents',
+      );
+
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+
+      const fileName = `incident_${Date.now()}.jpg`;
+      const filePath = path.join(uploadDir, fileName);
+
+      fs.writeFileSync(filePath, buffer);
+
+      fotoUrl = `/uploads/incidents/${fileName}`;
     }
+  }
 
-    const vehicles = await this.prisma.vehicle.findMany({
-      where: {
-        activo: true,
+  return this.prisma.vehicleIncident.create({
+    data: {
+      vehicle: {
+        connect: { id: vehicle.id },
       },
-      select: {
-        id: true,
-        patente: true,
+      reportedBy: {
+        connect: { id: dto.reportedById },
       },
-    });
+      empresa: dto.empresa,
+      type: 'OTRO',
+      severity: 'MEDIA',
+      descripcion: dto.descripcion,
+      ubicacionTexto: dto.ubicacionTexto,
 
-    const vehicle = vehicles.find(
-      (v) => normalizePlate(v.patente) === patente,
-    );
-
-    if (!vehicle) {
-      throw new NotFoundException('No se encontró un vehículo con esa patente');
-    }
-
-    return this.prisma.vehicleIncident.create({
-      data: {
-        vehicle: {
-          connect: { id: vehicle.id },
-        },
-        reportedBy: {
-          connect: { id: dto.reportedById },
-        },
-        empresa: dto.empresa,
-        type: 'OTRO',
-        severity: 'MEDIA',
-        descripcion: dto.descripcion,
-        ubicacionTexto: dto.ubicacionTexto,
-      },
-      include: {
-        vehicle: true,
-        reportedBy: true,
-        workshopTasks: {
-          include: {
-            assignedTo: true,
-            assignments: {
-              include: {
-                user: true,
-              },
+      // 🔥 GUARDAR FOTO
+      fotoUrl,
+    },
+    include: {
+      vehicle: true,
+      reportedBy: true,
+      workshopTasks: {
+        include: {
+          assignedTo: true,
+          assignments: {
+            include: {
+              user: true,
             },
           },
         },
       },
-    });
-  }
+    },
+  });
+}
 
   async getIncidents() {
     return this.prisma.vehicleIncident.findMany({
@@ -1899,7 +2005,15 @@ export class WorkshopService {
   async getRequestedPartsTasks() {
     return this.prisma.workshopTask.findMany({
       where: {
-        status: WorkshopTaskStatus.ESPERANDO_REPUESTO,
+        OR: [
+          { status: WorkshopTaskStatus.ESPERANDO_REPUESTO },
+          { status: WorkshopTaskStatus.EN_COMPRA },
+          { status: WorkshopTaskStatus.COMPRADO },
+          { status: WorkshopTaskStatus.ENTREGADO },
+        ],
+        observaciones: {
+          contains: 'REQUIERE REPUESTO',
+        },
       },
       include: {
         vehicle: true,
@@ -2368,57 +2482,112 @@ export class WorkshopService {
     return result;
   }
 
-  async finishWorkshopTaskByWorker(taskId: string, userId: string) {
-    const task = await this.ensureWorkshopTaskExists(taskId);
-    await this.ensureResponsibleAssignment(taskId, userId);
+  async finishWorkshopTaskByWorker(
+  taskId: string,
+  userId: string,
+  dto?: {
+    trabajoRealizado?: string;
+    fotoEvidencia?: string;
+  },
+) {
+  const task = await this.ensureWorkshopTaskExists(taskId);
+  await this.ensureResponsibleAssignment(taskId, userId);
 
-    if (task.status === WorkshopTaskStatus.CANCELADA) {
-      throw new BadRequestException(
-        'No se puede terminar una tarea cancelada',
-      );
+  if (task.status === WorkshopTaskStatus.CANCELADA) {
+    throw new BadRequestException(
+      'No se puede terminar una tarea cancelada',
+    );
+  }
+
+  if (task.status === WorkshopTaskStatus.TERMINADA) {
+    throw new BadRequestException('La tarea ya está terminada');
+  }
+
+  // =========================
+  // 📸 GUARDAR FOTO EVIDENCIA
+  // =========================
+  let imagePath: string | null = null;
+
+  if (dto?.fotoEvidencia) {
+    const buffer = this.parseImageDataUrl(dto.fotoEvidencia);
+
+    if (buffer) {
+      const uploadDir = path.join(process.cwd(), 'uploads/workshop-evidence');
+
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+
+      const fileName = `evidence_${Date.now()}_${Math.random()
+        .toString(36)
+        .substring(2, 8)}.jpg`;
+
+      const fullPath = path.join(uploadDir, fileName);
+
+      fs.writeFileSync(fullPath, buffer);
+
+      imagePath = `/uploads/workshop-evidence/${fileName}`;
     }
+  }
 
-    if (task.status === WorkshopTaskStatus.TERMINADA) {
-      throw new BadRequestException('La tarea ya está terminada');
-    }
+  // =========================
+  // 📝 TEXTO FINAL
+  // =========================
+  const trabajoRealizado = String(dto?.trabajoRealizado || '').trim();
 
-    const updatedTask = await this.prisma.workshopTask.update({
-      where: { id: taskId },
-      data: {
-        status: WorkshopTaskStatus.TERMINADA,
-        startedAt: task.startedAt ?? new Date(),
-        closedAt: new Date(),
-        closedBy: {
-          connect: { id: userId },
+  // =========================
+  // 💾 UPDATE
+  // =========================
+  const updatedTask = await this.prisma.workshopTask.update({
+    where: { id: taskId },
+    data: {
+      status: WorkshopTaskStatus.TERMINADA,
+      startedAt: task.startedAt ?? new Date(),
+      closedAt: new Date(),
+      closedBy: {
+        connect: { id: userId },
+      },
+
+      // ✅ NUEVO
+      trabajoRealizado: trabajoRealizado || undefined,
+
+      // ✅ GUARDAMOS EN OBSERVACIONES (como haces con repuestos)
+      observaciones: imagePath
+  ? task.observaciones?.trim()
+    ? `${task.observaciones}\n📸 Evidencia: ${imagePath}`
+    : `📸 Evidencia: ${imagePath}`
+  : task.observaciones,
+    },
+    include: {
+      vehicle: true,
+      incident: true,
+      createdBy: true,
+      assignedTo: true,
+      closedBy: true,
+      assignments: {
+        include: {
+          user: true,
         },
       },
-      include: {
-        vehicle: true,
-        incident: true,
-        createdBy: true,
-        assignedTo: true,
-        closedBy: true,
-        assignments: {
-          include: {
-            user: true,
-          },
-        },
-        partsUsed: true,
+      partsUsed: true,
+    },
+  });
+
+  // =========================
+  // 🔁 INCIDENTE → RESUELTO
+  // =========================
+  if (updatedTask.incidentId) {
+    await this.prisma.vehicleIncident.update({
+      where: { id: updatedTask.incidentId },
+      data: {
+        status: VehicleIncidentStatus.RESUELTO,
+        cerradoEn: new Date(),
       },
     });
-
-    if (updatedTask.incidentId) {
-      await this.prisma.vehicleIncident.update({
-        where: { id: updatedTask.incidentId },
-        data: {
-          status: VehicleIncidentStatus.RESUELTO,
-          cerradoEn: new Date(),
-        },
-      });
-    }
-
-    return updatedTask;
   }
+
+  return updatedTask;
+}
 
   // ============================
   // REPUESTOS

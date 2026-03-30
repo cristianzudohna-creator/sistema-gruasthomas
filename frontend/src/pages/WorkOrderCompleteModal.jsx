@@ -621,7 +621,12 @@ export default function WorkOrderCompleteModal({
     if (!normalizeText(f.llegadaPlanta)) e.llegadaPlanta = "Obligatorio";
     else if (!isValidHora(f.llegadaPlanta)) e.llegadaPlanta = "HH:MM";
 
-    if (normalizeText(f.colacion) && !isValidHora(f.colacion)) e.colacion = "HH:MM";
+    if (normalizeText(f.colacion)) {
+  const n = Number(f.colacion);
+  if (isNaN(n) || n < 0) {
+    e.colacion = "Debe ser un número válido";
+  }
+}
 
     if (!normalizeText(f.movimientos)) e.movimientos = "Obligatorio";
 
@@ -957,14 +962,38 @@ export default function WorkOrderCompleteModal({
                   error={errors.llegadaPlanta}
                 />
 
-                <LabeledInput
-                  label="Horas de colación (opcional)"
-                  placeholder="Ej: 01:00"
-                  value={f.colacion}
-                  onChange={(e) => setField("colacion", e.target.value)}
-                  disabled={saving || savingDraft}
-                  error={errors.colacion}
-                />
+                <div>
+  <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.75, marginBottom: 6 }}>
+    Horas de colación (opcional)
+  </div>
+
+  <input
+    type="number"
+    min="0"
+    max="12"
+    step="1"
+    className="gt-input"
+    placeholder="Ej: 1"
+    value={f.colacion ?? ""}
+    onChange={(e) =>
+      setField(
+        "colacion",
+        e.target.value === "" ? "" : Number(e.target.value)
+      )
+    }
+    disabled={saving || savingDraft}
+  />
+
+  <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4 }}>
+    Cantidad de horas (ej: 1, 2, 3)
+  </div>
+
+  {errors.colacion && (
+    <div style={{ color: "#dc2626", fontSize: 12, marginTop: 4 }}>
+      {errors.colacion}
+    </div>
+  )}
+</div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                   <LabeledInput

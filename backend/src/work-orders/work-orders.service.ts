@@ -92,6 +92,7 @@ import ExcelJS = require("exceljs");
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { PassThrough } from "stream";
+import * as path from "path";
 
 function cleanStr(v: any): string | null {
   const s = String(v ?? "").trim();
@@ -2287,10 +2288,11 @@ export class WorkOrdersService {
 
     doc.font("Helvetica").fontSize(9).fillColor("#111");
     doc.text("Sociedad de Transportes Thomas Limitada", left, y, { width: w - 160 });
-    doc.text("Arriendo de equipos para transporte de carga y movimientos de izaje", left, y + 12, {
+    doc.text("R.U.T 76.030.114-0", left, y + 12, {width: w - 160,});
+    doc.text("Arriendo de equipos para transporte de carga y movimientos de izaje", left, y + 24, {
       width: w - 160,
     });
-    doc.text("info@gruasthomas.cl  •  www.gruasthomas.cl", left, y + 24, { width: w - 160 });
+    doc.text("info@gruasthomas.cl  •  www.gruasthomas.cl", left, y + 36, { width: w - 160 });
 
     const logoPath = getLogoPath();
     if (logoPath) {
@@ -2379,7 +2381,7 @@ export class WorkOrdersService {
     doc.font("Helvetica-Bold").fontSize(9.5).fillColor("#111");
     doc.text(`Recibí Conforme : ${recNombre || "—"}`, left, y, { width: w });
 
-    y += 70;
+    y += 50;
 
     const rutX1 = left;
     const rutX2 = left + colW;
@@ -2399,6 +2401,61 @@ export class WorkOrdersService {
     doc.font("Helvetica").fontSize(8.7).fillColor("#111");
     doc.text("R.U.T.", rutX1, labelY, { width: rutX2 - rutX1, align: "center" });
     doc.text("Firma", firmaX1, labelY, { width: firmaX2 - firmaX1, align: "center" });
+    // ============================
+// 🔵 FRANJA AZUL
+// ============================
+const footerX = 52;
+const footerY = 760;
+const footerW = 470;
+const footerH = 26;
+
+doc
+  .save()
+  .fillColor("#6f96b7")
+  .rect(footerX, footerY, footerW, footerH)
+  .fill()
+  .restore();
+
+// Texto
+doc
+  .fillColor("#ffffff")
+  .font("Helvetica")
+  .fontSize(8.5)
+  .text(
+    "Horacio Román Salinas 2080, Cerrillos - Santiago",
+    footerX,
+    footerY + 5,
+    { width: footerW, align: "center" }
+  );
+
+doc
+  .text(
+    "Fonos (56-2) 2741 9885 - (56-2) 2742 0808 - Móvil: (56-9) 7108 0758",
+    footerX,
+    footerY + 14,
+    { width: footerW, align: "center" }
+  );
+
+// ============================
+// 🟠 LOGO SGS
+// ============================
+
+const sgsPath = path.join(process.cwd(), "uploads/branding/sgs.png");
+
+// ============================
+// 🟠 LOGO SGS (AJUSTADO PRO)
+// ============================
+
+const logoSize = 50;
+
+doc.image(
+  sgsPath,
+  footerX + footerW - logoSize + 10, // más a la derecha
+  footerY - 12, // un poco más arriba
+  {
+    width: logoSize,
+  }
+);
 
     const sigBuf = getSignatureBuffer(wo as any, id);
     if (sigBuf) {
@@ -2421,6 +2478,8 @@ export class WorkOrdersService {
     return { buffer, filename };
   }
 }
+
+
 
 
 

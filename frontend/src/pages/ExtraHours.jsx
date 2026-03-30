@@ -1,16 +1,20 @@
 // ✅ Archivo: src/pages/ExtraHours.jsx (COMPLETO)
 // ✅ SUPERADMIN puede crear + revisar
 // ✅ JEFE_TALLER puede crear + revisar + firmar/rechazar
+// ✅ SUPERVISOR puede crear + revisar + firmar/rechazar
 // ✅ CONTROL_FLOTA solo revisa
 // ✅ Mecánicos y ayudantes crean y ven lo suyo
 // ✅ FIX UI: se elimina TRABAJADOR y FECHA FIRMA de la card
 // ✅ NUEVO: botón Volver al portal + Cerrar sesión
 // ✅ NUEVO: firma real con canvas (sin prompt)
+// ✅ NUEVO: botón eliminar reporte
+// ✅ NUEVO: eliminar con ConfirmModal bonito
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Admin.css";
 import "./ExtraHours.css";
+import ConfirmModal from "../components/ui/ConfirmModal";
 
 const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
 
@@ -68,6 +72,7 @@ function prettyWorkerType(value) {
   }
   if (v === "MECANICO_HIDRAULICO") return "Mecánico hidráulico";
   if (v === "JEFE_TALLER") return "Jefe de taller";
+  if (v === "SUPERVISOR") return "Supervisor";
   if (v === "CONTROL_FLOTA") return "Control flota";
   if (v === "SUPERADMIN") return "Superadmin";
 
@@ -122,7 +127,9 @@ export default function ExtraHours() {
 
   const isSuperadmin = role === "SUPERADMIN";
   const isControlFlota = role === "CONTROL_FLOTA";
-  const isJefeTaller = role === "TRABAJADOR" && workerType === "JEFE_TALLER";
+  const isJefeTaller =
+    role === "TRABAJADOR" &&
+    (workerType === "JEFE_TALLER" || workerType === "SUPERVISOR");
 
   const isTallerWorker =
     role === "TRABAJADOR" &&
@@ -132,11 +139,11 @@ export default function ExtraHours() {
       "AYUDANTE_MECANICO",
       "MECANICO_HIDRAULICO",
       "JEFE_TALLER",
+      "SUPERVISOR",
     ].includes(workerType);
 
   const isReviewerView = isSuperadmin || isControlFlota || isJefeTaller;
 
-  // ✅ mantenemos la lógica que ya tenías
   const canReviewReports = isJefeTaller;
   const canCreateReport = isSuperadmin || isTallerWorker;
 
@@ -152,11 +159,14 @@ export default function ExtraHours() {
 
   const [signingId, setSigningId] = useState(null);
   const [rejectingId, setRejectingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
-  // ✅ modal firma canvas
   const [signModalOpen, setSignModalOpen] = useState(false);
   const [reportToSign, setReportToSign] = useState(null);
   const [submittingSignature, setSubmittingSignature] = useState(false);
+
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [reportToDelete, setReportToDelete] = useState(null);
 
   const canvasRef = useRef(null);
   const wrapperRef = useRef(null);
@@ -482,6 +492,47 @@ export default function ExtraHours() {
     }
   }
 
+  function openDeleteModal(item) {
+    setReportToDelete(item);
+    setConfirmDeleteOpen(true);
+  }
+
+  function closeDeleteModal() {
+    if (deletingId) return;
+    setConfirmDeleteOpen(false);
+    setReportToDelete(null);
+  }
+
+  async function confirmDeleteReport() {
+    if (!reportToDelete?.id) return;
+
+    setDeletingId(reportToDelete.id);
+
+    try {
+      const res = await fetch(
+        `${API_URL}/workshop/extra-hours/${reportToDelete.id}`,
+        {
+          method: "DELETE",
+          headers: authHeaders(),
+          credentials: "include",
+        }
+      );
+
+      const text = !res.ok ? await res.text().catch(() => "") : "";
+
+      if (!res.ok) {
+        throw new Error(text || `Error HTTP ${res.status}`);
+      }
+
+      closeDeleteModal();
+      await loadData();
+    } catch (err) {
+      window.alert(err?.message || "No se pudo eliminar el reporte");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   const filteredItems = useMemo(() => {
     const q = String(query || "").trim().toLowerCase();
     if (!q) return items;
@@ -590,6 +641,11 @@ export default function ExtraHours() {
               const canReview =
                 canReviewReports && norm(item?.estado) === "ENVIADO";
 
+              const canDelete =
+                isSuperadmin ||
+                isJefeTaller ||
+                item?.trabajadorId === user?.id;
+
               const trabajadorNombre = [
                 item?.trabajador?.nombre,
                 item?.trabajador?.apellido,
@@ -656,33 +712,57 @@ export default function ExtraHours() {
                     ) : null}
                   </div>
 
-                  {canReview ? (
+                  {(canReview || canDelete) ? (
                     <div className="eh-actions">
-                      <button
-                        type="button"
-                        onClick={() => openSignModal(item.id)}
-                        disabled={
-                          signingId === item.id ||
-                          rejectingId === item.id ||
-                          submittingSignature
-                        }
-                        className="btn-primary eh-action-btn"
-                      >
-                        {signingId === item.id ? "Firmando..." : "Firmar"}
-                      </button>
+                      {canReview ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => openSignModal(item.id)}
+                            disabled={
+                              signingId === item.id ||
+                              rejectingId === item.id ||
+                              submittingSignature ||
+                              deletingId === item.id
+                            }
+                            className="btn-primary eh-action-btn"
+                          >
+                            {signingId === item.id ? "Firmando..." : "Firmar"}
+                          </button>
 
-                      <button
-                        type="button"
-                        onClick={() => rejectReport(item.id)}
-                        disabled={
-                          rejectingId === item.id || signingId === item.id
-                        }
-                        className="eh-danger-btn eh-action-btn"
-                      >
-                        {rejectingId === item.id
-                          ? "Rechazando..."
-                          : "Rechazar"}
-                      </button>
+                          <button
+                            type="button"
+                            onClick={() => rejectReport(item.id)}
+                            disabled={
+                              rejectingId === item.id ||
+                              signingId === item.id ||
+                              deletingId === item.id
+                            }
+                            className="eh-danger-btn eh-action-btn"
+                          >
+                            {rejectingId === item.id
+                              ? "Rechazando..."
+                              : "Rechazar"}
+                          </button>
+                        </>
+                      ) : null}
+
+                      {canDelete ? (
+                        <button
+                          type="button"
+                          onClick={() => openDeleteModal(item)}
+                          disabled={
+                            deletingId === item.id ||
+                            signingId === item.id ||
+                            rejectingId === item.id
+                          }
+                          className="eh-danger-btn eh-action-btn"
+                        >
+                          {deletingId === item.id
+                            ? "Eliminando..."
+                            : "Eliminar"}
+                        </button>
+                      ) : null}
                     </div>
                   ) : null}
                 </article>
@@ -866,6 +946,56 @@ export default function ExtraHours() {
             </div>
           </div>
         ) : null}
+
+        <ConfirmModal
+          open={confirmDeleteOpen}
+          onClose={closeDeleteModal}
+          onConfirm={confirmDeleteReport}
+          loading={!!deletingId}
+          danger
+          title="Eliminar reporte"
+          description={
+            <div style={{ display: "grid", gap: 10 }}>
+              <div>
+                Vas a eliminar este reporte de horas extras. Esta acción no se
+                puede deshacer.
+              </div>
+
+              {reportToDelete ? (
+                <div
+                  style={{
+                    padding: 12,
+                    borderRadius: 12,
+                    background: "rgba(0,0,0,.03)",
+                    border: "1px solid rgba(0,0,0,.06)",
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  <div>
+                    <b>Fecha:</b> {fmtDate(reportToDelete?.fecha)}
+                  </div>
+                  <div>
+                    <b>Horario:</b> {reportToDelete?.horaEntrada || "—"} -{" "}
+                    {reportToDelete?.horaSalida || "—"}
+                  </div>
+                  <div>
+                    <b>Trabajador:</b>{" "}
+                    {[
+                      reportToDelete?.trabajador?.nombre,
+                      reportToDelete?.trabajador?.apellido,
+                    ]
+                      .filter(Boolean)
+                      .join(" ")
+                      .trim() || "—"}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          }
+          confirmText="Sí, eliminar"
+          cancelText="Cancelar"
+        />
       </div>
     </div>
   );
