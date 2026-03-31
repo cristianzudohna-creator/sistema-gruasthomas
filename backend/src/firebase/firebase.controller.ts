@@ -1,27 +1,21 @@
-import { Controller, Get, Req } from "@nestjs/common";
+import { Controller, Get, Query } from "@nestjs/common";
 import { FirebaseService } from "./firebase.service";
-import { PrismaService } from "../prisma/prisma.service";
 
 @Controller("test")
 export class FirebaseController {
-  constructor(
-    private readonly firebaseService: FirebaseService,
-    private readonly prisma: PrismaService
-  ) {}
+  constructor(private readonly firebaseService: FirebaseService) {}
 
+  // 🔥 SIN AUTH (para pruebas)
   @Get("notification")
-  async testNotification(@Req() req: any) {
-    const userId = req.user?.id;
-
+  async testNotification(@Query("userId") userId: string) {
     if (!userId) {
-      return { ok: false, message: "No hay usuario autenticado" };
+      return { ok: false, message: "Falta userId" };
     }
 
-    // 🔥 NUEVO: enviar a TODOS los dispositivos
     await this.firebaseService.sendNotificationToUser(
       userId,
       "🚀 Notificación de prueba",
-      "Si ves esto en tu celular, todo funciona 🔥",
+      "Si ves esto en tu celular, TODO FUNCIONA 🔥",
       "/trabajador"
     );
 
