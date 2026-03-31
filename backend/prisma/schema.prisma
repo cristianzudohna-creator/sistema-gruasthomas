@@ -16,6 +16,11 @@
 // - relación en User para reportes firmados por JEFE_TALLER
 // ✅ FIX NUEVO:
 // - VehicleIncident.fotoUrl para guardar evidencia/foto del incidente
+//
+// ✅ NUEVO AHORA:
+// - UserFcmToken para múltiples dispositivos por usuario
+// - User.fcmTokens relación inversa
+// - se elimina el uso de fcmToken único en User
 
 datasource db {
   provider = "postgresql"
@@ -192,7 +197,6 @@ model User {
   rut      String? @unique
   role     Role    @default(TRABAJADOR)
   activo   Boolean @default(true)
-  fcmToken String?
 
   mustChangePassword Boolean   @default(false)
   passwordResetAt    DateTime?
@@ -206,6 +210,7 @@ model User {
   passwordResetTokens      PasswordResetToken[]
   passwordResetRequests    PasswordResetRequest[]
   auditLogs                AuditLog[]
+  fcmTokens                UserFcmToken[]
 
   horometers HorometerRecord[] @relation("UserHorometers")
 
@@ -226,6 +231,18 @@ model User {
 
   @@index([empresa])
   @@index([workerType])
+}
+
+model UserFcmToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model PasswordResetToken {

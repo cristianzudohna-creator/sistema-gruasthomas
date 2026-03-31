@@ -2,10 +2,11 @@ import { Injectable } from "@nestjs/common";
 import * as admin from "firebase-admin";
 import * as path from "path";
 import * as fs from "fs";
+import { PrismaService } from "../prisma/prisma.service";
 
 @Injectable()
 export class FirebaseService {
-  constructor() {
+  constructor(private readonly prisma: PrismaService) {
     if (!admin.apps.length) {
       const serviceAccountPath = path.join(
         process.cwd(),
@@ -27,29 +28,135 @@ export class FirebaseService {
     }
   }
 
-  async sendNotification(token: string, title: string, body: string) {
+  async sendNotification(token: string, title: string, body: string, url = "/trabajador") {
     if (!token) {
-      console.log("⚠️ Usuario sin token FCM");
+      console.log("⚠️ Token FCM vacío");
       return;
     }
 
     try {
       const result = await admin.messaging().send({
         token,
+        notification: {
+          title,
+          body,
+        },
         webpush: {
           notification: {
             title,
             body,
+            icon: "https://sistemagruasthomas.cl/logo-thomas.png",
           },
           fcmOptions: {
-            link: "https://sistemagruasthomas.cl/trabajador",
+            link: `https://sistemagruasthomas.cl${url}`,
           },
+        },
+        data: {
+          title,
+          body,
+          url,
         },
       });
 
       console.log("✅ Notificación enviada:", result);
-    } catch (error) {
+    } catch (error: any) {
       console.error("❌ Error enviando notificación:", error);
+
+      const code = error?.errorInfo?.code || error?.code || "";
+
+      if (
+        code === "messaging/registration-token-not-registered" ||
+        code === "messaging/invalid-registration-token"
+      ) {
+        try {
+          await this.prisma.userFcmToken.deleteMany({
+            where: { token },
+          });
+          console.log("🧹 Token inválido eliminado:", token);
+        } catch (deleteError) {
+          console.error("❌ Error eliminando token inválido:", deleteError);
+        }
+      }
+    }
+  }
+
+  async sendNotificationToUser(
+    userId: string,
+    title: string,
+    body: string,
+    url = "/trabajador"
+  ) {
+    if (!userId) {
+      console.log("⚠️ userId vacío al enviar notificación");
+      return;
+    }
+
+    try {
+      const userTokens = await this.prisma.userFcmToken.findMany({
+        where: { userId },
+        select: {
+          id: true,
+          token: true,
+        },
+      });
+
+      if (!userTokens.length) {
+        console.log(`⚠️ El usuario ${userId} no tiene tokens FCM registrados`);
+        return;
+      }
+
+      console.log(
+        `📲 Enviando notificación a ${userTokens.length} dispositivo(s) del usuario ${userId}`
+      );
+
+      for (const item of userTokens) {
+        try {
+          const result = await admin.messaging().send({
+            token: item.token,
+            notification: {
+              title,
+              body,
+            },
+            webpush: {
+              notification: {
+                title,
+                body,
+                icon: "https://sistemagruasthomas.cl/logo-thomas.png",
+              },
+              fcmOptions: {
+                link: `https://sistemagruasthomas.cl${url}`,
+              },
+            },
+            data: {
+              title,
+              body,
+              url,
+            },
+          });
+
+          console.log(`✅ Notificación enviada a token ${item.id}:`, result);
+        } catch (error: any) {
+          console.error(`❌ Error enviando a token ${item.id}:`, error);
+
+          const code = error?.errorInfo?.code || error?.code || "";
+
+          if (
+            code === "messaging/registration-token-not-registered" ||
+            code === "messaging/invalid-registration-token"
+          ) {
+            try {
+              await this.prisma.userFcmToken.delete({
+                where: { id: item.id },
+              });
+              console.log(`🧹 Token inválido eliminado: ${item.id}`);
+            } catch (deleteError) {
+              console.error("❌ Error eliminando token inválido:", deleteError);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("❌ Error enviando notificaciones al usuario:", error);
     }
   }
 }

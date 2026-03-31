@@ -910,15 +910,33 @@ export class UsersService {
       throw new BadRequestException("Token requerido");
     }
 
-    return this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        fcmToken: token,
-      },
-    });
+    try {
+      // 🔥 Evita duplicados por token
+      const existing = await this.prisma.userFcmToken.findUnique({
+        where: { token },
+      });
+
+      if (existing) {
+        // Si ya existe, actualiza userId (por si cambió)
+        return this.prisma.userFcmToken.update({
+          where: { token },
+          data: { userId },
+        });
+      }
+
+      // 🔥 Crear nuevo token
+      return this.prisma.userFcmToken.create({
+        data: {
+          userId,
+          token,
+        },
+      });
+    } catch (error) {
+      console.error("❌ Error guardando token FCM:", error);
+      throw new BadRequestException("No se pudo guardar token FCM");
+    }
   }
 }
-
 
 
 
