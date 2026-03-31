@@ -5,6 +5,8 @@
 // - Genera contraseña temporal si no viene una
 // - Guarda auditoría (sin password/hash)
 // - Devuelve password temporal (para entregarla al usuario)
+// ✅ NUEVO:
+// - saveFcmToken() para guardar token FCM por usuario
 
 import {
   BadRequestException,
@@ -893,6 +895,27 @@ export class UsersService {
     });
 
     return { ok: true, message: "Usuario eliminado correctamente." };
+  }
+
+  // ======================
+  // 🔥 FCM TOKEN
+  // ======================
+
+  async saveFcmToken(userId: string, token: string) {
+    if (!userId) {
+      throw new BadRequestException("UserId requerido");
+    }
+
+    if (!token) {
+      throw new BadRequestException("Token requerido");
+    }
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        fcmToken: token,
+      },
+    });
   }
 }
 

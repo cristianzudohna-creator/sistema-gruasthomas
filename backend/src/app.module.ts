@@ -30,6 +30,9 @@ import { WorkshopModule } from "./workshop/workshop.module";
 // ✅ Scheduler / Cron
 import { ScheduleModule } from "@nestjs/schedule";
 
+// ✅ FIREBASE
+import { FirebaseModule } from "./firebase/firebase.module";
+
 @Module({
   imports: [
     ScheduleModule.forRoot(),
@@ -43,9 +46,10 @@ import { ScheduleModule } from "@nestjs/schedule";
     MailModule,
     AlertsModule,
     ClientsModule,
-
-    // ✅ NUEVO MÓDULO
     WorkshopModule,
+
+    // ✅ NUEVO
+    FirebaseModule,
   ],
   controllers: [AppController],
   providers: [AppService],

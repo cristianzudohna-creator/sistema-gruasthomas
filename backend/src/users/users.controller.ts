@@ -7,6 +7,9 @@
 // - PATCH /users/:id/reset-password
 // - Puede: setear una contraseña temporal (si no se manda, el backend la genera)
 // - Devuelve la contraseña temporal (para que el superadmin se la entregue al usuario)
+//
+// ✅ NUEVO:
+// - POST /users/fcm-token para guardar token FCM del usuario logueado
 
 import {
   BadRequestException,
@@ -84,6 +87,30 @@ export class UsersController {
 
     // ✅ CORRECTO: usar updateMe (aplica reglas de self)
     return this.usersService.updateMe(safeDto, { id: String(id) }, { self: true });
+  }
+
+  // =========================
+  // 🔥 FCM TOKEN
+  // =========================
+
+  @Post("fcm-token")
+  @Roles("TRABAJADOR", "CONTROL_FLOTA", "ADMINISTRADORA", "SUPERADMIN")
+  async saveFcmToken(
+    @Req() req: Request,
+    @Body() body: { token: string }
+  ) {
+    const actor: any = (req as any).user ?? null;
+    const id = getActorId(actor);
+
+    if (!id) {
+      throw new BadRequestException("Actor inválido.");
+    }
+
+    if (!body?.token) {
+      throw new BadRequestException("Token requerido.");
+    }
+
+    return this.usersService.saveFcmToken(String(id), body.token);
   }
 
   // =========================

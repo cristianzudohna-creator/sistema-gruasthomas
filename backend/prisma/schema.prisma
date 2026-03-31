@@ -192,6 +192,7 @@ model User {
   rut      String? @unique
   role     Role    @default(TRABAJADOR)
   activo   Boolean @default(true)
+  fcmToken String?
 
   mustChangePassword Boolean   @default(false)
   passwordResetAt    DateTime?
