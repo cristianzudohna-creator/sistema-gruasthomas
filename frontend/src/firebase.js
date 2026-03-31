@@ -15,10 +15,13 @@ const app = initializeApp(firebaseConfig);
 
 let messagingInstance = null;
 
-// 🔥 Validar si el navegador soporta FCM (IMPORTANTE para celular)
+// 🔥 Validar si el navegador soporta FCM
 export async function getMessagingInstance() {
   try {
+    console.log("🔥 Verificando soporte Firebase Messaging...");
+
     const supported = await isSupported();
+    console.log("🔥 isSupported():", supported);
 
     if (!supported) {
       console.log("❌ Firebase Messaging no soportado en este navegador");
@@ -26,6 +29,7 @@ export async function getMessagingInstance() {
     }
 
     if (!messagingInstance) {
+      console.log("🔥 Creando instancia de messaging...");
       messagingInstance = getMessaging(app);
     }
 
@@ -36,15 +40,16 @@ export async function getMessagingInstance() {
   }
 }
 
-// 🔥 Obtener token FCM (MEJORADO)
+// 🔥 Obtener token FCM
 export async function getFCMToken() {
   try {
-    // ⚠️ IMPORTANTE: FCM solo funciona en HTTPS o localhost
-    if (
-      location.protocol !== "https:" &&
-      location.hostname !== "localhost"
-    ) {
-      console.warn("⚠️ FCM requiere HTTPS");
+    console.log("🔥 getFCMToken() iniciado");
+    console.log("🔥 location.protocol:", location.protocol);
+    console.log("🔥 location.hostname:", location.hostname);
+
+    // ⚠️ FCM solo funciona en HTTPS o localhost
+    if (location.protocol !== "https:" && location.hostname !== "localhost") {
+      console.warn("⚠️ FCM requiere HTTPS o localhost");
       return null;
     }
 
@@ -55,14 +60,17 @@ export async function getFCMToken() {
       return null;
     }
 
-    // ⚠️ Esperar a que el service worker esté listo
+    console.log("🔥 Esperando serviceWorker.ready...");
     const registration = await navigator.serviceWorker.ready;
+    console.log("✅ Service Worker ready:", registration);
 
     const token = await getToken(messaging, {
       vapidKey:
         "BMVxzIxQ_UJH6MkaROmnmLTO8PTPlqrQOUHQ7Bk6jG7-eEKJh4jX43Qtbe8DvWFFQvYyBmuPangpRsisyDYmrAI",
       serviceWorkerRegistration: registration,
     });
+
+    console.log("🔥 Resultado getToken():", token);
 
     if (!token) {
       console.warn("⚠️ No se obtuvo token FCM");

@@ -28,35 +28,54 @@ export class FirebaseService {
     }
   }
 
-  async sendNotification(token: string, title: string, body: string, url = "/trabajador") {
+  async sendNotification(
+    token: string,
+    title: string,
+    body: string,
+    url = "/trabajador"
+  ) {
     if (!token) {
       console.log("⚠️ Token FCM vacío");
       return;
     }
 
-    try {
-      const result = await admin.messaging().send({
-        token,
+    const finalUrl =
+      url.startsWith("http://") || url.startsWith("https://")
+        ? url
+        : `https://sistemagruasthomas.cl${url}`;
+
+    const payload: admin.messaging.Message = {
+      token,
+      notification: {
+        title,
+        body,
+      },
+      webpush: {
+        headers: {
+          Urgency: "high",
+        },
         notification: {
           title,
           body,
+          icon: "https://sistemagruasthomas.cl/logo-thomas.png",
         },
-        webpush: {
-          notification: {
-            title,
-            body,
-            icon: "https://sistemagruasthomas.cl/logo-thomas.png",
-          },
-          fcmOptions: {
-            link: `https://sistemagruasthomas.cl${url}`,
-          },
+        fcmOptions: {
+          link: finalUrl,
         },
-        data: {
-          title,
-          body,
-          url,
-        },
-      });
+      },
+      data: {
+        title,
+        body,
+        url: finalUrl,
+      },
+    };
+
+    try {
+      console.log("📤 Enviando notificación a token...");
+      console.log("📤 Token:", token);
+      console.log("📤 Payload:", payload);
+
+      const result = await admin.messaging().send(payload);
 
       console.log("✅ Notificación enviada:", result);
     } catch (error: any) {
@@ -91,6 +110,11 @@ export class FirebaseService {
       return;
     }
 
+    const finalUrl =
+      url.startsWith("http://") || url.startsWith("https://")
+        ? url
+        : `https://sistemagruasthomas.cl${url}`;
+
     try {
       const userTokens = await this.prisma.userFcmToken.findMany({
         where: { userId },
@@ -110,29 +134,37 @@ export class FirebaseService {
       );
 
       for (const item of userTokens) {
-        try {
-          const result = await admin.messaging().send({
-            token: item.token,
+        const payload: admin.messaging.Message = {
+          token: item.token,
+          notification: {
+            title,
+            body,
+          },
+          webpush: {
+            headers: {
+              Urgency: "high",
+            },
             notification: {
               title,
               body,
+              icon: "https://sistemagruasthomas.cl/logo-thomas.png",
             },
-            webpush: {
-              notification: {
-                title,
-                body,
-                icon: "https://sistemagruasthomas.cl/logo-thomas.png",
-              },
-              fcmOptions: {
-                link: `https://sistemagruasthomas.cl${url}`,
-              },
+            fcmOptions: {
+              link: finalUrl,
             },
-            data: {
-              title,
-              body,
-              url,
-            },
-          });
+          },
+          data: {
+            title,
+            body,
+            url: finalUrl,
+          },
+        };
+
+        try {
+          console.log(`📤 Enviando a token ${item.id}...`);
+          console.log("📤 Payload:", payload);
+
+          const result = await admin.messaging().send(payload);
 
           console.log(`✅ Notificación enviada a token ${item.id}:`, result);
         } catch (error: any) {
