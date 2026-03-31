@@ -1,17 +1,17 @@
 // ✅ Archivo: frontend/src/pages/Login.jsx (COMPLETO)
-// ✅ Login por RUT + password
-// ✅ FIX: si backend devuelve mustChangePassword=true => redirige a /cambiar-contrasena (TU RUTA REAL)
-// ✅ FIX COOKIES: credentials:"include" para que el login guarde cookie de sesión
+// ✅ Login + FCM integrado correctamente
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Login.css";
 
+// 🔥 NUEVO: importar FCM
+import { getFCMToken } from "../firebase";
+
 function norm(role) {
   return String(role || "").trim().toUpperCase();
 }
 
-// ✅ Normaliza RUT en frontend: quita puntos/guion, trim, upper
 function normalizeRut(v) {
   return String(v || "")
     .trim()
@@ -39,7 +39,7 @@ export default function Login() {
 
       const res = await fetch("/api/auth/login", {
         method: "POST",
-        credentials: "include", // ✅ CLAVE: guarda cookie de sesión
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -56,13 +56,51 @@ export default function Login() {
 
       const data = await res.json();
 
-      // ✅ guardar sesión (si sigues usando token para otras cosas, no molesta)
-      if (data?.access_token) localStorage.setItem("access_token", data.access_token);
+      // ✅ guardar sesión
+      if (data?.access_token) {
+        localStorage.setItem("access_token", data.access_token);
+      }
 
-      // ✅ guarda user (incluye mustChangePassword)
-      if (data.user) localStorage.setItem("user", JSON.stringify(data.user));
+      if (data.user) {
+        localStorage.setItem("user", JSON.stringify(data.user));
+      }
 
-      // ✅ CLAVE: si debe cambiar password => manda a /cambiar-contrasena (no /cambiar-clave)
+      // ====================================================
+      // 🔥🔥🔥 AQUÍ ESTÁ LA MAGIA (FCM) 🔥🔥🔥
+      // ====================================================
+      try {
+        if ("Notification" in window) {
+          const permission = await Notification.requestPermission();
+
+          if (permission === "granted") {
+            const token = await getFCMToken();
+
+            if (token) {
+              console.log("📱 TOKEN FCM:", token);
+
+              await fetch("/api/users/fcm-token", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${data.access_token}`,
+                },
+                credentials: "include",
+                body: JSON.stringify({ token }),
+              });
+
+              console.log("✅ Token FCM guardado");
+            } else {
+              console.log("⚠️ No se obtuvo token FCM");
+            }
+          } else {
+            console.log("❌ Permiso de notificaciones denegado");
+          }
+        }
+      } catch (err) {
+        console.error("❌ Error FCM:", err);
+      }
+      // ====================================================
+
       const mustChangePassword =
         !!data?.mustChangePassword || !!data?.user?.mustChangePassword;
 
@@ -71,7 +109,6 @@ export default function Login() {
         return;
       }
 
-      // ✅ redirect correcto por rol
       const role = norm(data?.user?.role);
 
       const goesAdmin = ["SUPERADMIN", "CONTROL_FLOTA", "ADMINISTRADORA"].includes(role);
@@ -86,9 +123,9 @@ export default function Login() {
         return;
       }
 
-      // fallback
-      setError("Tu usuario no tiene un rol válido asignado. Contacta al administrador.");
+      setError("Tu usuario no tiene un rol válido asignado.");
       navigate("/login", { replace: true });
+
     } catch {
       setError("Error de conexión con el servidor");
     } finally {
@@ -115,46 +152,36 @@ export default function Login() {
           <div className="login-body">
             <form onSubmit={handleSubmit}>
               <div className="form-group">
-                <label className="label" htmlFor="rut">RUT</label>
+                <label className="label">RUT</label>
                 <input
-                  id="rut"
                   className="input"
                   type="text"
                   value={rut}
                   onChange={(e) => setRut(e.target.value)}
-                  autoComplete="username"
-                  inputMode="text"
-                  placeholder="Ej: 12.345.678-9"
                 />
               </div>
 
               <div className="form-group">
-                <label className="label" htmlFor="password">Contraseña</label>
+                <label className="label">Contraseña</label>
                 <input
-                  id="password"
                   className="input"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
                 />
-              </div>
-
-              <div className="login-actions">
-                <a className="login-link" href="/olvide-contrasena">
-                  Olvidé mi contraseña
-                </a>
               </div>
 
               {error && <div className="error">{error}</div>}
 
-              <button type="submit" className="btn btn-primary" disabled={loading}>
+              <button type="submit" disabled={loading}>
                 {loading ? "Ingresando..." : "Ingresar"}
               </button>
             </form>
           </div>
 
-          <div className="login-footer">© {new Date().getFullYear()} Grúas Thomas</div>
+          <div className="login-footer">
+            © {new Date().getFullYear()} Grúas Thomas
+          </div>
         </div>
       </div>
     </div>
