@@ -10,7 +10,7 @@ export class FirebaseService {
     if (!admin.apps.length) {
       const serviceAccountPath = path.join(
   process.cwd(),
-  "backend/firebase-service-account.json"
+  "firebase-service-account.json"
 );
 
       if (!fs.existsSync(serviceAccountPath)) {
