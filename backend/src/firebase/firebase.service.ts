@@ -34,15 +34,20 @@ export class FirebaseService {
     }
 
     try {
-      await admin.messaging().send({
+      const result = await admin.messaging().send({
         token,
-        notification: {
-          title,
-          body,
+        webpush: {
+          notification: {
+            title,
+            body,
+          },
+          fcmOptions: {
+            link: "https://sistemagruasthomas.cl/trabajador",
+          },
         },
       });
 
-      console.log("✅ Notificación enviada");
+      console.log("✅ Notificación enviada:", result);
     } catch (error) {
       console.error("❌ Error enviando notificación:", error);
     }

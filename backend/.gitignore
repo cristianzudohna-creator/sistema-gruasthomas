@@ -56,3 +56,9 @@ pids
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 /generated/prisma
+
+# Firebase service account
+firebase-service-account.json
+sistema-gruasthomas-firebase-adminsdk-*.json
+backend/firebase-service-account.json
+backend/sistema-gruasthomas-firebase-adminsdk-*.json
