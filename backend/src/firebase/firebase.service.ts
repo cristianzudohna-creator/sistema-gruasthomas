@@ -9,9 +9,9 @@ export class FirebaseService {
   constructor(private readonly prisma: PrismaService) {
     if (!admin.apps.length) {
       const serviceAccountPath = path.join(
-        process.cwd(),
-        "firebase-service-account.json"
-      );
+  process.cwd(),
+  "backend/firebase-service-account.json"
+);
 
       if (!fs.existsSync(serviceAccountPath)) {
         console.error("❌ No se encontró firebase-service-account.json");
