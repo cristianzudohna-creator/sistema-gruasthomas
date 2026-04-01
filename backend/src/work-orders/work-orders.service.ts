@@ -84,6 +84,7 @@ import {
 } from "@prisma/client";
 
 import { AuditService } from "../audit/audit.service";
+import { FirebaseService } from "../firebase/firebase.service";
 
 import PDFDocument = require("pdfkit");
 import archiver = require("archiver");
@@ -327,7 +328,8 @@ function zipBufferFromArchiver(archive: archiver.Archiver): Promise<Buffer> {
 export class WorkOrdersService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly audit: AuditService
+    private readonly audit: AuditService,
+    private readonly firebaseService: FirebaseService
   ) {}
 
   private safeActor(actor: any) {
@@ -1307,6 +1309,27 @@ export class WorkOrdersService {
         after: this.snapshotWorkOrder(created),
       },
     });
+
+    // 🔔 NOTIFICACIÓN SOLO AL OPERADOR ASIGNADO
+    if (created.assignedToId) {
+      try {
+        await this.firebaseService.sendNotificationToUser(
+          created.assignedToId,
+          "Nueva Orden de Trabajo",
+          `Se te ha asignado una OT: ${created.titulo || "Sin título"}`,
+          "/trabajador"
+        );
+
+        console.log(
+          `✅ Notificación enviada al operador asignado: ${created.assignedToId}`
+        );
+      } catch (error) {
+        console.error(
+          "❌ Error enviando notificación de OT al operador:",
+          error
+        );
+      }
+    }
 
     return created;
   }
@@ -2402,60 +2425,60 @@ export class WorkOrdersService {
     doc.text("R.U.T.", rutX1, labelY, { width: rutX2 - rutX1, align: "center" });
     doc.text("Firma", firmaX1, labelY, { width: firmaX2 - firmaX1, align: "center" });
     // ============================
-// 🔵 FRANJA AZUL
-// ============================
-const footerX = 52;
-const footerY = 760;
-const footerW = 470;
-const footerH = 26;
+    // 🔵 FRANJA AZUL
+    // ============================
+    const footerX = 52;
+    const footerY = 760;
+    const footerW = 470;
+    const footerH = 26;
 
-doc
-  .save()
-  .fillColor("#6f96b7")
-  .rect(footerX, footerY, footerW, footerH)
-  .fill()
-  .restore();
+    doc
+      .save()
+      .fillColor("#6f96b7")
+      .rect(footerX, footerY, footerW, footerH)
+      .fill()
+      .restore();
 
-// Texto
-doc
-  .fillColor("#ffffff")
-  .font("Helvetica")
-  .fontSize(8.5)
-  .text(
-    "Horacio Román Salinas 2080, Cerrillos - Santiago",
-    footerX,
-    footerY + 5,
-    { width: footerW, align: "center" }
-  );
+    // Texto
+    doc
+      .fillColor("#ffffff")
+      .font("Helvetica")
+      .fontSize(8.5)
+      .text(
+        "Horacio Román Salinas 2080, Cerrillos - Santiago",
+        footerX,
+        footerY + 5,
+        { width: footerW, align: "center" }
+      );
 
-doc
-  .text(
-    "Fonos (56-2) 2741 9885 - (56-2) 2742 0808 - Móvil: (56-9) 7108 0758",
-    footerX,
-    footerY + 14,
-    { width: footerW, align: "center" }
-  );
+    doc
+      .text(
+        "Fonos (56-2) 2741 9885 - (56-2) 2742 0808 - Móvil: (56-9) 7108 0758",
+        footerX,
+        footerY + 14,
+        { width: footerW, align: "center" }
+      );
 
-// ============================
-// 🟠 LOGO SGS
-// ============================
+    // ============================
+    // 🟠 LOGO SGS
+    // ============================
 
-const sgsPath = path.join(process.cwd(), "uploads/branding/sgs.png");
+    const sgsPath = path.join(process.cwd(), "uploads/branding/sgs.png");
 
-// ============================
-// 🟠 LOGO SGS (AJUSTADO PRO)
-// ============================
+    // ============================
+    // 🟠 LOGO SGS (AJUSTADO PRO)
+    // ============================
 
-const logoSize = 50;
+    const logoSize = 50;
 
-doc.image(
-  sgsPath,
-  footerX + footerW - logoSize + 10, // más a la derecha
-  footerY - 12, // un poco más arriba
-  {
-    width: logoSize,
-  }
-);
+    doc.image(
+      sgsPath,
+      footerX + footerW - logoSize + 10, // más a la derecha
+      footerY - 12, // un poco más arriba
+      {
+        width: logoSize,
+      }
+    );
 
     const sigBuf = getSignatureBuffer(wo as any, id);
     if (sigBuf) {
