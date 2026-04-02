@@ -1,12 +1,11 @@
 // ✅ Archivo: frontend/src/pages/ChangePassword.jsx (COMPLETO)
 // ✅ FIX: al cambiar contraseña -> set user.mustChangePassword = false en localStorage
 // ✅ FIX NUEVO: credentials:"include" para móviles
-// ✅ FIX NUEVO: navegación segura sin setTimeout
+// ✅ FIX NUEVO: redirect real con window.location.replace()
 // ✅ FIX NUEVO: fallback correcto si localStorage.user viene vacío o corrupto
 // ✅ FIX NUEVO: mejor manejo de errores backend
 
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import "./Login.css";
 
 function norm(v) {
@@ -14,8 +13,6 @@ function norm(v) {
 }
 
 export default function ChangePassword() {
-  const navigate = useNavigate();
-
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -55,7 +52,7 @@ export default function ChangePassword() {
     try {
       const res = await fetch("/api/auth/change-password", {
         method: "POST",
-        credentials: "include", // ✅ importante para móviles / cookies
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -84,17 +81,22 @@ export default function ChangePassword() {
 
       setOk(data?.message || "Contraseña actualizada correctamente");
 
-      // ✅ limpiar flag local
-      let storedUser = null;
+      // ✅ actualizar user local
       try {
-        storedUser = JSON.parse(localStorage.getItem("user") || "null");
-      } catch {
-        storedUser = null;
-      }
+        const raw = localStorage.getItem("user");
 
-      if (storedUser && typeof storedUser === "object") {
-        storedUser.mustChangePassword = false;
-        localStorage.setItem("user", JSON.stringify(storedUser));
+        if (!raw) {
+          console.warn("⚠️ No hay user en localStorage");
+        } else {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === "object") {
+            parsed.mustChangePassword = false;
+            localStorage.setItem("user", JSON.stringify(parsed));
+            console.log("✅ user actualizado:", parsed);
+          }
+        }
+      } catch (err) {
+        console.error("❌ Error actualizando user:", err);
       }
 
       // ✅ limpiar formulario
@@ -102,7 +104,7 @@ export default function ChangePassword() {
       setNewPassword("");
       setConfirm("");
 
-      // ✅ navegación segura
+      // ✅ calcular destino
       let to = "/";
 
       try {
@@ -124,7 +126,8 @@ export default function ChangePassword() {
         to = "/";
       }
 
-      navigate(to, { replace: true });
+      // ✅ FIX REAL: navegación completa del navegador
+      window.location.replace(to);
     } catch (err) {
       console.error("❌ Error change-password:", err);
       setError("Error de conexión con el servidor");
