@@ -829,12 +829,26 @@ export class WorkOrdersService {
 
   private async notifyOtCompletedAdmins(workOrder: any, completedByUserId?: string) {
   try {
-    const destinatarios = await this.prisma.user.findMany({
+    // 🔥 1. SUPERADMIN (SIN FILTRO EMPRESA)
+    const superAdmins = await this.prisma.user.findMany({
       where: {
         activo: true,
-        role: {
-          in: ["SUPERADMIN", "ADMINISTRADORA"],
-        },
+        role: "SUPERADMIN",
+      },
+      select: {
+        id: true,
+        role: true,
+        nombre: true,
+        apellido: true,
+        email: true,
+      },
+    });
+
+    // 🔥 2. ADMINISTRADORA (CON FILTRO EMPRESA)
+    const administradoras = await this.prisma.user.findMany({
+      where: {
+        activo: true,
+        role: "ADMINISTRADORA",
         ...(workOrder?.empresa ? { empresa: workOrder.empresa } : {}),
       },
       select: {
@@ -846,9 +860,18 @@ export class WorkOrdersService {
       },
     });
 
+    // 🔥 UNIR Y EVITAR DUPLICADOS
+    const destinatariosMap = new Map<string, any>();
+
+    [...superAdmins, ...administradoras].forEach((u) => {
+      destinatariosMap.set(u.id, u);
+    });
+
+    const destinatarios = Array.from(destinatariosMap.values());
+
     if (!destinatarios.length) {
       console.log(
-        `⚠️ No se encontraron usuarios SUPERADMIN/ADMINISTRADORA para notificar OT completada ${workOrder?.id}`
+        `⚠️ No se encontraron usuarios para notificar OT completada ${workOrder?.id}`
       );
       return;
     }
@@ -860,6 +883,7 @@ export class WorkOrdersService {
       `OT ${String(workOrder?.id || "").slice(0, 8)}`;
 
     let nombreOperador = "el operador";
+
     if (completedByUserId) {
       const operador = await this.prisma.user.findUnique({
         where: { id: completedByUserId },
@@ -874,13 +898,14 @@ export class WorkOrdersService {
 
     const body = `La OT ${tituloOt} fue completada por ${nombreOperador}.`;
 
+    // 🔥 ENVÍO
     for (const user of destinatarios) {
       try {
         await this.firebaseService.sendNotificationToUser(
           user.id,
           "OT completada",
           body,
-          "/admin/ordenes-trabajo" // ✅ CAMBIO AQUÍ
+          "/admin/ordenes-trabajo"
         );
 
         console.log(
@@ -897,125 +922,6 @@ export class WorkOrdersService {
     console.error("❌ Error general notificando OT completada a admins:", error);
   }
 }
-
-  async exportPdfZipByFilters(
-    filters: {
-      from?: string;
-      to?: string;
-      operatorId?: string;
-      operatorName?: string;
-      riggerName?: string;
-    },
-    actor?: any
-  ): Promise<{ buffer: Buffer; filename: string; total: number }> {
-    if (!this.isOtAdminRole(actor)) {
-      throw new ForbiddenException("No autorizado.");
-    }
-
-    const from = cleanStr(filters?.from);
-    const to = cleanStr(filters?.to);
-    const operatorId = cleanStr(filters?.operatorId);
-    const operatorName = cleanStr(filters?.operatorName);
-    const riggerName = cleanStr(filters?.riggerName);
-
-    const createdAt: any = {};
-    const gte = this.parseStartDate(from);
-    const lt = this.parseEndExclusiveDate(to);
-
-    if (from && !gte) {
-      throw new BadRequestException("Fecha desde inválida. Usa YYYY-MM-DD.");
-    }
-    if (to && !lt) {
-      throw new BadRequestException("Fecha hasta inválida. Usa YYYY-MM-DD.");
-    }
-
-    if (gte) createdAt.gte = gte;
-    if (lt) createdAt.lt = lt;
-
-    if (gte && lt && gte >= lt) {
-      throw new BadRequestException("El rango de fechas es inválido.");
-    }
-
-    const whereEmpresa = await this.empresaWhereByActor(actor);
-
-    const andWhere: any[] = [
-      whereEmpresa,
-      this.whereActivosOnly(),
-      { status: WorkOrderStatus.APROBADA },
-    ];
-
-    if (Object.keys(createdAt).length > 0) {
-      andWhere.push({ createdAt });
-    }
-
-    if (operatorId) {
-      andWhere.push({
-        assignedToId: operatorId,
-      });
-    }
-
-    if (operatorName) {
-      andWhere.push({
-        OR: [
-          { operador: { contains: operatorName, mode: "insensitive" } },
-          { conductor: { contains: operatorName, mode: "insensitive" } },
-        ],
-      });
-    }
-
-    if (riggerName) {
-      andWhere.push({
-        rigger: { contains: riggerName, mode: "insensitive" },
-      });
-    }
-
-    const items = await this.prisma.workOrder.findMany({
-      where: {
-        AND: andWhere,
-      },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      select: {
-        id: true,
-        createdAt: true,
-        status: true,
-      },
-    });
-
-    if (!items.length) {
-      throw new NotFoundException("No se encontraron OTs APROBADAS con esos filtros.");
-    }
-
-    const zipName = await this.buildZipFileName({
-      from,
-      to,
-      operatorId,
-      operatorName,
-      riggerName,
-    });
-
-    const archive = archiver("zip", { zlib: { level: 9 } });
-    const zipPromise = zipBufferFromArchiver(archive);
-
-    let index = 1;
-    for (const item of items) {
-      const { buffer } = await this.generatePdf(item.id, actor);
-      const seq = String(index).padStart(3, "0");
-      const datePart = fmtIsoDateOnly(item.createdAt) || "SIN_FECHA";
-      const otNum = `OT-${String(item.id).slice(0, 6).toUpperCase()}`;
-      const entryName = `${seq}_${safeFilePart(otNum)}_${datePart}.pdf`;
-      archive.append(buffer, { name: entryName });
-      index += 1;
-    }
-
-    await archive.finalize();
-    const buffer = await zipPromise;
-
-    return {
-      buffer,
-      filename: zipName,
-      total: items.length,
-    };
-  }
 
   async exportApprovedExcel(
     filters: {
