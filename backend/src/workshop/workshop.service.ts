@@ -6,6 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { FirebaseService } from '../firebase/firebase.service';
 import {
   Prisma,
   VehicleIncidentStatus,
@@ -38,7 +39,10 @@ function normalizePlate(input: string) {
 
 @Injectable()
 export class WorkshopService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+  private prisma: PrismaService,
+  private readonly firebaseService: FirebaseService,
+) {}
 
   // ============================
   // HELPERS PRIVADOS
@@ -1360,7 +1364,7 @@ if (user.role !== 'SUPERADMIN') {
   }
 
   // ============================
-  // 🔥 FOTO (NUEVO)
+  // 🔥 FOTO
   // ============================
   let fotoUrl: string | null = null;
 
@@ -1368,11 +1372,7 @@ if (user.role !== 'SUPERADMIN') {
     const buffer = this.parseImageDataUrl(dto.foto);
 
     if (buffer) {
-      const uploadDir = path.join(
-        process.cwd(),
-        'uploads',
-        'incidents',
-      );
+      const uploadDir = path.join(process.cwd(), 'uploads', 'incidents');
 
       if (!fs.existsSync(uploadDir)) {
         fs.mkdirSync(uploadDir, { recursive: true });
@@ -1387,7 +1387,7 @@ if (user.role !== 'SUPERADMIN') {
     }
   }
 
-  return this.prisma.vehicleIncident.create({
+  const incident = await this.prisma.vehicleIncident.create({
     data: {
       vehicle: {
         connect: { id: vehicle.id },
@@ -1400,8 +1400,6 @@ if (user.role !== 'SUPERADMIN') {
       severity: 'MEDIA',
       descripcion: dto.descripcion,
       ubicacionTexto: dto.ubicacionTexto,
-
-      // 🔥 GUARDAR FOTO
       fotoUrl,
     },
     include: {
@@ -1419,6 +1417,10 @@ if (user.role !== 'SUPERADMIN') {
       },
     },
   });
+
+  await this.notifyIncidentCreated(incident);
+
+  return incident;
 }
 
   async getIncidents() {
@@ -2633,4 +2635,86 @@ if (user.role !== 'SUPERADMIN') {
 
     return incident;
   }
+
+  private async notifyIncidentCreated(incident: any) {
+  try {
+    // SUPERADMIN sin filtro empresa
+    const superAdmins = await this.prisma.user.findMany({
+      where: {
+        activo: true,
+        role: Role.SUPERADMIN,
+      },
+      select: {
+        id: true,
+        role: true,
+        workerType: true,
+        nombre: true,
+        apellido: true,
+        email: true,
+      },
+    });
+
+    // JEFE_TALLER + SUPERVISOR con filtro empresa
+    const tallerLeads = await this.prisma.user.findMany({
+      where: {
+        activo: true,
+        role: Role.TRABAJADOR,
+        workerType: {
+          in: [WorkerType.JEFE_TALLER, WorkerType.SUPERVISOR],
+        },
+        ...(incident?.empresa ? { empresa: incident.empresa } : {}),
+      },
+      select: {
+        id: true,
+        role: true,
+        workerType: true,
+        nombre: true,
+        apellido: true,
+        email: true,
+      },
+    });
+
+    const destinatariosMap = new Map<string, any>();
+
+    [...superAdmins, ...tallerLeads].forEach((u) => {
+      destinatariosMap.set(u.id, u);
+    });
+
+    const destinatarios = Array.from(destinatariosMap.values());
+
+    if (!destinatarios.length) {
+      console.log(
+        `⚠️ No se encontraron usuarios para notificar incidente ${incident?.id}`,
+      );
+      return;
+    }
+
+    const patente = String(incident?.vehicle?.patente || '').trim() || 'SIN PATENTE';
+    const descripcion = String(incident?.descripcion || '').trim() || 'Sin descripción';
+
+    const body = `Incidente en ${patente}: ${descripcion}`;
+
+    for (const user of destinatarios) {
+      try {
+        await this.firebaseService.sendNotificationToUser(
+          user.id,
+          '🚨 Nuevo incidente',
+          body,
+          '/admin/incidentes',
+        );
+
+        console.log(
+          `✅ Notificación de incidente enviada a ${user.role}${user.workerType ? `/${user.workerType}` : ''}: ${user.id}`,
+        );
+      } catch (error) {
+        console.error(
+          `❌ Error notificando incidente a ${user.role}${user.workerType ? `/${user.workerType}` : ''} (${user.id}):`,
+          error,
+        );
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error general notifyIncidentCreated:', error);
+  }
+}
 }

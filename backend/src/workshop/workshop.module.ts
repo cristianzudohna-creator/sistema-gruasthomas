@@ -1,14 +1,13 @@
-// ✅ Archivo: src/workshop/workshop.module.ts
-
 import { Module } from '@nestjs/common';
+import { PrismaModule } from '../prisma/prisma.module';
+import { FirebaseModule } from '../firebase/firebase.module';
 import { WorkshopController } from './workshop.controller';
 import { WorkshopService } from './workshop.service';
-import { PrismaService } from '../prisma/prisma.service';
-import { WorkshopAccessGuard } from './workshop-access.guard';
 
 @Module({
+  imports: [PrismaModule, FirebaseModule],
   controllers: [WorkshopController],
-  providers: [WorkshopService, PrismaService, WorkshopAccessGuard],
+  providers: [WorkshopService],
   exports: [WorkshopService],
 })
 export class WorkshopModule {}

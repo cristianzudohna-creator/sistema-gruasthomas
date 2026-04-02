@@ -876,11 +876,9 @@ export class WorkOrdersService {
       return;
     }
 
-    const tituloOt =
-      cleanStr(workOrder?.titulo) ||
-      cleanStr(workOrder?.cliente) ||
-      cleanStr(workOrder?.lugar) ||
-      `OT ${String(workOrder?.id || "").slice(0, 8)}`;
+    const codigoOt = `OT-${String(workOrder?.id || "")
+      .slice(0, 6)
+      .toUpperCase()}`;
 
     let nombreOperador = "el operador";
 
@@ -896,9 +894,8 @@ export class WorkOrdersService {
         "el operador";
     }
 
-    const body = `La OT ${tituloOt} fue completada por ${nombreOperador}.`;
+    const body = `La OT ${codigoOt} fue completada por ${nombreOperador}.`;
 
-    // 🔥 ENVÍO
     for (const user of destinatarios) {
       try {
         await this.firebaseService.sendNotificationToUser(
