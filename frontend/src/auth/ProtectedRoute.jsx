@@ -4,9 +4,11 @@
 // ✅ FIX: JEFE_TALLER / SUPERVISOR puede entrar a /admin/horas-extras
 // ✅ FIX: ADQUISICIONES puede entrar a /admin/repuestos
 // ✅ FIX NUEVO: TRABAJADOR normal NO puede entrar a /admin y se redirige a su módulo
+// ✅ FIX NUEVO NOTIFICACIONES: evita redirección prematura cuando la app abre desde notificación
 
 import { Navigate, useLocation, Link } from "react-router-dom";
 import { getToken, getUser } from "./auth";
+import { useEffect, useState } from "react";
 
 function norm(value) {
   return String(value || "").trim().toUpperCase();
@@ -211,9 +213,39 @@ function NoAccess({ user }) {
 }
 
 export default function ProtectedRoute({ children, role }) {
-  const token = getToken();
-  const user = getUser();
   const location = useLocation();
+
+  // ✅ FIX NOTIFICACIONES:
+  // evita redirección inmediata cuando la app se abre desde una notificación
+  const [bootReady, setBootReady] = useState(false);
+  const [token, setToken] = useState(null);
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const loadSession = () => {
+      try {
+        const t = getToken();
+        const u = getUser();
+
+        setToken(t);
+        setUser(u);
+      } catch (error) {
+        console.error("❌ Error cargando sesión en ProtectedRoute:", error);
+        setToken(null);
+        setUser(null);
+      } finally {
+        setTimeout(() => {
+          setBootReady(true);
+        }, 120);
+      }
+    };
+
+    loadSession();
+  }, []);
+
+  if (!bootReady) {
+    return null;
+  }
 
   if (!token || !user) {
     return <Navigate to="/" replace state={{ from: location.pathname }} />;

@@ -14,11 +14,26 @@ firebase.initializeApp({
 // 🔥 Instancia messaging
 const messaging = firebase.messaging();
 
-// 🔥 Mensajes en background (MEJORADO)
+function normalizeUrl(url) {
+  const raw = String(url || "").trim();
+
+  if (!raw) return self.location.origin + "/";
+
+  if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    return raw;
+  }
+
+  if (raw.startsWith("/")) {
+    return self.location.origin + raw;
+  }
+
+  return self.location.origin + "/" + raw;
+}
+
+// 🔥 Mensajes en background
 messaging.onBackgroundMessage((payload) => {
   console.log("🔥 Mensaje recibido en background:", payload);
 
-  // ✅ Soporta notification y data
   const title =
     payload.notification?.title ||
     payload.data?.title ||
@@ -35,13 +50,14 @@ messaging.onBackgroundMessage((payload) => {
 
   const url =
     payload.data?.url ||
+    payload.fcmOptions?.link ||
     "/";
 
   const notificationOptions = {
     body,
     icon,
     data: {
-      url, // para abrir cuando hagan click
+      url: normalizeUrl(url),
     },
   };
 
@@ -52,16 +68,36 @@ messaging.onBackgroundMessage((payload) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  const urlToOpen = event.notification.data?.url || "/";
+  const targetUrl = normalizeUrl(event.notification?.data?.url || "/");
 
   event.waitUntil(
-    clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clientList) => {
+      // 1) Si ya existe una ventana abierta de este sistema, la enfocamos
       for (const client of clientList) {
-        if (client.url.includes(urlToOpen) && "focus" in client) {
-          return client.focus();
+        try {
+          const isSameOrigin = client.url.startsWith(self.location.origin);
+
+          if (isSameOrigin && "focus" in client) {
+            await client.focus();
+
+            // Intentamos navegar esa pestaña a la URL exacta de la notificación
+            if ("navigate" in client) {
+              await client.navigate(targetUrl);
+            }
+
+            return client;
+          }
+        } catch (error) {
+          console.error("❌ Error enfocando/navegando cliente existente:", error);
         }
       }
-      return clients.openWindow(urlToOpen);
+
+      // 2) Si no hay ninguna abierta, abrimos una nueva
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+
+      return null;
     })
   );
 });

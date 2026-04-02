@@ -9,8 +9,10 @@
 // ✅ FIX REAL: autocomplete remoto contra backend /users con q + workerType + limit=50
 // ✅ NUEVO: descarga ZIP de múltiples OT filtradas
 // ✅ NUEVO: descarga EXCEL de OTs aprobadas por rango de fecha
+// ✅ NUEVO: abre automáticamente detalle de OT si viene ?otId=... en la URL
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import "./Admin.css";
 import "./WorkOrdersAdmin.css";
 
@@ -354,6 +356,8 @@ function makeWorkerLabel(user) {
 }
 
 export default function WorkOrdersAdmin() {
+  const [searchParams] = useSearchParams();
+
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [items, setItems] = useState([]);
@@ -389,6 +393,7 @@ export default function WorkOrdersAdmin() {
 
   const operadorBoxRef = useRef(null);
   const riggerBoxRef = useRef(null);
+  const autoOpenedOtRef = useRef("");
 
   const statusOptions = useMemo(
     () => ["ALL", "ABIERTA", "EN_PROCESO", "COMPLETADA", "APROBADA", "RECHAZADA", "CERRADA"],
@@ -800,6 +805,22 @@ export default function WorkOrdersAdmin() {
     await loadAll();
     if (targetId) await refreshDetailIfOpen(targetId);
   }
+
+  // ✅ NUEVO: abrir OT automáticamente si viene ?otId=...
+  useEffect(() => {
+    const otId = String(searchParams.get("otId") || "").trim();
+
+    if (!otId) return;
+    if (loading) return;
+    if (!items || items.length === 0) return;
+    if (autoOpenedOtRef.current === otId) return;
+
+    const exists = items.find((x) => String(x?.id) === otId);
+    if (!exists) return;
+
+    autoOpenedOtRef.current = otId;
+    openDetail(otId);
+  }, [searchParams, items, loading]);
 
   const filtered = useMemo(() => {
     const s = String(status || "ALL").toUpperCase();

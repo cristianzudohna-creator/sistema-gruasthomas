@@ -9,9 +9,9 @@ export class FirebaseService {
   constructor(private readonly prisma: PrismaService) {
     if (!admin.apps.length) {
       const serviceAccountPath = path.join(
-  process.cwd(),
-  "firebase-service-account.json"
-);
+        process.cwd(),
+        "firebase-service-account.json"
+      );
 
       if (!fs.existsSync(serviceAccountPath)) {
         console.error("❌ No se encontró firebase-service-account.json");
@@ -28,6 +28,93 @@ export class FirebaseService {
     }
   }
 
+  private getBaseUrl(): string {
+    return (
+      process.env.FRONTEND_URL?.trim() ||
+      "https://sistemagruasthomas.cl"
+    );
+  }
+
+  private buildFinalUrl(url = "/trabajador"): string {
+    const cleanUrl = String(url || "").trim() || "/trabajador";
+
+    if (
+      cleanUrl.startsWith("http://") ||
+      cleanUrl.startsWith("https://")
+    ) {
+      return cleanUrl;
+    }
+
+    return `${this.getBaseUrl()}${cleanUrl.startsWith("/") ? cleanUrl : `/${cleanUrl}`}`;
+  }
+
+  private buildPayload(
+    token: string,
+    title: string,
+    body: string,
+    url = "/trabajador"
+  ): admin.messaging.Message {
+    const finalUrl = this.buildFinalUrl(url);
+    const iconUrl = `${this.getBaseUrl()}/logo-thomas.png`;
+
+    return {
+      token,
+      notification: {
+        title: String(title || ""),
+        body: String(body || ""),
+      },
+      webpush: {
+        headers: {
+          Urgency: "high",
+        },
+        notification: {
+          title: String(title || ""),
+          body: String(body || ""),
+          icon: iconUrl,
+        },
+        fcmOptions: {
+          link: finalUrl,
+        },
+      },
+      data: {
+        title: String(title || ""),
+        body: String(body || ""),
+        url: finalUrl,
+      },
+    };
+  }
+
+  private async deleteInvalidTokenByValue(token: string) {
+    try {
+      await this.prisma.userFcmToken.deleteMany({
+        where: { token },
+      });
+      console.log("🧹 Token inválido eliminado:", token);
+    } catch (deleteError) {
+      console.error("❌ Error eliminando token inválido:", deleteError);
+    }
+  }
+
+  private async deleteInvalidTokenById(id: string) {
+    try {
+      await this.prisma.userFcmToken.delete({
+        where: { id },
+      });
+      console.log(`🧹 Token inválido eliminado: ${id}`);
+    } catch (deleteError) {
+      console.error("❌ Error eliminando token inválido:", deleteError);
+    }
+  }
+
+  private isInvalidTokenError(error: any): boolean {
+    const code = error?.errorInfo?.code || error?.code || "";
+
+    return (
+      code === "messaging/registration-token-not-registered" ||
+      code === "messaging/invalid-registration-token"
+    );
+  }
+
   async sendNotification(
     token: string,
     title: string,
@@ -39,40 +126,12 @@ export class FirebaseService {
       return;
     }
 
-    const finalUrl =
-      url.startsWith("http://") || url.startsWith("https://")
-        ? url
-        : `https://sistemagruasthomas.cl${url}`;
-
-    const payload: admin.messaging.Message = {
-      token,
-      notification: {
-        title,
-        body,
-      },
-      webpush: {
-        headers: {
-          Urgency: "high",
-        },
-        notification: {
-          title,
-          body,
-          icon: "https://sistemagruasthomas.cl/logo-thomas.png",
-        },
-        fcmOptions: {
-          link: finalUrl,
-        },
-      },
-      data: {
-        title,
-        body,
-        url: finalUrl,
-      },
-    };
+    const payload = this.buildPayload(token, title, body, url);
 
     try {
-      console.log("📤 Enviando notificación a token...");
+      console.log("📤 Enviando notificación a token directo...");
       console.log("📤 Token:", token);
+      console.log("📤 URL final:", this.buildFinalUrl(url));
       console.log("📤 Payload:", payload);
 
       const result = await admin.messaging().send(payload);
@@ -81,20 +140,8 @@ export class FirebaseService {
     } catch (error: any) {
       console.error("❌ Error enviando notificación:", error);
 
-      const code = error?.errorInfo?.code || error?.code || "";
-
-      if (
-        code === "messaging/registration-token-not-registered" ||
-        code === "messaging/invalid-registration-token"
-      ) {
-        try {
-          await this.prisma.userFcmToken.deleteMany({
-            where: { token },
-          });
-          console.log("🧹 Token inválido eliminado:", token);
-        } catch (deleteError) {
-          console.error("❌ Error eliminando token inválido:", deleteError);
-        }
+      if (this.isInvalidTokenError(error)) {
+        await this.deleteInvalidTokenByValue(token);
       }
     }
   }
@@ -109,11 +156,6 @@ export class FirebaseService {
       console.log("⚠️ userId vacío al enviar notificación");
       return;
     }
-
-    const finalUrl =
-      url.startsWith("http://") || url.startsWith("https://")
-        ? url
-        : `https://sistemagruasthomas.cl${url}`;
 
     try {
       const userTokens = await this.prisma.userFcmToken.findMany({
@@ -134,34 +176,11 @@ export class FirebaseService {
       );
 
       for (const item of userTokens) {
-        const payload: admin.messaging.Message = {
-          token: item.token,
-          notification: {
-            title,
-            body,
-          },
-          webpush: {
-            headers: {
-              Urgency: "high",
-            },
-            notification: {
-              title,
-              body,
-              icon: "https://sistemagruasthomas.cl/logo-thomas.png",
-            },
-            fcmOptions: {
-              link: finalUrl,
-            },
-          },
-          data: {
-            title,
-            body,
-            url: finalUrl,
-          },
-        };
+        const payload = this.buildPayload(item.token, title, body, url);
 
         try {
           console.log(`📤 Enviando a token ${item.id}...`);
+          console.log("📤 URL final:", this.buildFinalUrl(url));
           console.log("📤 Payload:", payload);
 
           const result = await admin.messaging().send(payload);
@@ -170,20 +189,8 @@ export class FirebaseService {
         } catch (error: any) {
           console.error(`❌ Error enviando a token ${item.id}:`, error);
 
-          const code = error?.errorInfo?.code || error?.code || "";
-
-          if (
-            code === "messaging/registration-token-not-registered" ||
-            code === "messaging/invalid-registration-token"
-          ) {
-            try {
-              await this.prisma.userFcmToken.delete({
-                where: { id: item.id },
-              });
-              console.log(`🧹 Token inválido eliminado: ${item.id}`);
-            } catch (deleteError) {
-              console.error("❌ Error eliminando token inválido:", deleteError);
-            }
+          if (this.isInvalidTokenError(error)) {
+            await this.deleteInvalidTokenById(item.id);
           }
         }
       }

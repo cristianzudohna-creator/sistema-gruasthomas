@@ -62,6 +62,10 @@
 // - TOTAL HORAS queda coherente con la OT
 // - HOJA OPERADORES con encabezado gris oscuro
 // - HOJA RIGGER con encabezado azul
+//
+// ✅ NUEVO (NOTIFICACIONES):
+// - Al completar la OT se notifica a usuarios SUPERADMIN y ADMINISTRADORA
+// - Se mantiene la notificación al operador al crear la OT
 
 import {
   BadRequestException,
@@ -822,6 +826,77 @@ export class WorkOrdersService {
 
     this.styleExcelBodyRow(row);
   }
+
+  private async notifyOtCompletedAdmins(workOrder: any, completedByUserId?: string) {
+  try {
+    const destinatarios = await this.prisma.user.findMany({
+      where: {
+        activo: true,
+        role: {
+          in: ["SUPERADMIN", "ADMINISTRADORA"],
+        },
+        ...(workOrder?.empresa ? { empresa: workOrder.empresa } : {}),
+      },
+      select: {
+        id: true,
+        role: true,
+        nombre: true,
+        apellido: true,
+        email: true,
+      },
+    });
+
+    if (!destinatarios.length) {
+      console.log(
+        `⚠️ No se encontraron usuarios SUPERADMIN/ADMINISTRADORA para notificar OT completada ${workOrder?.id}`
+      );
+      return;
+    }
+
+    const tituloOt =
+      cleanStr(workOrder?.titulo) ||
+      cleanStr(workOrder?.cliente) ||
+      cleanStr(workOrder?.lugar) ||
+      `OT ${String(workOrder?.id || "").slice(0, 8)}`;
+
+    let nombreOperador = "el operador";
+    if (completedByUserId) {
+      const operador = await this.prisma.user.findUnique({
+        where: { id: completedByUserId },
+        select: { nombre: true, apellido: true, email: true },
+      });
+
+      nombreOperador =
+        [operador?.nombre, operador?.apellido].filter(Boolean).join(" ").trim() ||
+        cleanStr(operador?.email) ||
+        "el operador";
+    }
+
+    const body = `La OT ${tituloOt} fue completada por ${nombreOperador}.`;
+
+    for (const user of destinatarios) {
+      try {
+        await this.firebaseService.sendNotificationToUser(
+          user.id,
+          "OT completada",
+          body,
+          "/admin/ordenes-trabajo" // ✅ CAMBIO AQUÍ
+        );
+
+        console.log(
+          `✅ Notificación OT completada enviada a ${user.role}: ${user.id}`
+        );
+      } catch (error) {
+        console.error(
+          `❌ Error enviando notificación OT completada a ${user.role} (${user.id}):`,
+          error
+        );
+      }
+    }
+  } catch (error) {
+    console.error("❌ Error general notificando OT completada a admins:", error);
+  }
+}
 
   async exportPdfZipByFilters(
     filters: {
@@ -1787,6 +1862,9 @@ export class WorkOrdersService {
       },
     });
 
+    // 🔔 NOTIFICAR A SUPERADMIN + ADMINISTRADORA
+    await this.notifyOtCompletedAdmins(after, userId);
+
     return after;
   }
 
@@ -2311,7 +2389,7 @@ export class WorkOrdersService {
 
     doc.font("Helvetica").fontSize(9).fillColor("#111");
     doc.text("Sociedad de Transportes Thomas Limitada", left, y, { width: w - 160 });
-    doc.text("R.U.T 76.030.114-0", left, y + 12, {width: w - 160,});
+    doc.text("R.U.T 76.030.114-0", left, y + 12, { width: w - 160 });
     doc.text("Arriendo de equipos para transporte de carga y movimientos de izaje", left, y + 24, {
       width: w - 160,
     });
@@ -2424,6 +2502,7 @@ export class WorkOrdersService {
     doc.font("Helvetica").fontSize(8.7).fillColor("#111");
     doc.text("R.U.T.", rutX1, labelY, { width: rutX2 - rutX1, align: "center" });
     doc.text("Firma", firmaX1, labelY, { width: firmaX2 - firmaX1, align: "center" });
+
     // ============================
     // 🔵 FRANJA AZUL
     // ============================
@@ -2439,7 +2518,6 @@ export class WorkOrdersService {
       .fill()
       .restore();
 
-    // Texto
     doc
       .fillColor("#ffffff")
       .font("Helvetica")
@@ -2462,19 +2540,17 @@ export class WorkOrdersService {
     // ============================
     // 🟠 LOGO SGS
     // ============================
-
     const sgsPath = path.join(process.cwd(), "uploads/branding/sgs.png");
 
     // ============================
     // 🟠 LOGO SGS (AJUSTADO PRO)
     // ============================
-
     const logoSize = 50;
 
     doc.image(
       sgsPath,
-      footerX + footerW - logoSize + 10, // más a la derecha
-      footerY - 12, // un poco más arriba
+      footerX + footerW - logoSize + 10,
+      footerY - 12,
       {
         width: logoSize,
       }

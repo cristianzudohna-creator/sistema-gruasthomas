@@ -1,4 +1,11 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+} from "react-router-dom";
+import { useEffect } from "react";
 import Login from "./pages/Login";
 import Admin from "./pages/Admin";
 import Trabajador from "./pages/Trabajador";
@@ -32,9 +39,69 @@ import ExtraHours from "./pages/ExtraHours";
 // ✅ NUEVO: ADMINISTRADORA
 import AdminExtraHours from "./pages/AdminExtraHours";
 
+// ✅ Firebase foreground notifications
+import { onMessage } from "firebase/messaging";
+import { getMessagingInstance } from "./firebase";
+
+function NotificationListener() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    let unsubscribe = null;
+
+    const initForegroundNotifications = async () => {
+      try {
+        const messaging = await getMessagingInstance();
+        if (!messaging) return;
+
+        unsubscribe = onMessage(messaging, (payload) => {
+          console.log("🔥 Notificación recibida en foreground:", payload);
+
+          const rawUrl =
+            payload?.data?.url ||
+            payload?.fcmOptions?.link ||
+            "/";
+
+          const finalUrl = String(rawUrl || "").trim() || "/";
+
+          try {
+            const urlObj = finalUrl.startsWith("http://") || finalUrl.startsWith("https://")
+              ? new URL(finalUrl)
+              : new URL(finalUrl, window.location.origin);
+
+            const sameOrigin = urlObj.origin === window.location.origin;
+            const pathToNavigate = sameOrigin
+              ? `${urlObj.pathname}${urlObj.search}${urlObj.hash}`
+              : "/";
+
+            console.log("➡️ Navegando a:", pathToNavigate);
+            navigate(pathToNavigate);
+          } catch (error) {
+            console.error("❌ Error resolviendo URL de notificación:", error);
+          }
+        });
+      } catch (error) {
+        console.error("❌ Error configurando onMessage:", error);
+      }
+    };
+
+    initForegroundNotifications();
+
+    return () => {
+      if (typeof unsubscribe === "function") {
+        unsubscribe();
+      }
+    };
+  }, [navigate]);
+
+  return null;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
+      <NotificationListener />
+
       <Routes>
         {/* Login */}
         <Route path="/" element={<Login />} />
