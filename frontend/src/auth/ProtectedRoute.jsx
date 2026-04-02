@@ -222,26 +222,35 @@ export default function ProtectedRoute({ children, role }) {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    const loadSession = () => {
-      try {
-        const t = getToken();
-        const u = getUser();
+  const loadSession = () => {
+    try {
+      const t = getToken();
+      const u = getUser();
 
-        setToken(t);
-        setUser(u);
-      } catch (error) {
-        console.error("❌ Error cargando sesión en ProtectedRoute:", error);
-        setToken(null);
-        setUser(null);
-      } finally {
-        setTimeout(() => {
-          setBootReady(true);
-        }, 120);
-      }
-    };
+      setToken(t);
+      setUser(u);
+    } catch (error) {
+      console.error("❌ Error cargando sesión:", error);
+      setToken(null);
+      setUser(null);
+    } finally {
+      setTimeout(() => setBootReady(true), 120);
+    }
+  };
 
+  loadSession();
+
+  // 🔥 ESCUCHAR cambios en localStorage
+  const handleStorage = () => {
     loadSession();
-  }, []);
+  };
+
+  window.addEventListener("storage", handleStorage);
+
+  return () => {
+    window.removeEventListener("storage", handleStorage);
+  };
+}, []);
 
   if (!bootReady) {
     return null;
