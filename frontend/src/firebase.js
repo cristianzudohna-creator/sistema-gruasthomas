@@ -40,6 +40,47 @@ export async function getMessagingInstance() {
   }
 }
 
+// 🔥 Guardar token FCM en backend
+async function saveFCMTokenToBackend(fcmToken) {
+  try {
+    const authToken = localStorage.getItem("access_token");
+
+    if (!authToken) {
+      console.warn("⚠️ No hay token JWT para guardar FCM en backend");
+      return false;
+    }
+
+    console.log("📤 Enviando token FCM al backend...");
+
+    const response = await fetch("/api/users/fcm-token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({
+        token: fcmToken,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "");
+      console.error(
+        "❌ Error guardando token FCM en backend:",
+        response.status,
+        errorText
+      );
+      return false;
+    }
+
+    console.log("✅ Token FCM guardado correctamente");
+    return true;
+  } catch (error) {
+    console.error("❌ Error enviando token FCM al backend:", error);
+    return false;
+  }
+}
+
 // 🔥 Obtener token FCM
 export async function getFCMToken() {
   try {
@@ -78,6 +119,9 @@ export async function getFCMToken() {
     }
 
     console.log("🔥 Token FCM obtenido:", token);
+
+    // ✅ GUARDAR EN BACKEND
+    await saveFCMTokenToBackend(token);
 
     return token;
   } catch (error) {
