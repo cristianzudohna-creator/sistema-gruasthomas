@@ -97,7 +97,10 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const payload = { rut: normalizeRut(rut), password };
+      const payload = { 
+  rut: rut.trim(), 
+  password 
+};
 
       const res = await fetch("/api/auth/login", {
         method: "POST",

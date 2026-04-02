@@ -126,18 +126,30 @@ export class UsersService {
   // ✅ Login por RUT
   // (devuelve el user completo, incluyendo password hash y flags)
   findByRut(rut: string) {
-    const cleanRut = this.normalizeRut(rut);
-    if (!cleanRut) return null as any;
+  const cleanRut = this.normalizeRut(rut);
+  if (!cleanRut) return null as any;
 
-    return this.prisma.user.findFirst({
-      where: {
-        rut: {
-          equals: cleanRut,
-          mode: "insensitive",
+  return this.prisma.user.findFirst({
+    where: {
+      OR: [
+        // formato limpio
+        {
+          rut: {
+            equals: cleanRut,
+            mode: "insensitive",
+          },
         },
-      },
-    });
-  }
+        // formato con guion posible
+        {
+          rut: {
+            contains: cleanRut,
+            mode: "insensitive",
+          },
+        },
+      ],
+    },
+  });
+}
 
   async ensureAdmin() {
     const email = "admin@empresa.cl";
