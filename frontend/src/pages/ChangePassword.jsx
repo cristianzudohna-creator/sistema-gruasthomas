@@ -1,5 +1,10 @@
 // ✅ Archivo: frontend/src/pages/ChangePassword.jsx (COMPLETO)
 // ✅ FIX: al cambiar contraseña -> set user.mustChangePassword = false en localStorage
+// ✅ FIX NUEVO: credentials:"include" para móviles
+// ✅ FIX NUEVO: navegación segura sin setTimeout
+// ✅ FIX NUEVO: fallback correcto si localStorage.user viene vacío o corrupto
+// ✅ FIX NUEVO: mejor manejo de errores backend
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Login.css";
@@ -28,10 +33,12 @@ export default function ChangePassword() {
       setError("Completa todos los campos");
       return;
     }
+
     if (newPassword.length < 8) {
       setError("La nueva contraseña debe tener al menos 8 caracteres");
       return;
     }
+
     if (newPassword !== confirm) {
       setError("La confirmación no coincide");
       return;
@@ -44,9 +51,11 @@ export default function ChangePassword() {
     }
 
     setLoading(true);
+
     try {
       const res = await fetch("/api/auth/change-password", {
         method: "POST",
+        credentials: "include", // ✅ importante para móviles / cookies
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -57,41 +66,67 @@ export default function ChangePassword() {
         }),
       });
 
+      console.log("CHANGE PASSWORD STATUS:", res.status);
+
+      let data = null;
+      try {
+        data = await res.json();
+      } catch {
+        data = null;
+      }
+
       if (!res.ok) {
-        let msg = "No se pudo cambiar la contraseña";
-        try {
-          const err = await res.json();
-          msg = err?.message || msg;
-        } catch {}
-        setError(Array.isArray(msg) ? msg.join(", ") : msg);
+        let msg = data?.message || "No se pudo cambiar la contraseña";
+        if (Array.isArray(msg)) msg = msg.join(", ");
+        setError(msg);
         return;
       }
 
-      const data = await res.json();
       setOk(data?.message || "Contraseña actualizada correctamente");
 
-      // ✅ IMPORTANTÍSIMO: quitar flag mustChangePassword en localStorage
+      // ✅ limpiar flag local
+      let storedUser = null;
       try {
-        const user = JSON.parse(localStorage.getItem("user") || "null");
-        if (user && typeof user === "object") {
-          user.mustChangePassword = false;
-          localStorage.setItem("user", JSON.stringify(user));
-        }
-      } catch {}
+        storedUser = JSON.parse(localStorage.getItem("user") || "null");
+      } catch {
+        storedUser = null;
+      }
 
-      // limpiar
+      if (storedUser && typeof storedUser === "object") {
+        storedUser.mustChangePassword = false;
+        localStorage.setItem("user", JSON.stringify(storedUser));
+      }
+
+      // ✅ limpiar formulario
       setCurrentPassword("");
       setNewPassword("");
       setConfirm("");
 
-      // volver al panel según rol
-      const user = JSON.parse(localStorage.getItem("user") || "null");
-      const role = norm(user?.role);
+      // ✅ navegación segura
+      let to = "/";
 
-      const to = role === "TRABAJADOR" ? "/trabajador" : "/admin";
+      try {
+        const user = JSON.parse(localStorage.getItem("user") || "null");
+        const role = norm(user?.role);
 
-      setTimeout(() => navigate(to, { replace: true }), 700);
-    } catch {
+        if (role === "TRABAJADOR") {
+          to = "/trabajador";
+        } else if (
+          role === "SUPERADMIN" ||
+          role === "CONTROL_FLOTA" ||
+          role === "ADMINISTRADORA"
+        ) {
+          to = "/admin";
+        } else {
+          to = "/";
+        }
+      } catch {
+        to = "/";
+      }
+
+      navigate(to, { replace: true });
+    } catch (err) {
+      console.error("❌ Error change-password:", err);
       setError("Error de conexión con el servidor");
     } finally {
       setLoading(false);
