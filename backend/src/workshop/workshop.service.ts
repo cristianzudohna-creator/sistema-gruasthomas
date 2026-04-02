@@ -1724,7 +1724,7 @@ if (user.role !== 'SUPERADMIN') {
       },
     });
 
-    return this.prisma.vehicleIncident.findUnique({
+        const result = await this.prisma.vehicleIncident.findUnique({
       where: { id: incident.id },
       include: {
         vehicle: true,
@@ -1745,6 +1745,14 @@ if (user.role !== 'SUPERADMIN') {
         },
       },
     });
+
+    const task = result?.workshopTasks?.[0];
+
+    if (task) {
+      await this.notifyWorkshopTaskAssigned(task);
+    }
+
+    return result;
   }
 
   async removeIncident(id: string) {
@@ -1979,6 +1987,8 @@ if (user.role !== 'SUPERADMIN') {
         },
       });
     });
+
+    await this.notifyWorkshopTaskAssigned(createdTask);
 
     return createdTask;
   }
@@ -2715,6 +2725,56 @@ if (user.role !== 'SUPERADMIN') {
     }
   } catch (error) {
     console.error('❌ Error general notifyIncidentCreated:', error);
+  }
+}
+
+private async notifyWorkshopTaskAssigned(task: any) {
+  try {
+    const assignedUsers =
+      task?.assignments
+        ?.map((a: any) => a.user)
+        ?.filter(Boolean)
+        ?.filter((u: any) =>
+          u.workerType === WorkerType.MECANICO ||
+          u.workerType === WorkerType.AYUDANTE_DE_MECANICO ||
+          u.workerType === WorkerType.JEFE_TALLER
+        ) || [];
+
+    const uniqueUsersMap = new Map<string, any>();
+    assignedUsers.forEach((u: any) => uniqueUsersMap.set(u.id, u));
+    const users = Array.from(uniqueUsersMap.values());
+
+    if (!users.length) {
+      console.log('⚠️ No hay usuarios asignados para notificar tarea de taller');
+      return;
+    }
+
+    const codigo = String(task?.codigo || '').trim() || 'SIN CÓDIGO';
+    const titulo = String(task?.titulo || '').trim() || 'Tarea de taller';
+
+    const body = `Se te asignó la tarea ${codigo}: ${titulo}`;
+
+    for (const user of users) {
+      try {
+        await this.firebaseService.sendNotificationToUser(
+          user.id,
+          '🛠️ Nueva tarea asignada',
+          body,
+          '/trabajador/taller',
+        );
+
+        console.log(
+          `✅ Notificación de tarea enviada a ${user.id} (${codigo})`,
+        );
+      } catch (error) {
+        console.error(
+          `❌ Error notificando tarea a ${user.id} (${codigo}):`,
+          error,
+        );
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error general notifyWorkshopTaskAssigned:', error);
   }
 }
 }
