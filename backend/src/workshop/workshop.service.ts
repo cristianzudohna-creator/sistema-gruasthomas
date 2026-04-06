@@ -1,4 +1,4 @@
-// ✅ Archivo: src/workshop/workshop.service.ts (COMPLETO + FOTO EN SOLICITUD DE REPUESTO + EXCEL GLOBAL)
+// ✅ Archivo: src/workshop/workshop.service.ts (COMPLETO + FOTO EN SOLICITUD DE REPUESTO + EXCEL GLOBAL + NOTIFICACIÓN A ADQUISICIONES)
 
 import {
   Injectable,
@@ -40,9 +40,9 @@ function normalizePlate(input: string) {
 @Injectable()
 export class WorkshopService {
   constructor(
-  private prisma: PrismaService,
-  private readonly firebaseService: FirebaseService,
-) {}
+    private prisma: PrismaService,
+    private readonly firebaseService: FirebaseService,
+  ) {}
 
   // ============================
   // HELPERS PRIVADOS
@@ -83,30 +83,30 @@ export class WorkshopService {
   }
 
   private async ensureWorkshopTaskExists(
-  id: string,
-  tx?: Prisma.TransactionClient,
-) {
-  const db = tx ?? this.prisma;
+    id: string,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const db = tx ?? this.prisma;
 
-  const task = await db.workshopTask.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      incidentId: true,
-      status: true,
-      startedAt: true,
-      closedAt: true,
-      observaciones: true,
-      trabajoRealizado: true,
-    },
-  });
+    const task = await db.workshopTask.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        incidentId: true,
+        status: true,
+        startedAt: true,
+        closedAt: true,
+        observaciones: true,
+        trabajoRealizado: true,
+      },
+    });
 
-  if (!task) {
-    throw new NotFoundException('Tarea de taller no encontrada');
+    if (!task) {
+      throw new NotFoundException('Tarea de taller no encontrada');
+    }
+
+    return task;
   }
-
-  return task;
-}
 
   private async getTaskAssignmentForUser(
     workshopTaskId: string,
@@ -610,18 +610,18 @@ export class WorkshopService {
     }
 
     if (
-  user.role === 'TRABAJADOR' &&
-  (
-    user.workerType === WorkerType.JEFE_TALLER ||
-    user.workerType === WorkerType.SUPERVISOR
-  )
-) {
-  return user;
-}
+      user.role === 'TRABAJADOR' &&
+      (
+        user.workerType === WorkerType.JEFE_TALLER ||
+        user.workerType === WorkerType.SUPERVISOR
+      )
+    ) {
+      return user;
+    }
 
-throw new BadRequestException(
-  'Solo jefe de taller, supervisor o superadmin pueden firmar/revisar reportes',
-);
+    throw new BadRequestException(
+      'Solo jefe de taller, supervisor o superadmin pueden firmar/revisar reportes',
+    );
   }
 
   private async ensureExtraHoursAdminAccess(userId: string) {
@@ -675,25 +675,25 @@ throw new BadRequestException(
     const user = await this.getUserForExtraHours(userId);
 
     const allowedWorkerTypes: WorkerType[] = [
-  WorkerType.MECANICO,
-  WorkerType.AYUDANTE_DE_MECANICO,
-  WorkerType.JEFE_TALLER,
-  WorkerType.SUPERVISOR,
-];
+      WorkerType.MECANICO,
+      WorkerType.AYUDANTE_DE_MECANICO,
+      WorkerType.JEFE_TALLER,
+      WorkerType.SUPERVISOR,
+    ];
 
-if (user.role !== 'SUPERADMIN') {
-  if (!user.workerType || !allowedWorkerTypes.includes(user.workerType)) {
-    throw new BadRequestException(
-      'Solo mecánico, ayudante de mecánico, jefe de taller o supervisor pueden crear reportes de horas extras',
-    );
-  }
+    if (user.role !== 'SUPERADMIN') {
+      if (!user.workerType || !allowedWorkerTypes.includes(user.workerType)) {
+        throw new BadRequestException(
+          'Solo mecánico, ayudante de mecánico, jefe de taller o supervisor pueden crear reportes de horas extras',
+        );
+      }
 
-  if (!user.empresa) {
-    throw new BadRequestException(
-      'El trabajador no tiene empresa asignada',
-    );
-  }
-}
+      if (!user.empresa) {
+        throw new BadRequestException(
+          'El trabajador no tiene empresa asignada',
+        );
+      }
+    }
 
     const descripcionTrabajo = String(dto?.descripcionTrabajo || '').trim();
     if (!descripcionTrabajo) {
@@ -781,20 +781,20 @@ if (user.role !== 'SUPERADMIN') {
     }
 
     if (
-  user.role === 'TRABAJADOR' &&
-  (
-    user.workerType === WorkerType.JEFE_TALLER ||
-    user.workerType === WorkerType.SUPERVISOR
-  )
-) {
-  if (user.empresa && report.empresa && user.empresa !== report.empresa) {
-    throw new BadRequestException(
-      'No puedes ver reportes de otra empresa',
-    );
-  }
+      user.role === 'TRABAJADOR' &&
+      (
+        user.workerType === WorkerType.JEFE_TALLER ||
+        user.workerType === WorkerType.SUPERVISOR
+      )
+    ) {
+      if (user.empresa && report.empresa && user.empresa !== report.empresa) {
+        throw new BadRequestException(
+          'No puedes ver reportes de otra empresa',
+        );
+      }
 
-  return report;
-}
+      return report;
+    }
 
     if (report.trabajadorId !== user.id) {
       throw new BadRequestException(
@@ -1269,159 +1269,156 @@ if (user.role !== 'SUPERADMIN') {
   }
 
   async removeExtraHourReport(id: string, userId: string) {
-  const report = await this.prisma.workshopExtraHourReport.findUnique({
-    where: { id },
-    include: {
-      trabajador: true,
-      firmadoPor: true,
-    },
-  });
+    const report = await this.prisma.workshopExtraHourReport.findUnique({
+      where: { id },
+      include: {
+        trabajador: true,
+        firmadoPor: true,
+      },
+    });
 
-  if (!report) {
-    throw new NotFoundException('Reporte de horas extras no encontrado');
+    if (!report) {
+      throw new NotFoundException('Reporte de horas extras no encontrado');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        activo: true,
+        role: true,
+        workerType: true,
+        empresa: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    if (!user.activo) {
+      throw new BadRequestException('Usuario inactivo');
+    }
+
+    const canDeleteOwnReport = report.trabajadorId === user.id;
+
+    const canDeleteAsManager =
+      user.role === Role.SUPERADMIN ||
+      (user.role === Role.TRABAJADOR &&
+        (
+          user.workerType === WorkerType.JEFE_TALLER ||
+          user.workerType === WorkerType.SUPERVISOR
+        ));
+
+    if (!canDeleteOwnReport && !canDeleteAsManager) {
+      throw new BadRequestException(
+        'No tienes permisos para eliminar este reporte',
+      );
+    }
+
+    if (
+      user.role !== Role.SUPERADMIN &&
+      user.empresa &&
+      report.empresa &&
+      user.empresa !== report.empresa
+    ) {
+      throw new BadRequestException(
+        'No puedes eliminar reportes de otra empresa',
+      );
+    }
+
+    await this.prisma.workshopExtraHourReport.delete({
+      where: { id },
+    });
+
+    return { message: 'Reporte eliminado correctamente' };
   }
-
-  const user = await this.prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      activo: true,
-      role: true,
-      workerType: true,
-      empresa: true,
-    },
-  });
-
-  if (!user) {
-    throw new NotFoundException('Usuario no encontrado');
-  }
-
-  if (!user.activo) {
-    throw new BadRequestException('Usuario inactivo');
-  }
-
-  const canDeleteOwnReport = report.trabajadorId === user.id;
-
-  const canDeleteAsManager =
-    user.role === Role.SUPERADMIN ||
-    (user.role === Role.TRABAJADOR &&
-      (
-        user.workerType === WorkerType.JEFE_TALLER ||
-        user.workerType === WorkerType.SUPERVISOR
-      ));
-
-  if (!canDeleteOwnReport && !canDeleteAsManager) {
-    throw new BadRequestException(
-      'No tienes permisos para eliminar este reporte',
-    );
-  }
-
-  if (
-    user.role !== Role.SUPERADMIN &&
-    user.empresa &&
-    report.empresa &&
-    user.empresa !== report.empresa
-  ) {
-    throw new BadRequestException(
-      'No puedes eliminar reportes de otra empresa',
-    );
-  }
-
-  await this.prisma.workshopExtraHourReport.delete({
-    where: { id },
-  });
-
-  return { message: 'Reporte eliminado correctamente' };
-}
 
   // ============================
   // INCIDENTES
   // ============================
 
   async createIncident(dto: CreateIncidentDto) {
-  const patente = normalizePlate(dto.patente);
+    const patente = normalizePlate(dto.patente);
 
-  if (!patente) {
-    throw new BadRequestException('La patente es obligatoria');
-  }
-
-  const vehicles = await this.prisma.vehicle.findMany({
-    where: {
-      activo: true,
-    },
-    select: {
-      id: true,
-      patente: true,
-    },
-  });
-
-  const vehicle = vehicles.find(
-    (v) => normalizePlate(v.patente) === patente,
-  );
-
-  if (!vehicle) {
-    throw new NotFoundException('No se encontró un vehículo con esa patente');
-  }
-
-  // ============================
-  // 🔥 FOTO
-  // ============================
-  let fotoUrl: string | null = null;
-
-  if (dto.foto) {
-    const buffer = this.parseImageDataUrl(dto.foto);
-
-    if (buffer) {
-      const uploadDir = path.join(process.cwd(), 'uploads', 'incidents');
-
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
-      }
-
-      const fileName = `incident_${Date.now()}.jpg`;
-      const filePath = path.join(uploadDir, fileName);
-
-      fs.writeFileSync(filePath, buffer);
-
-      fotoUrl = `/uploads/incidents/${fileName}`;
+    if (!patente) {
+      throw new BadRequestException('La patente es obligatoria');
     }
-  }
 
-  const incident = await this.prisma.vehicleIncident.create({
-    data: {
-      vehicle: {
-        connect: { id: vehicle.id },
+    const vehicles = await this.prisma.vehicle.findMany({
+      where: {
+        activo: true,
       },
-      reportedBy: {
-        connect: { id: dto.reportedById },
+      select: {
+        id: true,
+        patente: true,
       },
-      empresa: dto.empresa,
-      type: 'OTRO',
-      severity: 'MEDIA',
-      descripcion: dto.descripcion,
-      ubicacionTexto: dto.ubicacionTexto,
-      fotoUrl,
-    },
-    include: {
-      vehicle: true,
-      reportedBy: true,
-      workshopTasks: {
-        include: {
-          assignedTo: true,
-          assignments: {
-            include: {
-              user: true,
+    });
+
+    const vehicle = vehicles.find(
+      (v) => normalizePlate(v.patente) === patente,
+    );
+
+    if (!vehicle) {
+      throw new NotFoundException('No se encontró un vehículo con esa patente');
+    }
+
+    let fotoUrl: string | null = null;
+
+    if (dto.foto) {
+      const buffer = this.parseImageDataUrl(dto.foto);
+
+      if (buffer) {
+        const uploadDir = path.join(process.cwd(), 'uploads', 'incidents');
+
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+
+        const fileName = `incident_${Date.now()}.jpg`;
+        const filePath = path.join(uploadDir, fileName);
+
+        fs.writeFileSync(filePath, buffer);
+
+        fotoUrl = `/uploads/incidents/${fileName}`;
+      }
+    }
+
+    const incident = await this.prisma.vehicleIncident.create({
+      data: {
+        vehicle: {
+          connect: { id: vehicle.id },
+        },
+        reportedBy: {
+          connect: { id: dto.reportedById },
+        },
+        empresa: dto.empresa,
+        type: 'OTRO',
+        severity: 'MEDIA',
+        descripcion: dto.descripcion,
+        ubicacionTexto: dto.ubicacionTexto,
+        fotoUrl,
+      },
+      include: {
+        vehicle: true,
+        reportedBy: true,
+        workshopTasks: {
+          include: {
+            assignedTo: true,
+            assignments: {
+              include: {
+                user: true,
+              },
             },
           },
         },
       },
-    },
-  });
+    });
 
-  await this.notifyIncidentCreated(incident);
+    await this.notifyIncidentCreated(incident);
 
-  return incident;
-}
+    return incident;
+  }
 
   async getIncidents() {
     return this.prisma.vehicleIncident.findMany({
@@ -1724,7 +1721,7 @@ if (user.role !== 'SUPERADMIN') {
       },
     });
 
-        const result = await this.prisma.vehicleIncident.findUnique({
+    const result = await this.prisma.vehicleIncident.findUnique({
       where: { id: incident.id },
       include: {
         vehicle: true,
@@ -2450,6 +2447,10 @@ if (user.role !== 'SUPERADMIN') {
       const previousTask = await tx.workshopTask.findUnique({
         where: { id: dto.workshopTaskId },
         select: {
+          id: true,
+          codigo: true,
+          titulo: true,
+          empresa: true,
           observaciones: true,
           startedAt: true,
           incidentId: true,
@@ -2468,13 +2469,26 @@ if (user.role !== 'SUPERADMIN') {
         ? `${previousTask.observaciones}\n${extraObservation}`
         : extraObservation;
 
-      await tx.workshopTask.update({
+      const updatedTask = await tx.workshopTask.update({
         where: { id: dto.workshopTaskId },
         data: {
           status: WorkshopTaskStatus.ESPERANDO_REPUESTO,
           startedAt: previousTask?.startedAt ?? new Date(),
           closedAt: null,
           observaciones: mergedObservaciones,
+        },
+        include: {
+          vehicle: true,
+          incident: true,
+          createdBy: true,
+          assignedTo: true,
+          closedBy: true,
+          assignments: {
+            include: {
+              user: true,
+            },
+          },
+          partsUsed: true,
         },
       });
 
@@ -2488,118 +2502,107 @@ if (user.role !== 'SUPERADMIN') {
         });
       }
 
-      return part;
+      return {
+        part,
+        updatedTask,
+      };
     });
 
-    return result;
+    await this.notifyPartRequested(result.updatedTask);
+
+    return result.part;
   }
 
   async finishWorkshopTaskByWorker(
-  taskId: string,
-  userId: string,
-  dto?: {
-    trabajoRealizado?: string;
-    fotoEvidencia?: string;
-  },
-) {
-  const task = await this.ensureWorkshopTaskExists(taskId);
-  await this.ensureResponsibleAssignment(taskId, userId);
+    taskId: string,
+    userId: string,
+    dto?: {
+      trabajoRealizado?: string;
+      fotoEvidencia?: string;
+    },
+  ) {
+    const task = await this.ensureWorkshopTaskExists(taskId);
+    await this.ensureResponsibleAssignment(taskId, userId);
 
-  if (task.status === WorkshopTaskStatus.CANCELADA) {
-    throw new BadRequestException(
-      'No se puede terminar una tarea cancelada',
-    );
-  }
-
-  if (task.status === WorkshopTaskStatus.TERMINADA) {
-    throw new BadRequestException('La tarea ya está terminada');
-  }
-
-  // =========================
-  // 📸 GUARDAR FOTO EVIDENCIA
-  // =========================
-  let imagePath: string | null = null;
-
-  if (dto?.fotoEvidencia) {
-    const buffer = this.parseImageDataUrl(dto.fotoEvidencia);
-
-    if (buffer) {
-      const uploadDir = path.join(process.cwd(), 'uploads/workshop-evidence');
-
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
-      }
-
-      const fileName = `evidence_${Date.now()}_${Math.random()
-        .toString(36)
-        .substring(2, 8)}.jpg`;
-
-      const fullPath = path.join(uploadDir, fileName);
-
-      fs.writeFileSync(fullPath, buffer);
-
-      imagePath = `/uploads/workshop-evidence/${fileName}`;
+    if (task.status === WorkshopTaskStatus.CANCELADA) {
+      throw new BadRequestException(
+        'No se puede terminar una tarea cancelada',
+      );
     }
-  }
 
-  // =========================
-  // 📝 TEXTO FINAL
-  // =========================
-  const trabajoRealizado = String(dto?.trabajoRealizado || '').trim();
+    if (task.status === WorkshopTaskStatus.TERMINADA) {
+      throw new BadRequestException('La tarea ya está terminada');
+    }
 
-  // =========================
-  // 💾 UPDATE
-  // =========================
-  const updatedTask = await this.prisma.workshopTask.update({
-    where: { id: taskId },
-    data: {
-      status: WorkshopTaskStatus.TERMINADA,
-      startedAt: task.startedAt ?? new Date(),
-      closedAt: new Date(),
-      closedBy: {
-        connect: { id: userId },
-      },
+    let imagePath: string | null = null;
 
-      // ✅ NUEVO
-      trabajoRealizado: trabajoRealizado || undefined,
+    if (dto?.fotoEvidencia) {
+      const buffer = this.parseImageDataUrl(dto.fotoEvidencia);
 
-      // ✅ GUARDAMOS EN OBSERVACIONES (como haces con repuestos)
-      observaciones: imagePath
-  ? task.observaciones?.trim()
-    ? `${task.observaciones}\n📸 Evidencia: ${imagePath}`
-    : `📸 Evidencia: ${imagePath}`
-  : task.observaciones,
-    },
-    include: {
-      vehicle: true,
-      incident: true,
-      createdBy: true,
-      assignedTo: true,
-      closedBy: true,
-      assignments: {
-        include: {
-          user: true,
-        },
-      },
-      partsUsed: true,
-    },
-  });
+      if (buffer) {
+        const uploadDir = path.join(process.cwd(), 'uploads/workshop-evidence');
 
-  // =========================
-  // 🔁 INCIDENTE → RESUELTO
-  // =========================
-  if (updatedTask.incidentId) {
-    await this.prisma.vehicleIncident.update({
-      where: { id: updatedTask.incidentId },
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+
+        const fileName = `evidence_${Date.now()}_${Math.random()
+          .toString(36)
+          .substring(2, 8)}.jpg`;
+
+        const fullPath = path.join(uploadDir, fileName);
+
+        fs.writeFileSync(fullPath, buffer);
+
+        imagePath = `/uploads/workshop-evidence/${fileName}`;
+      }
+    }
+
+    const trabajoRealizado = String(dto?.trabajoRealizado || '').trim();
+
+    const updatedTask = await this.prisma.workshopTask.update({
+      where: { id: taskId },
       data: {
-        status: VehicleIncidentStatus.RESUELTO,
-        cerradoEn: new Date(),
+        status: WorkshopTaskStatus.TERMINADA,
+        startedAt: task.startedAt ?? new Date(),
+        closedAt: new Date(),
+        closedBy: {
+          connect: { id: userId },
+        },
+        trabajoRealizado: trabajoRealizado || undefined,
+        observaciones: imagePath
+          ? task.observaciones?.trim()
+            ? `${task.observaciones}\n📸 Evidencia: ${imagePath}`
+            : `📸 Evidencia: ${imagePath}`
+          : task.observaciones,
+      },
+      include: {
+        vehicle: true,
+        incident: true,
+        createdBy: true,
+        assignedTo: true,
+        closedBy: true,
+        assignments: {
+          include: {
+            user: true,
+          },
+        },
+        partsUsed: true,
       },
     });
-  }
 
-  return updatedTask;
-}
+    if (updatedTask.incidentId) {
+      await this.prisma.vehicleIncident.update({
+        where: { id: updatedTask.incidentId },
+        data: {
+          status: VehicleIncidentStatus.RESUELTO,
+          cerradoEn: new Date(),
+        },
+      });
+    }
+
+    return updatedTask;
+  }
 
   // ============================
   // REPUESTOS
@@ -2647,134 +2650,182 @@ if (user.role !== 'SUPERADMIN') {
   }
 
   private async notifyIncidentCreated(incident: any) {
-  try {
-    // SUPERADMIN sin filtro empresa
-    const superAdmins = await this.prisma.user.findMany({
-      where: {
-        activo: true,
-        role: Role.SUPERADMIN,
-      },
-      select: {
-        id: true,
-        role: true,
-        workerType: true,
-        nombre: true,
-        apellido: true,
-        email: true,
-      },
-    });
-
-    // JEFE_TALLER + SUPERVISOR con filtro empresa
-    const tallerLeads = await this.prisma.user.findMany({
-      where: {
-        activo: true,
-        role: Role.TRABAJADOR,
-        workerType: {
-          in: [WorkerType.JEFE_TALLER, WorkerType.SUPERVISOR],
+    try {
+      const superAdmins = await this.prisma.user.findMany({
+        where: {
+          activo: true,
+          role: Role.SUPERADMIN,
         },
-        ...(incident?.empresa ? { empresa: incident.empresa } : {}),
-      },
-      select: {
-        id: true,
-        role: true,
-        workerType: true,
-        nombre: true,
-        apellido: true,
-        email: true,
-      },
-    });
+        select: {
+          id: true,
+          role: true,
+          workerType: true,
+          nombre: true,
+          apellido: true,
+          email: true,
+        },
+      });
 
-    const destinatariosMap = new Map<string, any>();
+      const tallerLeads = await this.prisma.user.findMany({
+        where: {
+          activo: true,
+          role: Role.TRABAJADOR,
+          workerType: {
+            in: [WorkerType.JEFE_TALLER, WorkerType.SUPERVISOR],
+          },
+          ...(incident?.empresa ? { empresa: incident.empresa } : {}),
+        },
+        select: {
+          id: true,
+          role: true,
+          workerType: true,
+          nombre: true,
+          apellido: true,
+          email: true,
+        },
+      });
 
-    [...superAdmins, ...tallerLeads].forEach((u) => {
-      destinatariosMap.set(u.id, u);
-    });
+      const destinatariosMap = new Map<string, any>();
 
-    const destinatarios = Array.from(destinatariosMap.values());
+      [...superAdmins, ...tallerLeads].forEach((u) => {
+        destinatariosMap.set(u.id, u);
+      });
 
-    if (!destinatarios.length) {
-      console.log(
-        `⚠️ No se encontraron usuarios para notificar incidente ${incident?.id}`,
-      );
-      return;
-    }
+      const destinatarios = Array.from(destinatariosMap.values());
 
-    const patente = String(incident?.vehicle?.patente || '').trim() || 'SIN PATENTE';
-    const descripcion = String(incident?.descripcion || '').trim() || 'Sin descripción';
-
-    const body = `Incidente en ${patente}: ${descripcion}`;
-
-    for (const user of destinatarios) {
-      try {
-        await this.firebaseService.sendNotificationToUser(
-          user.id,
-          '🚨 Nuevo incidente',
-          body,
-          '/admin/incidentes',
-        );
-
+      if (!destinatarios.length) {
         console.log(
-          `✅ Notificación de incidente enviada a ${user.role}${user.workerType ? `/${user.workerType}` : ''}: ${user.id}`,
+          `⚠️ No se encontraron usuarios para notificar incidente ${incident?.id}`,
         );
-      } catch (error) {
-        console.error(
-          `❌ Error notificando incidente a ${user.role}${user.workerType ? `/${user.workerType}` : ''} (${user.id}):`,
-          error,
-        );
+        return;
       }
-    }
-  } catch (error) {
-    console.error('❌ Error general notifyIncidentCreated:', error);
-  }
-}
 
-private async notifyWorkshopTaskAssigned(task: any) {
-  try {
-    const assignedUsers =
-      task?.assignments
-        ?.map((a: any) => a.user)
-        ?.filter(Boolean)
-        ?.filter((u: any) =>
-          u.workerType === WorkerType.MECANICO ||
-          u.workerType === WorkerType.AYUDANTE_DE_MECANICO ||
-          u.workerType === WorkerType.JEFE_TALLER
-        ) || [];
+      const patente = String(incident?.vehicle?.patente || '').trim() || 'SIN PATENTE';
+      const descripcion = String(incident?.descripcion || '').trim() || 'Sin descripción';
 
-    const uniqueUsersMap = new Map<string, any>();
-    assignedUsers.forEach((u: any) => uniqueUsersMap.set(u.id, u));
-    const users = Array.from(uniqueUsersMap.values());
+      const body = `Incidente en ${patente}: ${descripcion}`;
 
-    if (!users.length) {
-      console.log('⚠️ No hay usuarios asignados para notificar tarea de taller');
-      return;
-    }
+      for (const user of destinatarios) {
+        try {
+          await this.firebaseService.sendNotificationToUser(
+            user.id,
+            '🚨 Nuevo incidente',
+            body,
+            '/admin/incidentes',
+          );
 
-    const codigo = String(task?.codigo || '').trim() || 'SIN CÓDIGO';
-    const titulo = String(task?.titulo || '').trim() || 'Tarea de taller';
-
-    const body = `Se te asignó la tarea ${codigo}: ${titulo}`;
-
-    for (const user of users) {
-      try {
-        await this.firebaseService.sendNotificationToUser(
-          user.id,
-          '🛠️ Nueva tarea asignada',
-          body,
-          '/trabajador/taller',
-        );
-
-        console.log(
-          `✅ Notificación de tarea enviada a ${user.id} (${codigo})`,
-        );
-      } catch (error) {
-        console.error(
-          `❌ Error notificando tarea a ${user.id} (${codigo}):`,
-          error,
-        );
+          console.log(
+            `✅ Notificación de incidente enviada a ${user.role}${user.workerType ? `/${user.workerType}` : ''}: ${user.id}`,
+          );
+        } catch (error) {
+          console.error(
+            `❌ Error notificando incidente a ${user.role}${user.workerType ? `/${user.workerType}` : ''} (${user.id}):`,
+            error,
+          );
+        }
       }
+    } catch (error) {
+      console.error('❌ Error general notifyIncidentCreated:', error);
     }
-  } catch (error) {
-    console.error('❌ Error general notifyWorkshopTaskAssigned:', error);
   }
-}
+
+  private async notifyWorkshopTaskAssigned(task: any) {
+    try {
+      const assignedUsers =
+        task?.assignments
+          ?.map((a: any) => a.user)
+          ?.filter(Boolean)
+          ?.filter((u: any) =>
+            u.workerType === WorkerType.MECANICO ||
+            u.workerType === WorkerType.AYUDANTE_DE_MECANICO ||
+            u.workerType === WorkerType.JEFE_TALLER
+          ) || [];
+
+      const uniqueUsersMap = new Map<string, any>();
+      assignedUsers.forEach((u: any) => uniqueUsersMap.set(u.id, u));
+      const users = Array.from(uniqueUsersMap.values());
+
+      if (!users.length) {
+        console.log('⚠️ No hay usuarios asignados para notificar tarea de taller');
+        return;
+      }
+
+      const codigo = String(task?.codigo || '').trim() || 'SIN CÓDIGO';
+      const titulo = String(task?.titulo || '').trim() || 'Tarea de taller';
+
+      const body = `Se te asignó la tarea ${codigo}: ${titulo}`;
+
+      for (const user of users) {
+        try {
+          await this.firebaseService.sendNotificationToUser(
+            user.id,
+            '🛠️ Nueva tarea asignada',
+            body,
+            '/trabajador/taller',
+          );
+
+          console.log(
+            `✅ Notificación de tarea enviada a ${user.id} (${codigo})`,
+          );
+        } catch (error) {
+          console.error(
+            `❌ Error notificando tarea a ${user.id} (${codigo}):`,
+            error,
+          );
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error general notifyWorkshopTaskAssigned:', error);
+    }
+  }
+
+  private async notifyPartRequested(task: any) {
+    try {
+      const users = await this.prisma.user.findMany({
+        where: {
+          activo: true,
+          role: Role.TRABAJADOR,
+          workerType: WorkerType.ADQUISICIONES,
+          ...(task?.empresa
+            ? {
+                empresa: task.empresa,
+              }
+            : {}),
+        },
+        select: {
+          id: true,
+          nombre: true,
+          apellido: true,
+        },
+      });
+
+      if (!users.length) {
+        console.log('⚠️ No hay usuarios de ADQUISICIONES para notificar');
+        return;
+      }
+
+      const codigo = String(task?.codigo || '').trim() || 'SIN CÓDIGO';
+      const titulo = String(task?.titulo || '').trim() || 'Tarea de taller';
+
+      for (const user of users) {
+        try {
+          await this.firebaseService.sendNotificationToUser(
+            user.id,
+            '🛠️ Repuesto solicitado',
+            `La tarea ${codigo} solicitó repuesto: ${titulo}`,
+            '/admin/repuestos',
+          );
+
+          console.log(`✅ Notificación de repuesto enviada a ${user.id} (${codigo})`);
+        } catch (error) {
+          console.error(
+            `❌ Error notificando repuesto a ${user.id} (${codigo}):`,
+            error,
+          );
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error general notifyPartRequested:', error);
+    }
+  }
 }

@@ -3,6 +3,7 @@
 // ✅ FIX: si backend devuelve mustChangePassword=true => redirige a /cambiar-contrasena
 // ✅ FIX COOKIES: credentials:"include" para que el login guarde cookie de sesión
 // ✅ NUEVO: registro FCM SIN bloquear el login
+// ✅ NUEVO: ojito profesional para mostrar/ocultar contraseña
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -88,6 +89,7 @@ export default function Login() {
 
   const [rut, setRut] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -97,14 +99,14 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const payload = { 
-  rut: rut.trim(), 
-  password 
-};
+      const payload = {
+        rut: rut.trim(),
+        password,
+      };
 
       const res = await fetch("/api/auth/login", {
         method: "POST",
-        credentials: "include", // ✅ CLAVE: guarda cookie de sesión
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -121,20 +123,17 @@ export default function Login() {
 
       const data = await res.json();
 
-      // ✅ guardar sesión
       if (data?.access_token) {
         localStorage.setItem("access_token", data.access_token);
       }
 
-      if (data.user) {
+      if (data?.user) {
         localStorage.setItem("user", JSON.stringify(data.user));
       }
 
-      // ✅ CLAVE: si debe cambiar password => manda a /cambiar-contrasena
       const mustChangePassword =
         !!data?.mustChangePassword || !!data?.user?.mustChangePassword;
 
-      // ✅ Registrar FCM sin bloquear login
       if (data?.access_token) {
         setTimeout(() => {
           registerFcmAfterLogin(data.access_token);
@@ -146,7 +145,6 @@ export default function Login() {
         return;
       }
 
-      // ✅ redirect correcto por rol
       const role = norm(data?.user?.role);
 
       const goesAdmin = ["SUPERADMIN", "CONTROL_FLOTA", "ADMINISTRADORA"].includes(role);
@@ -161,7 +159,6 @@ export default function Login() {
         return;
       }
 
-      // fallback
       setError("Tu usuario no tiene un rol válido asignado. Contacta al administrador.");
       navigate("/login", { replace: true });
     } catch (err) {
@@ -191,7 +188,9 @@ export default function Login() {
           <div className="login-body">
             <form onSubmit={handleSubmit}>
               <div className="form-group">
-                <label className="label" htmlFor="rut">RUT</label>
+                <label className="label" htmlFor="rut">
+                  RUT
+                </label>
                 <input
                   id="rut"
                   className="input"
@@ -205,15 +204,28 @@ export default function Login() {
               </div>
 
               <div className="form-group">
-                <label className="label" htmlFor="password">Contraseña</label>
-                <input
-                  id="password"
-                  className="input"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
-                />
+                <label className="label" htmlFor="password">
+                  Contraseña
+                </label>
+
+                <div className="password-wrapper">
+                  <input
+                    id="password"
+                    className="input"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className={`password-toggle ${showPassword ? "hide" : ""}`}
+                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                    title={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  />
+                </div>
               </div>
 
               <div className="login-actions">
@@ -236,7 +248,6 @@ export default function Login() {
     </div>
   );
 }
-
 
 
 

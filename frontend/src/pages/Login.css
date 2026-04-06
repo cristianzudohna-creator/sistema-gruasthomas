@@ -5,7 +5,6 @@
 }
 
 .login-page {
-  /* ✅ Evita bugs de iOS/Safari con fixed + barra */
   min-height: 100vh;
   min-height: 100dvh;
   background:
@@ -102,6 +101,7 @@
 .login-card .input {
   width: 100%;
   padding: 12px;
+  padding-right: 48px;
   border-radius: 8px;
   background-color: #ffffff !important;
   color: #0b0b0b !important;
@@ -119,6 +119,56 @@
 .login-card .input:-webkit-autofill {
   -webkit-text-fill-color: #0b0b0b !important;
   transition: background-color 9999s ease-in-out 0s;
+}
+
+/* ✅ Wrapper del input password */
+.password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* ✅ Botón del ojo */
+.password-toggle {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  border-radius: 6px;
+}
+
+/* ✅ Ojo abierto profesional */
+.password-toggle::before {
+  content: "";
+  width: 20px;
+  height: 20px;
+  display: block;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  opacity: 0.85;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23666' stroke-width='1.8'><path stroke-linecap='round' stroke-linejoin='round' d='M2.25 12s3.75-7.5 9.75-7.5 9.75 7.5 9.75 7.5-3.75 7.5-9.75 7.5S2.25 12 2.25 12z'/><circle cx='12' cy='12' r='3'/></svg>");
+}
+
+/* ✅ Ojo cerrado profesional */
+.password-toggle.hide::before {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23666' stroke-width='1.8'><path stroke-linecap='round' stroke-linejoin='round' d='M3 3l18 18M10.58 10.58a3 3 0 104.24 4.24'/><path stroke-linecap='round' stroke-linejoin='round' d='M9.88 5.08A9.77 9.77 0 0112 4.5c6 0 9.75 7.5 9.75 7.5a18.6 18.6 0 01-2.13 3.19M6.61 6.61A18.6 18.6 0 002.25 12s3.75 7.5 9.75 7.5c1.12 0 2.18-.2 3.17-.56'/></svg>");
+}
+
+.password-toggle:hover::before {
+  opacity: 1;
+}
+
+.password-toggle:focus-visible {
+  outline: 3px solid rgba(245,184,0,.55);
+  outline-offset: 2px;
 }
 
 .error {
@@ -215,7 +265,6 @@
     font-size: 20px;
   }
 
-  /* ✅ Evita zoom iOS */
   .login-card .input {
     font-size: 16px;
   }
