@@ -2780,52 +2780,57 @@ export class WorkshopService {
   }
 
   private async notifyPartRequested(task: any) {
-    try {
-      const users = await this.prisma.user.findMany({
-        where: {
-          activo: true,
-          role: Role.TRABAJADOR,
-          workerType: WorkerType.ADQUISICIONES,
-          ...(task?.empresa
-            ? {
-                empresa: task.empresa,
-              }
-            : {}),
-        },
-        select: {
-          id: true,
-          nombre: true,
-          apellido: true,
-        },
-      });
+  try {
+    const users = await this.prisma.user.findMany({
+      where: {
+        activo: true,
+        role: Role.TRABAJADOR,
+        workerType: WorkerType.ADQUISICIONES,
+      },
+      select: {
+        id: true,
+        nombre: true,
+        apellido: true,
+        empresa: true,
+      },
+    });
 
-      if (!users.length) {
-        console.log('⚠️ No hay usuarios de ADQUISICIONES para notificar');
-        return;
-      }
+    console.log(
+      '👀 Usuarios ADQUISICIONES encontrados:',
+      users.map((u) => ({
+        id: u.id,
+        nombre: `${u.nombre || ''} ${u.apellido || ''}`.trim(),
+        empresa: u.empresa,
+      })),
+    );
 
-      const codigo = String(task?.codigo || '').trim() || 'SIN CÓDIGO';
-      const titulo = String(task?.titulo || '').trim() || 'Tarea de taller';
-
-      for (const user of users) {
-        try {
-          await this.firebaseService.sendNotificationToUser(
-            user.id,
-            '🛠️ Repuesto solicitado',
-            `La tarea ${codigo} solicitó repuesto: ${titulo}`,
-            '/admin/repuestos',
-          );
-
-          console.log(`✅ Notificación de repuesto enviada a ${user.id} (${codigo})`);
-        } catch (error) {
-          console.error(
-            `❌ Error notificando repuesto a ${user.id} (${codigo}):`,
-            error,
-          );
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error general notifyPartRequested:', error);
+    if (!users.length) {
+      console.log('⚠️ No hay usuarios de ADQUISICIONES para notificar');
+      return;
     }
+
+    const codigo = String(task?.codigo || '').trim() || 'SIN CÓDIGO';
+    const titulo = String(task?.titulo || '').trim() || 'Tarea de taller';
+
+    for (const user of users) {
+      try {
+        await this.firebaseService.sendNotificationToUser(
+          user.id,
+          '🛠️ Repuesto solicitado',
+          `La tarea ${codigo} solicitó repuesto: ${titulo}`,
+          '/admin/repuestos',
+        );
+
+        console.log(`✅ Notificación de repuesto enviada a ${user.id} (${codigo})`);
+      } catch (error) {
+        console.error(
+          `❌ Error notificando repuesto a ${user.id} (${codigo}):`,
+          error,
+        );
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error general notifyPartRequested:', error);
   }
+}
 }
