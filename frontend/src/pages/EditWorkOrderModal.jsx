@@ -6,12 +6,55 @@
 //    - diasTrabajo: ["LUN","MAR"...] (compat)
 // ✅ Cambios UI solicitados:
 //    - ❌ Se elimina teléfono del cliente
-//    - ✅ Rigger pasa a input normal (como operador)
+//    - ✅ Rigger deja de ser input normal y ahora usa autocomplete
+//    - ✅ Patente usa autocomplete
+//    - ✅ Operador usa autocomplete
 //    - ✅ Se agregan títulos (labels) arriba de cada campo
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
 import ConfirmModal from "../components/ui/ConfirmModal";
+
+const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
+
+function getToken() {
+  return localStorage.getItem("access_token") || "";
+}
+
+async function readError(res) {
+  const contentType = res.headers.get("content-type") || "";
+
+  if (contentType.includes("application/json")) {
+    try {
+      const data = await res.json();
+      if (Array.isArray(data?.message)) return data.message.join(" | ");
+      if (typeof data?.message === "string") return data.message;
+      return JSON.stringify(data);
+    } catch {}
+  }
+
+  try {
+    const t = await res.text();
+    return t || `HTTP ${res.status}`;
+  } catch {
+    return `HTTP ${res.status}`;
+  }
+}
+
+async function apiGet(path) {
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: { Authorization: `Bearer ${getToken()}` },
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const msg = await readError(res);
+    throw new Error(msg || `GET ${path} -> ${res.status}`);
+  }
+
+  if (res.status === 204) return null;
+  return res.json();
+}
 
 function normalizeText(s) {
   return String(s || "").trim();
@@ -51,8 +94,8 @@ function fmtDDMMYYYYFromISO(iso) {
 function dowLabelFromISO(iso) {
   if (!isValidISODate(iso)) return "";
   const d = new Date(iso + "T00:00:00");
-  const jsDow = d.getDay(); // 0..6
-  const idx = jsDow === 0 ? 6 : jsDow - 1; // lun..dom
+  const jsDow = d.getDay();
+  const idx = jsDow === 0 ? 6 : jsDow - 1;
   return WEEKDAYS_SHORT[idx] || "";
 }
 
@@ -306,6 +349,357 @@ function MiniCalendarMulti({ label = "Días programados", valueISO, onChangeISO,
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/* =========================
+   Autocomplete (trabajadores)
+========================= */
+function WorkerAutocomplete({
+  label,
+  placeholder,
+  value,
+  onChangeValue,
+  onPickUser,
+  disabled,
+  empresa,
+  workerType,
+}) {
+  const inputRef = useRef(null);
+  const dropdownRef = useRef(null);
+
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [items, setItems] = useState([]);
+  const [tip, setTip] = useState("Escribe para buscar (nombre / apellido / rut).");
+  const debounceRef = useRef(null);
+
+  async function doSearch(q) {
+    const query = normalizeText(q);
+    if (!query) {
+      setItems([]);
+      setTip("Escribe para buscar (nombre / apellido / rut).");
+      return;
+    }
+
+    setLoading(true);
+    setTip("");
+    try {
+      const qs = new URLSearchParams();
+      if (empresa) qs.set("empresa", String(empresa).toUpperCase());
+      qs.set("activo", "true");
+      qs.set("role", "TRABAJADOR");
+      qs.set("q", query);
+      qs.set("limit", "12");
+      if (workerType) qs.set("workerType", workerType);
+
+      const data = await apiGet(`/users?${qs.toString()}`);
+      const list = data?.items || [];
+      setItems(list);
+
+      if (list.length === 0) {
+        setTip(empresa ? `No se encontró en ${String(empresa).toUpperCase()}.` : "No se encontró.");
+      }
+    } catch (e) {
+      setItems([]);
+      setTip(e.message || "Error buscando trabajadores");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function onInputChange(e) {
+    const v = e.target.value;
+    onChangeValue(v);
+    setOpen(true);
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => doSearch(v), 250);
+  }
+
+  function pick(u) {
+    const name = `${u?.nombre || ""}${u?.apellido ? " " + u.apellido : ""}`.trim();
+    onChangeValue(name || u?.email || "");
+    onPickUser?.(u);
+    setOpen(false);
+    setTimeout(() => inputRef.current?.blur?.(), 0);
+  }
+
+  function onKeyDown(e) {
+    if (e.key === "Escape") setOpen(false);
+  }
+
+  useEffect(() => {
+    function onDocPointerDown(ev) {
+      if (!open) return;
+
+      const path = typeof ev.composedPath === "function" ? ev.composedPath() : [];
+      const inInput =
+        inputRef.current &&
+        (path.includes(inputRef.current) || inputRef.current.contains(ev.target));
+      const inDrop =
+        dropdownRef.current &&
+        (path.includes(dropdownRef.current) || dropdownRef.current.contains(ev.target));
+
+      if (inInput || inDrop) return;
+      setOpen(false);
+    }
+
+    document.addEventListener("pointerdown", onDocPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onDocPointerDown, true);
+  }, [open]);
+
+  return (
+    <div style={{ position: "relative" }}>
+      <label style={{ display: "block", fontSize: 12, fontWeight: 900, opacity: 0.75, marginBottom: 6 }}>
+        {label}
+      </label>
+
+      <input
+        ref={inputRef}
+        className="gt-input"
+        placeholder={placeholder}
+        value={value}
+        onChange={onInputChange}
+        disabled={disabled}
+        onFocus={() => {
+          setOpen(true);
+          if (normalizeText(value)) doSearch(value);
+        }}
+        onKeyDown={onKeyDown}
+        onBlur={() => {}}
+      />
+
+      {open ? (
+        <div
+          ref={dropdownRef}
+          onPointerDownCapture={(e) => e.stopPropagation()}
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            top: "calc(100% + 8px)",
+            background: "#fff",
+            border: "1px solid rgba(0,0,0,0.12)",
+            borderRadius: 14,
+            boxShadow: "0 12px 30px rgba(0,0,0,0.10)",
+            zIndex: 2000,
+            overflow: "hidden",
+          }}
+        >
+          <div style={{ padding: "10px 12px", fontWeight: 900, opacity: 0.75 }}>
+            Sugerencias {empresa ? `(${String(empresa).toUpperCase()})` : ""}
+          </div>
+
+          <div style={{ maxHeight: 220, overflow: "auto", borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+            {loading ? (
+              <div style={{ padding: 12, opacity: 0.75 }}>Buscando...</div>
+            ) : items.length > 0 ? (
+              items.map((u) => {
+                const name = `${u?.nombre || ""}${u?.apellido ? " " + u.apellido : ""}`.trim();
+                const rut = u?.rut || "";
+                const emp = normalizeText(u?.empresa || "");
+                return (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => pick(u)}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      border: "none",
+                      background: "transparent",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div style={{ fontWeight: 900 }}>{name || u.email}</div>
+                    <div style={{ fontSize: 12, opacity: 0.7 }}>{[rut, emp].filter(Boolean).join(" • ")}</div>
+                  </button>
+                );
+              })
+            ) : (
+              <div style={{ padding: 12, opacity: 0.85 }}>{tip}</div>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* =========================
+   Autocomplete (vehículos / patentes)
+========================= */
+function VehicleAutocomplete({
+  label,
+  placeholder,
+  value,
+  onChangeValue,
+  onPickVehicle,
+  disabled,
+  empresa,
+}) {
+  const inputRef = useRef(null);
+  const dropdownRef = useRef(null);
+
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [items, setItems] = useState([]);
+  const [tip, setTip] = useState("Escribe para buscar por patente.");
+  const debounceRef = useRef(null);
+
+  async function doSearch(q) {
+    const query = normalizeText(q).toUpperCase();
+    if (!query) {
+      setItems([]);
+      setTip("Escribe para buscar por patente.");
+      return;
+    }
+
+    setLoading(true);
+    setTip("");
+    try {
+      const qs = new URLSearchParams();
+      qs.set("q", query);
+      qs.set("search", query);
+      qs.set("limit", "8");
+      if (empresa) qs.set("empresa", String(empresa).toUpperCase());
+
+      const data = await apiGet(`/vehicles?${qs.toString()}`);
+      const list = Array.isArray(data) ? data : data?.items || [];
+
+      setItems(list);
+      if (list.length === 0) setTip("No se encontró. Puedes escribir la patente manual.");
+    } catch (e) {
+      setItems([]);
+      setTip(e.message || "Error buscando vehículos");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function onInputChange(e) {
+    const v = e.target.value;
+    onChangeValue(v);
+    setOpen(true);
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => doSearch(v), 250);
+  }
+
+  function pick(v) {
+    const patente = normalizeText(v?.patente || "");
+    onChangeValue(patente);
+    onPickVehicle?.(v);
+    setOpen(false);
+    setTimeout(() => inputRef.current?.blur?.(), 0);
+  }
+
+  function onKeyDown(e) {
+    if (e.key === "Escape") setOpen(false);
+  }
+
+  useEffect(() => {
+    function onDocPointerDown(ev) {
+      if (!open) return;
+
+      const path = typeof ev.composedPath === "function" ? ev.composedPath() : [];
+      const inInput =
+        inputRef.current &&
+        (path.includes(inputRef.current) || inputRef.current.contains(ev.target));
+      const inDrop =
+        dropdownRef.current &&
+        (path.includes(dropdownRef.current) || dropdownRef.current.contains(ev.target));
+
+      if (inInput || inDrop) return;
+      setOpen(false);
+    }
+
+    document.addEventListener("pointerdown", onDocPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onDocPointerDown, true);
+  }, [open]);
+
+  return (
+    <div style={{ position: "relative" }}>
+      <label style={{ display: "block", fontSize: 12, fontWeight: 900, opacity: 0.75, marginBottom: 6 }}>
+        {label}
+      </label>
+
+      <input
+        ref={inputRef}
+        className="gt-input"
+        placeholder={placeholder}
+        value={value}
+        onChange={onInputChange}
+        disabled={disabled}
+        onFocus={() => {
+          setOpen(true);
+          if (normalizeText(value)) doSearch(value);
+        }}
+        onKeyDown={onKeyDown}
+        onBlur={() => {}}
+      />
+
+      {open ? (
+        <div
+          ref={dropdownRef}
+          onPointerDownCapture={(e) => e.stopPropagation()}
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            top: "calc(100% + 8px)",
+            background: "#fff",
+            border: "1px solid rgba(0,0,0,0.12)",
+            borderRadius: 14,
+            boxShadow: "0 12px 30px rgba(0,0,0,0.10)",
+            zIndex: 2000,
+            overflow: "hidden",
+          }}
+        >
+          <div style={{ padding: "10px 12px", fontWeight: 900, opacity: 0.75 }}>
+            Patentes {empresa ? `(${String(empresa).toUpperCase()})` : ""}
+          </div>
+
+          <div style={{ maxHeight: 220, overflow: "auto", borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+            {loading ? (
+              <div style={{ padding: 12, opacity: 0.75 }}>Buscando...</div>
+            ) : items.length > 0 ? (
+              items.map((v) => {
+                const patente = normalizeText(v?.patente);
+                const marcaModelo = normalizeText(v?.marcaModelo);
+                const emp = normalizeText(v?.empresa);
+                const sub = [marcaModelo, emp].filter(Boolean).join(" • ");
+
+                return (
+                  <button
+                    key={v.id || patente}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => pick(v)}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      border: "none",
+                      background: "transparent",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div style={{ fontWeight: 900 }}>{patente || "Patente"}</div>
+                    {sub ? <div style={{ fontSize: 12, opacity: 0.7 }}>{sub}</div> : null}
+                  </button>
+                );
+              })
+            ) : (
+              <div style={{ padding: 12, opacity: 0.85 }}>{tip}</div>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -633,38 +1027,46 @@ export default function EditWorkOrderModal({ open, onClose, data, loading, error
               <div className="ot-box-title">Equipo</div>
 
               <div className="ot-grid-2">
-                <div className="gt-field">
-                  <label>Patente</label>
-                  <input
-                    className="gt-input"
-                    value={f.camion}
-                    onChange={(e) => setField("camion", e.target.value)}
-                    disabled={saving}
-                    placeholder="Ej: AB1234"
-                  />
-                </div>
+                <VehicleAutocomplete
+                  label="Patente"
+                  placeholder="Escribe para buscar (ej: AB)"
+                  value={f.camion}
+                  onChangeValue={(v) => setField("camion", v)}
+                  onPickVehicle={(veh) => {
+                    const patente = normalizeText(veh?.patente || "");
+                    setField("camion", patente);
+                  }}
+                  disabled={saving}
+                  empresa={data?.empresa}
+                />
 
-                <div className="gt-field">
-                  <label>Operador</label>
-                  <input
-                    className="gt-input"
-                    value={f.conductor}
-                    onChange={(e) => setField("conductor", e.target.value)}
-                    disabled={saving}
-                    placeholder="Ej: Juan Pérez"
-                  />
-                </div>
+                <WorkerAutocomplete
+                  label="Operador"
+                  placeholder="Escribe para buscar (ej: Juan)"
+                  value={f.conductor}
+                  onChangeValue={(v) => setField("conductor", v)}
+                  onPickUser={(u) => {
+                    const name = `${u?.nombre || ""}${u?.apellido ? " " + u.apellido : ""}`.trim();
+                    setField("conductor", name || "");
+                  }}
+                  disabled={saving}
+                  empresa={data?.empresa}
+                  workerType="OPERADOR"
+                />
 
-                <div className="gt-field">
-                  <label>Rigger</label>
-                  <input
-                    className="gt-input"
-                    value={f.rigger}
-                    onChange={(e) => setField("rigger", e.target.value)}
-                    disabled={saving}
-                    placeholder="Ej: Augusto"
-                  />
-                </div>
+                <WorkerAutocomplete
+                  label="Rigger"
+                  placeholder="Escribe para buscar (ej: Augusto)"
+                  value={f.rigger}
+                  onChangeValue={(v) => setField("rigger", v)}
+                  onPickUser={(u) => {
+                    const name = `${u?.nombre || ""}${u?.apellido ? " " + u.apellido : ""}`.trim();
+                    setField("rigger", name || "");
+                  }}
+                  disabled={saving}
+                  empresa={data?.empresa}
+                  workerType="RIGGER"
+                />
 
                 <div className="gt-field" style={{ gridColumn: "1 / -1" }}>
                   <MiniCalendarMulti

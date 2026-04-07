@@ -5,12 +5,6 @@ import { HorometerAlertsService } from "../alerts/horometer-alerts.service";
 type CreateHorometerInput = {
   horas: number;
   comentario?: string;
-
-  fotoUrl: string;
-  filePath: string;
-  originalName: string;
-  mimeType: string;
-  sizeBytes: number;
 };
 
 @Injectable()
@@ -20,7 +14,9 @@ export class VehicleHorometersService {
     private horometerAlerts: HorometerAlertsService
   ) {}
 
-  // ✅ LIST (sin email) + ✅ agrega faltanHoras / faltanLabel para mantención (+500)
+  // =========================
+  // LIST
+  // =========================
   async listByVehicle(vehicleId: string) {
     const vehicle = await this.prisma.vehicle.findUnique({
       where: { id: vehicleId },
@@ -29,7 +25,6 @@ export class VehicleHorometersService {
 
     if (!vehicle) throw new NotFoundException("Vehículo no encontrado");
 
-    // ✅ Plan (meta fija)
     const plan = await this.prisma.horometerMaintenancePlan.findUnique({
       where: { vehicleId },
       select: { intervalHours: true, nextDueHours: true },
@@ -43,17 +38,9 @@ export class VehicleHorometersService {
         horas: true,
         comentario: true,
         createdAt: true,
-
-        // ✅ SIN email
         trabajadorNombre: true,
         trabajadorApellido: true,
         trabajadorRut: true,
-
-        // ✅ evidencia
-        fotoUrl: true,
-        originalName: true,
-        mimeType: true,
-        sizeBytes: true,
       },
     });
 
@@ -72,31 +59,24 @@ export class VehicleHorometersService {
 
       return {
         ...r,
-
-        // ✅ nuevo para la UI
         faltanHoras,
         faltanLabel,
-
-        // ✅ opcional (por si quieres mostrarlo arriba)
         nextDueHours: nextDue,
         intervalHours,
       };
     });
 
     return {
-      vehicle: {
-        id: vehicle.id,
-        patente: vehicle.patente,
-        empresa: vehicle.empresa,
-      },
-      // ✅ también lo enviamos a nivel raíz (útil para cabecera del modal)
+      vehicle,
       plan: nextDue == null ? null : { nextDueHours: nextDue, intervalHours },
       total: records.length,
       records,
     };
   }
 
-  // ✅ CREATE (actorId = SUPERADMIN / CONTROL_FLOTA)
+  // =========================
+  // CREATE
+  // =========================
   async create(vehicleId: string, actorId: string, input: CreateHorometerInput) {
     const vehicle = await this.prisma.vehicle.findUnique({
       where: { id: vehicleId },
@@ -115,112 +95,137 @@ export class VehicleHorometersService {
       throw new BadRequestException("Campo 'horas' inválido.");
     }
 
+    // =========================
+    // CREAR REGISTRO
+    // =========================
     const created = await this.prisma.horometerRecord.create({
       data: {
         vehicleId,
         trabajadorId: actor.id,
-
         trabajadorNombre: actor.nombre,
         trabajadorApellido: actor.apellido,
         trabajadorRut: actor.rut,
-        trabajadorEmail: actor.email, // se guarda en DB, pero NO se expone en list
-
+        trabajadorEmail: actor.email,
         empresa: vehicle.empresa,
-
         horas,
         comentario: String(input?.comentario ?? "").trim() || null,
-
-        fotoUrl: input.fotoUrl ?? "",
-        filePath: input.filePath ?? "",
-        originalName: input.originalName ?? "",
-        mimeType: input.mimeType ?? "",
-        sizeBytes: Number(input.sizeBytes ?? 0),
-      },
-      select: {
-        id: true,
-        horas: true,
-        comentario: true,
-        createdAt: true,
-        trabajadorNombre: true,
-        trabajadorApellido: true,
-        trabajadorRut: true,
-        fotoUrl: true,
-        originalName: true,
-        mimeType: true,
-        sizeBytes: true,
       },
     });
 
-    // ✅ HOOK: si corresponde, genera alerta por horómetro (meta fija +500)
+    // =========================
+    // PLAN 500H DESDE BASE REAL
+    // =========================
+    const interval = 500;
+
+    const existingPlan = await this.prisma.horometerMaintenancePlan.findUnique({
+      where: { vehicleId },
+    });
+
+    if (!existingPlan) {
+      // 🔥 primer registro = base de mantención
+      await this.prisma.horometerMaintenancePlan.create({
+        data: {
+          vehicleId,
+          intervalHours: interval,
+          nextDueHours: horas + interval,
+          lastNotifiedDueHours: null,
+        },
+      });
+    } else {
+      let nextDue = existingPlan.nextDueHours;
+
+      // 🔥 avanzar ciclos correctamente
+      while (horas >= nextDue) {
+        nextDue += interval;
+      }
+
+      if (nextDue !== existingPlan.nextDueHours) {
+        await this.prisma.horometerMaintenancePlan.update({
+          where: { vehicleId },
+          data: {
+            nextDueHours: nextDue,
+          },
+        });
+      }
+    }
+
+    // =========================
+    // ALERTAS
+    // =========================
     await this.horometerAlerts.onHorometerCreated({
       vehicleId,
-      horas: created.horas,
+      horas,
     });
 
     return created;
   }
 
-  // ✅ UPDATE
-  async update(
-    vehicleId: string,
-    recordId: string,
-    patch: Partial<CreateHorometerInput> & { comentario?: string }
-  ) {
-    const existing = await this.prisma.horometerRecord.findFirst({
-      where: { id: recordId, vehicleId },
+  // =========================
+  // 🔥 REINICIAR CICLO (MANTENCIÓN REAL)
+  // =========================
+  async resetMaintenanceCycle(vehicleId: string, horas: number) {
+    if (!Number.isFinite(horas) || horas < 0) {
+      throw new BadRequestException("Horas inválidas");
+    }
+
+    const vehicle = await this.prisma.vehicle.findUnique({
+      where: { id: vehicleId },
       select: { id: true },
     });
-    if (!existing) throw new NotFoundException("Registro de horómetro no encontrado");
 
-    const data: any = {};
+    if (!vehicle) throw new NotFoundException("Vehículo no encontrado");
 
-    if (patch?.horas !== undefined) {
-      const horas = Number(patch.horas);
-      if (!Number.isFinite(horas) || horas < 0) {
-        throw new BadRequestException("Campo 'horas' inválido.");
-      }
-      data.horas = horas;
+    const interval = 500;
+
+    const existingPlan = await this.prisma.horometerMaintenancePlan.findUnique({
+      where: { vehicleId },
+    });
+
+    if (!existingPlan) {
+      await this.prisma.horometerMaintenancePlan.create({
+        data: {
+          vehicleId,
+          intervalHours: interval,
+          nextDueHours: horas + interval,
+          lastNotifiedDueHours: null,
+        },
+      });
+    } else {
+      await this.prisma.horometerMaintenancePlan.update({
+        where: { vehicleId },
+        data: {
+          intervalHours: interval,
+          nextDueHours: horas + interval,
+          lastNotifiedDueHours: null,
+        },
+      });
     }
 
-    if (patch?.comentario !== undefined) {
-      const c = String(patch.comentario ?? "").trim();
-      data.comentario = c ? c : null;
-    }
+    return {
+      ok: true,
+      nextDueHours: horas + interval,
+      intervalHours: interval,
+    };
+  }
 
-    if (patch?.fotoUrl !== undefined) data.fotoUrl = patch.fotoUrl || "";
-    if (patch?.filePath !== undefined) data.filePath = patch.filePath || "";
-    if (patch?.originalName !== undefined) data.originalName = patch.originalName || "";
-    if (patch?.mimeType !== undefined) data.mimeType = patch.mimeType || "";
-    if (patch?.sizeBytes !== undefined) data.sizeBytes = Number(patch.sizeBytes || 0);
-
+  // =========================
+  // UPDATE
+  // =========================
+  async update(vehicleId: string, recordId: string, patch: any) {
     return this.prisma.horometerRecord.update({
       where: { id: recordId },
-      data,
-      select: {
-        id: true,
-        horas: true,
-        comentario: true,
-        createdAt: true,
-        trabajadorNombre: true,
-        trabajadorApellido: true,
-        trabajadorRut: true,
-        fotoUrl: true,
-        originalName: true,
-        mimeType: true,
-        sizeBytes: true,
-      },
+      data: patch,
     });
   }
 
-  // ✅ DELETE
+  // =========================
+  // DELETE
+  // =========================
   async remove(vehicleId: string, recordId: string) {
-    const existing = await this.prisma.horometerRecord.findFirst({
-      where: { id: recordId, vehicleId },
-      select: { id: true },
+    await this.prisma.horometerRecord.delete({
+      where: { id: recordId },
     });
-    if (!existing) throw new NotFoundException("Registro de horómetro no encontrado");
 
-    await this.prisma.horometerRecord.delete({ where: { id: recordId } });
     return { ok: true };
   }
 }

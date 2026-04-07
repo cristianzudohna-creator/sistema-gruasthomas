@@ -15,17 +15,11 @@ export class HorometerAlertsService {
 
   constructor(private prisma: PrismaService, private mail: MailService) {}
 
+  // ✅ avisar cuando falten 100 horas o menos
   private getMarginHours(): number {
-    const n = Number(process.env.ALERT_HOROMETER_MARGIN_HOURS ?? 0);
-    return Number.isFinite(n) && n >= 0 ? n : 0;
+    return 100;
   }
 
-  /**
-   * ✅ Destinatarios por empresa:
-   * - ALERT_HOROMETER_TO_GRUAS_THOMAS="a@x.com,b@y.com"
-   * - ALERT_HOROMETER_TO_INSPROTEL="..."
-   * fallback: ALERT_HOROMETER_TO="..."
-   */
   private getRecipients(empresa: string): string[] {
     const byCompany =
       (process.env as any)[`ALERT_HOROMETER_TO_${empresa}`] ||
@@ -40,12 +34,6 @@ export class HorometerAlertsService {
     return empresa;
   }
 
-  /**
-   * ✅ Hook al crear horómetro.
-   * - Si no hay plan: crea nextDueHours = horas + 500
-   * - Si está cerca (margen) o vencido: manda correo 1 sola vez por meta
-   * - Si vencido: avanza nextDueHours en saltos de 500 hasta quedar > horas
-   */
   async onHorometerCreated(params: { vehicleId: string; horas: number }) {
     const { vehicleId, horas } = params;
 
@@ -64,47 +52,39 @@ export class HorometerAlertsService {
     if (!vehicle.activo) return;
     if (vehicle.estadoOperativo !== "OPERATIVO") return;
 
-    let plan = await this.prisma.horometerMaintenancePlan.findUnique({
+    const plan = await this.prisma.horometerMaintenancePlan.findUnique({
       where: { vehicleId },
     });
 
-    if (!plan) {
-      plan = await this.prisma.horometerMaintenancePlan.create({
-        data: {
-          vehicleId,
-          intervalHours: 500,
-          nextDueHours: horas + 500,
-          enabled: true,
-        },
-      });
-    }
-
+    // ✅ Si no existe plan, no se puede alertar
+    if (!plan) return;
     if (!plan.enabled) return;
 
     const margin = this.getMarginHours();
-    const due = plan.nextDueHours;
+    const due = Number(plan.nextDueHours || 0);
+    const remaining = due - horas;
 
-    const isNear = horas >= due - margin && horas < due;
-    const isDueOrOver = horas >= due;
+    const isNear = remaining <= margin && remaining > 0;
+    const isDueOrOver = remaining <= 0;
 
+    // ✅ si no está cerca ni vencido, no hacer nada
     if (!isNear && !isDueOrOver) return;
 
-    // ✅ evitar repetir
+    // ✅ evitar repetir correo del mismo ciclo
     if (plan.lastNotifiedDueHours === due) return;
 
     const recipients = this.getRecipients(vehicle.empresa);
     if (recipients.length === 0) {
       this.logger.warn(
-        `No hay destinatarios configurados para ALERT_HOROMETER_TO_${vehicle.empresa} / ALERT_HOROMETER_TO`
+        `No hay destinatarios configurados para ALERT_HOROMETER_TO_${vehicle.empresa}`
       );
       return;
     }
 
     const empresaLabel = this.companyLabel(vehicle.empresa);
     const status = isDueOrOver ? "VENCIDO" : "PRONTO";
-    const remaining = due - horas;
 
-    const subject = `[${empresaLabel}] Mantención por horómetro (${status}) - ${vehicle.patente} (meta ${due}h)`;
+    const subject = `[${empresaLabel}] Mantención por horómetro (${status}) - ${vehicle.patente}`;
 
     const html = `
       <div style="font-family: Arial, sans-serif; line-height:1.5">
@@ -115,11 +95,15 @@ export class HorometerAlertsService {
         <hr />
 
         <p><b>Horómetro actual:</b> ${horas} h</p>
-        <p><b>Meta mantención:</b> ${due} h (cada ${plan.intervalHours} h)</p>
+        <p><b>Próxima mantención:</b> ${due} h</p>
+        <p><b>Intervalo:</b> ${plan.intervalHours} h</p>
+
         ${
           isDueOrOver
-            ? `<p style="color:#b00020"><b>Estado:</b> VENCIDO (se pasó por ${Math.abs(remaining)} h)</p>`
-            : `<p><b>Estado:</b> PRONTO (faltan ${Math.max(remaining, 0)} h)</p>`
+            ? `<p style="color:#b00020"><b>Estado:</b> VENCIDO (se pasó por ${Math.abs(
+                remaining
+              )} h)</p>`
+            : `<p><b>Estado:</b> PRONTO (faltan ${remaining} h)</p>`
         }
 
         <hr />
@@ -135,10 +119,9 @@ export class HorometerAlertsService {
         to: recipients,
         subject,
         html,
-        textFallback: `${empresaLabel} - Mantención por horómetro ${status}. Vehículo ${vehicle.patente}. Horas: ${horas}. Meta: ${due}.`,
+        textFallback: `${empresaLabel} - Mantención ${status}. Vehículo ${vehicle.patente}. Horómetro actual ${horas}. Próxima mantención ${due}.`,
       });
 
-      // ✅ Log (reusamos thresholdDays como "metaHoras")
       await this.prisma.alertDispatchLog.upsert({
         where: {
           kind_entityId_thresholdDays: {
@@ -162,24 +145,21 @@ export class HorometerAlertsService {
         },
       });
 
-      let nextDue = due;
-      if (isDueOrOver) {
-        while (nextDue <= horas) nextDue += plan.intervalHours;
-      }
-
+      // ✅ Marcar que este ciclo ya fue notificado
+      // ✅ No mover aquí el nextDueHours
+      // porque el ciclo base lo controla el service principal
       await this.prisma.horometerMaintenancePlan.update({
         where: { id: plan.id },
         data: {
           lastNotifiedDueHours: due,
-          nextDueHours: nextDue,
         },
       });
 
       this.logger.log(
-        `Alerta horómetro enviada. veh=${vehicle.patente} horas=${horas} due=${due} nextDue=${nextDue}`
+        `Alerta enviada veh=${vehicle.patente} horas=${horas} due=${due} status=${status}`
       );
     } catch (err: any) {
-      this.logger.error(`Error enviando alerta horómetro: ${err?.message || err}`);
+      this.logger.error(`Error enviando alerta: ${err?.message || err}`);
     }
   }
 }

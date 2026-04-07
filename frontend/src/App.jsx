@@ -193,7 +193,7 @@ export default function App() {
           <Route
             path="clientes"
             element={
-              <ProtectedRoute role={["SUPERADMIN"]}>
+              <ProtectedRoute role={["SUPERADMIN", "ADMINISTRADORA"]}>
                 <Clientes />
               </ProtectedRoute>
             }

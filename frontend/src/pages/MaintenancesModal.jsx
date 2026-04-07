@@ -1,12 +1,16 @@
-// ✅ Archivo: src/pages/MaintenancesModal.jsx (RESPONSIVE TABLET/CEL)
-// ✅ FIX:
-// - API_URL dinámico (VITE_API_URL -> fallback host actual)
-// - fetch con credentials: "include"
-// - 401 => logout + redirect
-// - validación tamaño de archivo (opcional)
-// - orden por fechaRealizada desc (se mantiene)
+// ✅ Archivo: src/pages/MaintenancesModal.jsx (COMPLETO)
+// ✅ CAMBIOS:
+// - quitado Fecha próxima
+// - quitado "Sin próxima mantención"
+// - quitado Observación / columna Obs.
+// - ajustada validación y payload
+// - se mantiene lista, edición, eliminación y archivo
+// ✅ FIX NUEVO:
+// - menú de acciones de 3 puntos ahora flotante con position: fixed
+// - z-index alto para quedar sobre el modal
+// - se cierra con click fuera, ESC o scroll
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import Modal from "../components/ui/Modal";
 import { getToken, logout } from "../auth/auth";
@@ -56,7 +60,6 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // ✅ responsive modal width
   const [modalWidth, setModalWidth] = useState(1000);
   useEffect(() => {
     function compute() {
@@ -70,23 +73,17 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
     return () => window.removeEventListener("resize", compute);
   }, []);
 
-  // modos: list / add / edit
   const [mode, setMode] = useState("list"); // "list" | "add" | "edit"
   const [editing, setEditing] = useState(null);
 
-  // form
   const [form, setForm] = useState({
     typeText: "",
     fechaRealizada: "",
-    fechaProxima: "",
-    observacion: "",
   });
 
-  const [sinProxima, setSinProxima] = useState(false);
   const [file, setFile] = useState(null);
 
-  // expand obs
-  const [expandedId, setExpandedId] = useState(null);
+  const [actionMenu, setActionMenu] = useState(null);
 
   const isFormOpen = mode === "add" || mode === "edit";
 
@@ -94,6 +91,69 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
     setSuccess(msg);
     setTimeout(() => setSuccess(""), 2000);
   }
+
+  function closeActionMenu() {
+    setActionMenu(null);
+  }
+
+  function openActionMenu(e, m) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const menuWidth = 220;
+    const menuHeight = 148;
+    const gap = 8;
+
+    let left = rect.right - menuWidth;
+    let top = rect.bottom + gap;
+
+    const vw = window.innerWidth || 0;
+    const vh = window.innerHeight || 0;
+
+    if (left < 12) left = 12;
+    if (left + menuWidth > vw - 12) left = vw - menuWidth - 12;
+
+    if (top + menuHeight > vh - 12) {
+      top = rect.top - menuHeight - gap;
+    }
+    if (top < 12) top = 12;
+
+    setActionMenu({
+      id: m.id,
+      left,
+      top,
+      fileUrl: m.archivoUrl ? toAbsoluteFileUrl(m.archivoUrl) : "",
+      item: m,
+    });
+  }
+
+  useEffect(() => {
+    function onDocPointerDown(e) {
+      if (!actionMenu) return;
+      closeActionMenu();
+    }
+
+    function onEsc(e) {
+      if (e.key === "Escape") closeActionMenu();
+    }
+
+    function onScroll() {
+      if (actionMenu) closeActionMenu();
+    }
+
+    document.addEventListener("mousedown", onDocPointerDown);
+    document.addEventListener("keydown", onEsc);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+
+    return () => {
+      document.removeEventListener("mousedown", onDocPointerDown);
+      document.removeEventListener("keydown", onEsc);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [actionMenu]);
 
   // =========================
   // FETCH
@@ -124,7 +184,6 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
       const data = await res.json();
       const arr = Array.isArray(data) ? data : [];
 
-      // ✅ orden por fecha realizada desc
       arr.sort((a, b) => {
         const da = new Date(a?.fechaRealizada || 0).getTime();
         const db = new Date(b?.fechaRealizada || 0).getTime();
@@ -146,24 +205,14 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
       setEditing(null);
       setError("");
       setSuccess("");
-      setExpandedId(null);
+      closeActionMenu();
       resetForm();
       fetchMaintenances();
+    } else {
+      closeActionMenu();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, vehicle?.id]);
-
-  // ✅ cerrar menú acciones al click afuera
-  useEffect(() => {
-    function onDocClick(e) {
-      const openDetails = document.querySelectorAll("details.gt-actions[open]");
-      openDetails.forEach((d) => {
-        if (!d.contains(e.target)) d.removeAttribute("open");
-      });
-    }
-    document.addEventListener("click", onDocClick);
-    return () => document.removeEventListener("click", onDocClick);
-  }, []);
 
   // =========================
   // FORM
@@ -173,10 +222,7 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
     setForm({
       typeText: "",
       fechaRealizada: "",
-      fechaProxima: "",
-      observacion: "",
     });
-    setSinProxima(false);
     setFile(null);
   }
 
@@ -184,38 +230,30 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
     setError("");
     setSuccess("");
     resetForm();
+    closeActionMenu();
     setMode("add");
   }
 
   function cancelForm() {
     setError("");
     resetForm();
+    closeActionMenu();
     setMode("list");
   }
 
   function startEdit(m) {
     setError("");
     setSuccess("");
+    closeActionMenu();
     setEditing(m);
     setMode("edit");
-
-    const fechaProxima = toDateInput(m.fechaProxima);
-    const noTieneProxima = !fechaProxima;
 
     setForm({
       typeText: m?.nombre || m?.type || "",
       fechaRealizada: toDateInput(m.fechaRealizada),
-      fechaProxima: fechaProxima,
-      observacion: m.observacion || "",
     });
 
-    setSinProxima(noTieneProxima);
     setFile(null);
-  }
-
-  function toggleSinProxima(checked) {
-    setSinProxima(checked);
-    if (checked) setForm((prev) => ({ ...prev, fechaProxima: "" }));
   }
 
   // =========================
@@ -226,16 +264,16 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
 
     if (!form.typeText.trim()) throw new Error("Debes escribir el tipo de mantención.");
     if (!form.fechaRealizada) throw new Error("Debes seleccionar la fecha realizada.");
-    if (!sinProxima && !form.fechaProxima)
-      throw new Error("Debes seleccionar la fecha próxima o marcar “Sin próxima mantención”.");
     if (!file) throw new Error("Debes seleccionar un archivo (PDF/DOC/DOCX).");
 
-    // ✅ validación extensión
     const fileName = file?.name?.toLowerCase?.() || "";
-    const okExt = fileName.endsWith(".pdf") || fileName.endsWith(".doc") || fileName.endsWith(".docx");
+    const okExt =
+      fileName.endsWith(".pdf") ||
+      fileName.endsWith(".doc") ||
+      fileName.endsWith(".docx");
+
     if (!okExt) throw new Error("Formato no permitido. Solo PDF, DOC o DOCX.");
 
-    // ✅ validación tamaño (opcional) - 12MB
     const MAX_MB = 12;
     if ((file?.size || 0) > MAX_MB * 1024 * 1024) {
       throw new Error(`Archivo demasiado grande. Máximo ${MAX_MB}MB.`);
@@ -246,8 +284,6 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
     formData.append("type", "OTRO");
     formData.append("nombre", form.typeText.trim());
     formData.append("fechaRealizada", form.fechaRealizada);
-    formData.append("fechaProxima", sinProxima ? "" : form.fechaProxima);
-    if (form.observacion.trim()) formData.append("observacion", form.observacion.trim());
 
     const res = await fetch(`${API_URL}/vehicles/${vehicle.id}/maintenances/upload`, {
       method: "POST",
@@ -271,15 +307,11 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
 
     if (!form.typeText.trim()) throw new Error("Debes escribir el tipo de mantención.");
     if (!form.fechaRealizada) throw new Error("Debes seleccionar la fecha realizada.");
-    if (!sinProxima && !form.fechaProxima)
-      throw new Error("Debes seleccionar la fecha próxima o marcar “Sin próxima mantención”.");
 
     const payload = {
       type: "OTRO",
       nombre: form.typeText.trim(),
       fechaRealizada: form.fechaRealizada,
-      fechaProxima: sinProxima ? "" : form.fechaProxima,
-      observacion: form.observacion?.trim() || undefined,
     };
 
     const res = await fetch(`${API_URL}/vehicles/maintenances/${editing.id}`, {
@@ -327,6 +359,7 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
   const [toDelete, setToDelete] = useState(null);
 
   function askDelete(m) {
+    closeActionMenu();
     setToDelete(m);
     setConfirmOpen(true);
   }
@@ -365,16 +398,6 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
       setSaving(false);
     }
   }
-
-  // ✅ helper “Ver más”
-  const hasLongObs = useMemo(() => {
-    const map = new Map();
-    for (const m of items) {
-      const txt = (m?.observacion || "").trim();
-      map.set(m.id, txt.length > 80);
-    }
-    return map;
-  }, [items]);
 
   const title = "Mantenciones del vehículo";
   const subtitle = vehicle ? `${vehicle.patente} • ${vehicle.marcaModelo}` : "";
@@ -425,7 +448,6 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
           </div>
         )}
 
-        {/* ✅ FORM */}
         {isFormOpen && (
           <div
             style={{
@@ -452,7 +474,7 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
                   />
                 </div>
 
-                <div className="gt-field">
+                <div className="gt-field" style={{ gridColumn: "1 / -1" }}>
                   <label>Fecha realizada</label>
                   <input
                     type="date"
@@ -460,38 +482,6 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
                     value={form.fechaRealizada}
                     onChange={(e) => setForm({ ...form, fechaRealizada: e.target.value })}
                     required
-                    disabled={saving}
-                  />
-                </div>
-
-                <div className="gt-field">
-                  <label>Fecha próxima</label>
-                  <input
-                    type="date"
-                    className="gt-input"
-                    value={form.fechaProxima}
-                    onChange={(e) => setForm({ ...form, fechaProxima: e.target.value })}
-                    disabled={saving || sinProxima}
-                    required={!sinProxima}
-                  />
-
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, fontSize: 13 }}>
-                    <input
-                      type="checkbox"
-                      checked={sinProxima}
-                      onChange={(e) => toggleSinProxima(e.target.checked)}
-                      disabled={saving}
-                    />
-                    Sin próxima mantención (vehículo parado / en pana)
-                  </label>
-                </div>
-
-                <div className="gt-field" style={{ gridColumn: "1 / -1" }}>
-                  <label>Observación</label>
-                  <input
-                    className="gt-input"
-                    value={form.observacion}
-                    onChange={(e) => setForm({ ...form, observacion: e.target.value })}
                     disabled={saving}
                   />
                 </div>
@@ -522,7 +512,6 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
                   </div>
                 )}
 
-                {/* ✅ Botonera responsive */}
                 <div className="maint-form-actions">
                   <button className="gt-btn ghost" type="button" onClick={cancelForm} disabled={saving}>
                     Cancelar
@@ -537,7 +526,6 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
           </div>
         )}
 
-        {/* ✅ LISTA responsive */}
         {!isFormOpen && (
           <div className="gt-maint-wrap">
             <table className="gt-maint-table" style={{ width: "100%" }}>
@@ -549,9 +537,6 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
                   <th className="col-realizada" style={{ textAlign: "left" }}>
                     Realizada
                   </th>
-                  <th className="col-obs" style={{ textAlign: "left" }}>
-                    Obs.
-                  </th>
                   <th className="col-actions" style={{ textAlign: "right" }}>
                     Acciones
                   </th>
@@ -561,95 +546,42 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
               <tbody>
                 {items.map((m) => {
                   const label = m?.nombre || m?.type || "-";
-                  const fileUrl = m.archivoUrl ? toAbsoluteFileUrl(m.archivoUrl) : "";
-                  const isExpanded = expandedId === m.id;
 
                   return (
                     <tr key={m.id}>
-                      {/* ✅ Tipo + Obs (móvil) */}
                       <td className="col-tipo" title={label}>
                         <div className="maint-tipo-main">{label}</div>
-
-                        <div className="maint-obs-mobile">
-                          <div
-                            style={{
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: isExpanded ? "normal" : "nowrap",
-                              lineHeight: 1.35,
-                            }}
-                          >
-                            {(m.observacion || "").trim() ? m.observacion : "—"}
-                          </div>
-
-                          {(m.observacion || "").trim() && hasLongObs.get(m.id) && (
-                            <button
-                              type="button"
-                              className="gt-link"
-                              onClick={() => setExpandedId(isExpanded ? null : m.id)}
-                              style={{ marginTop: 6 }}
-                            >
-                              {isExpanded ? "Ver menos" : "Ver más"}
-                            </button>
-                          )}
-                        </div>
                       </td>
 
                       <td className="col-realizada" style={{ whiteSpace: "nowrap" }}>
                         {toDateInput(m.fechaRealizada) || "-"}
                       </td>
 
-                      {/* ✅ Obs desktop/tablet */}
-                      <td className="col-obs">
-                        <div
-                          style={{
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: isExpanded ? "normal" : "nowrap",
-                            lineHeight: 1.35,
-                          }}
-                        >
-                          {(m.observacion || "").trim() ? m.observacion : "—"}
-                        </div>
-
-                        {(m.observacion || "").trim() && hasLongObs.get(m.id) && (
+                      <td className="col-actions" style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                        <div style={{ display: "inline-flex", justifyContent: "flex-end" }}>
                           <button
                             type="button"
-                            className="gt-link"
-                            onClick={() => setExpandedId(isExpanded ? null : m.id)}
-                            style={{ marginTop: 6 }}
+                            aria-label="Acciones"
+                            title="Acciones"
+                            onClick={(e) => openActionMenu(e, m)}
+                            disabled={saving}
+                            style={{
+                              width: 42,
+                              height: 42,
+                              borderRadius: 14,
+                              border: "1px solid rgba(0,0,0,0.1)",
+                              background: "#fff",
+                              cursor: saving ? "not-allowed" : "pointer",
+                              fontSize: 24,
+                              lineHeight: 1,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+                            }}
                           >
-                            {isExpanded ? "Ver menos" : "Ver más"}
+                            ⋮
                           </button>
-                        )}
-                      </td>
-
-                      {/* ✅ Acciones */}
-                      <td className="col-actions" style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                        <div className="gt-actions-wrap" style={{ display: "inline-flex", justifyContent: "flex-end" }}>
-                          <details className="gt-actions">
-                            <summary className="gt-actions-btn" aria-label="Acciones" title="Acciones">
-                              ⋮
-                            </summary>
-
-                            <div className="gt-actions-menu">
-                              {fileUrl ? (
-                                <a className="gt-actions-item" href={fileUrl} target="_blank" rel="noreferrer">
-                                  Ver / Descargar
-                                </a>
-                              ) : (
-                                <span className="gt-actions-item disabled">Sin archivo</span>
-                              )}
-
-                              <button className="gt-actions-item" type="button" onClick={() => startEdit(m)} disabled={saving}>
-                                Editar
-                              </button>
-
-                              <button className="gt-actions-item danger" type="button" onClick={() => askDelete(m)} disabled={saving}>
-                                Eliminar
-                              </button>
-                            </div>
-                          </details>
                         </div>
                       </td>
                     </tr>
@@ -658,7 +590,7 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
 
                 {!loading && items.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="empty">
+                    <td colSpan={3} className="empty">
                       No hay mantenciones registradas.
                     </td>
                   </tr>
@@ -669,7 +601,109 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
         )}
       </Modal>
 
-      {/* ✅ CONFIRM DELETE */}
+      {actionMenu && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 2147483646,
+          }}
+        >
+          <div
+            onClick={closeActionMenu}
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: "transparent",
+            }}
+          />
+
+          <div
+            style={{
+              position: "fixed",
+              top: actionMenu.top,
+              left: actionMenu.left,
+              width: 220,
+              zIndex: 2147483647,
+              background: "#fff",
+              border: "1px solid rgba(15,23,42,0.10)",
+              borderRadius: 16,
+              boxShadow: "0 18px 40px rgba(15,23,42,0.16)",
+              overflow: "hidden",
+            }}
+          >
+            {actionMenu.fileUrl ? (
+              <a
+                href={actionMenu.fileUrl}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  display: "block",
+                  padding: "14px 16px",
+                  textDecoration: "none",
+                  color: "rgba(0,0,0,0.85)",
+                  fontWeight: 700,
+                  borderBottom: "1px solid rgba(0,0,0,0.06)",
+                  background: "#fff",
+                }}
+                onClick={closeActionMenu}
+              >
+                Ver / Descargar
+              </a>
+            ) : (
+              <div
+                style={{
+                  padding: "14px 16px",
+                  color: "rgba(0,0,0,0.45)",
+                  fontWeight: 700,
+                  borderBottom: "1px solid rgba(0,0,0,0.06)",
+                  background: "#fff",
+                }}
+              >
+                Sin archivo
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => startEdit(actionMenu.item)}
+              disabled={saving}
+              style={{
+                width: "100%",
+                textAlign: "left",
+                padding: "14px 16px",
+                border: "none",
+                borderBottom: "1px solid rgba(0,0,0,0.06)",
+                background: "#fff",
+                color: "rgba(0,0,0,0.85)",
+                fontWeight: 700,
+                cursor: saving ? "not-allowed" : "pointer",
+              }}
+            >
+              Editar
+            </button>
+
+            <button
+              type="button"
+              onClick={() => askDelete(actionMenu.item)}
+              disabled={saving}
+              style={{
+                width: "100%",
+                textAlign: "left",
+                padding: "14px 16px",
+                border: "none",
+                background: "#fff",
+                color: "#b00020",
+                fontWeight: 800,
+                cursor: saving ? "not-allowed" : "pointer",
+              }}
+            >
+              Eliminar
+            </button>
+          </div>
+        </div>
+      )}
+
       <ConfirmModal
         open={confirmOpen}
         title="¿Eliminar mantención?"
@@ -695,7 +729,6 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
     </>
   );
 }
-
 
 
 

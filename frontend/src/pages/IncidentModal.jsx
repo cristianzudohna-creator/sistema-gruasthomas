@@ -6,19 +6,17 @@
 // ✅ NUEVO: preview y eliminar foto
 // ✅ NUEVO: envía foto en base64 al backend
 // ✅ NUEVO: buscador de vehículo por patente / marca-modelo
+// ✅ FOTO: estilo igual al modal de finalizar tarea
+// ✅ NUEVO: la lista de vehículos solo aparece cuando escriben
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
 import "./Admin.css";
 
 const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
 
 function getToken() {
-  return (
-    localStorage.getItem("access_token") ||
-    localStorage.getItem("token") ||
-    ""
-  );
+  return localStorage.getItem("access_token") || localStorage.getItem("token") || "";
 }
 
 function getUserFromStorage() {
@@ -60,6 +58,9 @@ export default function IncidentModal({ open, onClose, onCreated }) {
   const token = useMemo(() => getToken(), []);
   const currentUser = useMemo(() => getUserFromStorage(), []);
 
+  const takePhotoInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
+
   const [vehicles, setVehicles] = useState([]);
   const [loadingVehicles, setLoadingVehicles] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -85,6 +86,9 @@ export default function IncidentModal({ open, onClose, onCreated }) {
     setPhotoBase64("");
     setPhotoPreview("");
     setError("");
+
+    if (takePhotoInputRef.current) takePhotoInputRef.current.value = "";
+    if (galleryInputRef.current) galleryInputRef.current.value = "";
   }
 
   const availableVehicles = useMemo(() => {
@@ -94,17 +98,14 @@ export default function IncidentModal({ open, onClose, onCreated }) {
   }, [vehicles]);
 
   const selectedVehicle = useMemo(() => {
-    return (
-      availableVehicles.find((v) => String(v?.id) === String(form.vehicleId)) ||
-      null
-    );
+    return availableVehicles.find((v) => String(v?.id) === String(form.vehicleId)) || null;
   }, [availableVehicles, form.vehicleId]);
 
   const filteredVehicles = useMemo(() => {
     const q = String(vehicleQuery || "").trim().toLowerCase();
 
     if (!q) {
-      return availableVehicles.slice(0, 12);
+      return [];
     }
 
     return availableVehicles
@@ -203,6 +204,9 @@ export default function IncidentModal({ open, onClose, onCreated }) {
   function removePhoto() {
     setPhotoBase64("");
     setPhotoPreview("");
+
+    if (takePhotoInputRef.current) takePhotoInputRef.current.value = "";
+    if (galleryInputRef.current) galleryInputRef.current.value = "";
   }
 
   async function submit(e) {
@@ -268,7 +272,20 @@ export default function IncidentModal({ open, onClose, onCreated }) {
   }
 
   const showVehicleResults =
-    !selectedVehicle || vehicleQuery !== fmtVehicle(selectedVehicle);
+    String(vehicleQuery || "").trim().length > 0 &&
+    (!selectedVehicle || vehicleQuery !== fmtVehicle(selectedVehicle));
+
+  const photoActionBtnStyle = {
+    width: "100%",
+    minHeight: 46,
+    borderRadius: 14,
+    border: "1px solid rgba(15,23,42,.10)",
+    background: "#f8fafc",
+    cursor: saving ? "not-allowed" : "pointer",
+    fontWeight: 800,
+    fontSize: 14,
+    color: "#1f2937",
+  };
 
   return (
     <Modal
@@ -408,61 +425,101 @@ export default function IncidentModal({ open, onClose, onCreated }) {
 
             <div className="modal-form">
               <div style={{ gridColumn: "1 / -1" }}>
-                <label htmlFor="incidentPhoto">Foto del incidente</label>
-
-                <input
-                  id="incidentPhoto"
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  onChange={handlePhotoChange}
-                />
+                <label>Foto del incidente</label>
 
                 <div
                   style={{
                     marginTop: 8,
-                    fontSize: 13,
-                    opacity: 0.75,
+                    display: "grid",
+                    gap: 12,
                   }}
                 >
-                  En celular podrás sacar la foto con la cámara o elegirla desde
-                  la galería.
-                </div>
+                  <input
+                    ref={takePhotoInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handlePhotoChange}
+                    style={{ display: "none" }}
+                  />
 
-                {photoPreview ? (
+                  <input
+                    ref={galleryInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoChange}
+                    style={{ display: "none" }}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => takePhotoInputRef.current?.click()}
+                    disabled={saving}
+                    style={photoActionBtnStyle}
+                  >
+                    📸 Tomar foto
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => galleryInputRef.current?.click()}
+                    disabled={saving}
+                    style={photoActionBtnStyle}
+                  >
+                    🖼️ Elegir desde galería
+                  </button>
+
                   <div
                     style={{
-                      marginTop: 12,
-                      border: "1px solid rgba(0,0,0,.08)",
-                      borderRadius: 14,
-                      padding: 12,
-                      background: "#fff",
+                      fontSize: 13,
+                      color: "#64748b",
+                      lineHeight: 1.45,
                     }}
                   >
-                    <img
-                      src={photoPreview}
-                      alt="Vista previa"
-                      style={{
-                        width: "100%",
-                        maxHeight: 240,
-                        objectFit: "cover",
-                        borderRadius: 12,
-                        display: "block",
-                      }}
-                    />
-
-                    <div style={{ marginTop: 10 }}>
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        onClick={removePhoto}
-                        disabled={saving}
-                      >
-                        Quitar foto
-                      </button>
-                    </div>
+                    En celular puedes tomar la foto directamente o elegir una imagen guardada.
                   </div>
-                ) : null}
+
+                  {photoPreview ? (
+                    <div
+                      style={{
+                        marginTop: 4,
+                        border: "1px solid rgba(0,0,0,.08)",
+                        borderRadius: 14,
+                        padding: 12,
+                        background: "#fff",
+                      }}
+                    >
+                      <img
+                        src={photoPreview}
+                        alt="Vista previa"
+                        style={{
+                          width: "100%",
+                          maxHeight: 240,
+                          objectFit: "cover",
+                          borderRadius: 12,
+                          display: "block",
+                        }}
+                      />
+
+                      <div
+                        style={{
+                          marginTop: 10,
+                          display: "flex",
+                          justifyContent: "flex-start",
+                        }}
+                      >
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={removePhoto}
+                          disabled={saving}
+                        >
+                          Quitar foto
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
           </>

@@ -1,15 +1,7 @@
 // ✅ Archivo: src/pages/ReportIncidentWorker.jsx
-// ✅ FIX 400 Bad Request
-// - envía empresa
-// - valida user.id
-// - muestra mensaje real del backend
-// - navegación segura
-// ✅ NUEVO:
-// - permite tomar/subir foto desde celular o PC
-// - preview y eliminar foto
-// - envía foto en base64 al backend
+// ✅ VERSION FINAL PRO
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { logout } from "../auth/auth";
 import "./Admin.css";
@@ -33,42 +25,26 @@ function getUser() {
       localStorage.getItem("profile");
 
     if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : null;
+    return JSON.parse(raw);
   } catch {
     return null;
   }
 }
 
-function norm(value) {
-  return String(value || "").trim().toUpperCase();
+function norm(v) {
+  return String(v || "").trim().toUpperCase();
 }
 
-function getUserEmpresa(user) {
-  return (
-    user?.empresa ||
-    user?.company ||
-    user?.companyName ||
-    user?.empresaNombre ||
-    user?.empresa_name ||
-    user?.businessUnit ||
-    ""
-  );
-}
-
-function normalizePlate(value) {
-  return String(value || "")
-    .trim()
+function normalizePlate(v) {
+  return String(v || "")
     .toUpperCase()
-    .replace(/\./g, "")
-    .replace(/-/g, "")
-    .replace(/\s+/g, "");
+    .replace(/[-.\s]/g, "");
 }
 
 function vehicleLabel(v) {
-  const patente = v?.patente || "";
-  const marcaModelo = v?.marcaModelo || "";
-  return marcaModelo ? `${patente} · ${marcaModelo}` : patente;
+  return v?.marcaModelo
+    ? `${v.patente} · ${v.marcaModelo}`
+    : v.patente;
 }
 
 export default function ReportIncidentWorker() {
@@ -76,9 +52,13 @@ export default function ReportIncidentWorker() {
   const token = useMemo(() => getToken(), []);
   const user = useMemo(() => getUser(), []);
 
-  const [saving, setSaving] = useState(false);
-  const [loadingVehicles, setLoadingVehicles] = useState(true);
+  const takePhotoRef = useRef(null);
+  const galleryRef = useRef(null);
+
   const [vehicles, setVehicles] = useState([]);
+  const [loadingVehicles, setLoadingVehicles] = useState(true);
+  const [saving, setSaving] = useState(false);
+
   const [showSuggestions, setShowSuggestions] = useState(false);
 
   const [fotoBase64, setFotoBase64] = useState("");
@@ -104,9 +84,7 @@ export default function ReportIncidentWorker() {
       window.location.href = "/login";
       return;
     }
-
     loadVehicles();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadVehicles() {
@@ -114,10 +92,7 @@ export default function ReportIncidentWorker() {
       setLoadingVehicles(true);
 
       const res = await fetch(`${API_URL}/vehicles`, {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : "",
-        },
-        credentials: "include",
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       const data = await res.json();
@@ -133,16 +108,16 @@ export default function ReportIncidentWorker() {
     setForm((prev) => ({ ...prev, [name]: value }));
   }
 
+  // ✅ SOLO muestra cuando escriben
   const filteredVehicles = useMemo(() => {
     const q = normalizePlate(form.patente);
-
-    if (!q) return vehicles.slice(0, 8);
+    if (!q) return [];
 
     return vehicles
       .filter((v) => {
-        const patente = normalizePlate(v?.patente);
-        const marcaModelo = String(v?.marcaModelo || "").toUpperCase();
-        return patente.includes(q) || marcaModelo.includes(q);
+        const p = normalizePlate(v?.patente);
+        const m = String(v?.marcaModelo || "").toUpperCase();
+        return p.includes(q) || m.includes(q);
       })
       .slice(0, 8);
   }, [vehicles, form.patente]);
@@ -152,20 +127,16 @@ export default function ReportIncidentWorker() {
     setShowSuggestions(false);
   }
 
-  function handleFotoChange(e) {
+  function handleFoto(e) {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
 
     reader.onload = () => {
-      const result = String(reader.result || "");
-      setFotoBase64(result);
-      setFotoPreview(result);
-    };
-
-    reader.onerror = () => {
-      alert("No se pudo leer la foto seleccionada");
+      const base64 = String(reader.result || "");
+      setFotoBase64(base64);
+      setFotoPreview(base64);
     };
 
     reader.readAsDataURL(file);
@@ -180,89 +151,55 @@ export default function ReportIncidentWorker() {
     e.preventDefault();
 
     const patente = normalizePlate(form.patente);
-    const descripcion = String(form.descripcion || "").trim();
-    const ubicacionTexto = String(form.ubicacionTexto || "").trim();
-
-    const reportedById = user?.id || user?.userId || user?.sub || "";
-    const empresa = norm(getUserEmpresa(user));
+    const descripcion = form.descripcion.trim();
 
     if (!patente || !descripcion) {
       alert("Completa los campos obligatorios");
       return;
     }
 
-    if (!reportedById) {
-      alert("No se encontró el ID del usuario logueado");
-      return;
-    }
-
-    if (!empresa) {
-      alert("No se encontró la empresa del usuario logueado");
-      return;
-    }
-
     try {
       setSaving(true);
 
-      const payload = {
-        patente,
-        descripcion,
-        ubicacionTexto: ubicacionTexto || undefined,
-        reportedById,
-        empresa,
-        foto: fotoBase64 || undefined,
-      };
-
-      const res = await fetch(`${API_URL}/workshop/incidents`, {
+      await fetch(`${API_URL}/workshop/incidents`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: token ? `Bearer ${token}` : "",
+          Authorization: `Bearer ${token}`,
         },
-        credentials: "include",
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          patente,
+          descripcion,
+          ubicacionTexto: form.ubicacionTexto || undefined,
+          reportedById: user?.id,
+          empresa: norm(user?.empresa),
+          foto: fotoBase64 || undefined,
+        }),
       });
 
-      let data = null;
-      try {
-        data = await res.json();
-      } catch {
-        data = null;
-      }
-
-      if (!res.ok) {
-        const backendMessage = Array.isArray(data?.message)
-          ? data.message.join(", ")
-          : data?.message || "Error al reportar incidente";
-        throw new Error(backendMessage);
-      }
-
-      alert("Incidente reportado");
-      navigate("/trabajador", { replace: true });
-    } catch (err) {
-      alert(err?.message || "Error al reportar");
+      alert("Incidente enviado");
+      goPortal();
+    } catch {
+      alert("Error al enviar");
     } finally {
       setSaving(false);
     }
   }
 
+  const showResults =
+    form.patente.trim().length > 0 && showSuggestions;
+
   return (
     <div className="riw-page">
       <div className="riw-card">
+
+        {/* HEADER */}
         <div className="riw-toolbar">
-          <button
-            type="button"
-            className="btn-secondary riw-toolbar-btn"
-            onClick={goPortal}
-          >
-            ← Volver al portal
+          <button onClick={goPortal} className="btn-secondary">
+            ← Volver
           </button>
 
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="riw-logout-btn"
-          >
+          <button onClick={handleLogout} className="riw-logout-btn">
             Cerrar sesión
           </button>
         </div>
@@ -271,27 +208,28 @@ export default function ReportIncidentWorker() {
           <h1 className="riw-title">🚨 Reportar incidente</h1>
 
           <p className="riw-subtitle">
-            Informa lo que pasó con el vehículo para que lo revise el jefe de
-            taller.
+            Informa lo que pasó con el vehículo para que lo revise el jefe de taller.
           </p>
         </div>
 
         <form onSubmit={submit} className="riw-form">
+
+          {/* PATENTE */}
           <div className="riw-field riw-field--autocomplete">
             <label className="riw-label">Patente</label>
 
             <input
               value={form.patente}
               onChange={(e) => {
-                updateField("patente", e.target.value.toUpperCase());
+                updateField("patente", e.target.value);
                 setShowSuggestions(true);
               }}
               onFocus={() => setShowSuggestions(true)}
-              placeholder="Escribe la patente"
+              placeholder="Escribe patente"
               className="riw-input riw-input--plate"
             />
 
-            {showSuggestions && filteredVehicles.length > 0 && (
+            {showResults && (
               <div className="riw-suggestions">
                 {filteredVehicles.map((v, idx) => (
                   <button
@@ -317,34 +255,64 @@ export default function ReportIncidentWorker() {
             </div>
           </div>
 
+          {/* DESCRIPCIÓN */}
           <div className="riw-field">
             <label className="riw-label">¿Qué pasó?</label>
 
             <textarea
               rows={5}
               value={form.descripcion}
-              onChange={(e) => updateField("descripcion", e.target.value)}
+              onChange={(e) =>
+                updateField("descripcion", e.target.value)
+              }
               className="riw-textarea"
             />
           </div>
 
+          {/* FOTO PRO */}
           <div className="riw-field">
             <label className="riw-label">Foto</label>
 
             <input
+              ref={takePhotoRef}
               type="file"
               accept="image/*"
               capture="environment"
-              onChange={handleFotoChange}
-              className="riw-file"
+              onChange={handleFoto}
+              style={{ display: "none" }}
             />
 
-            <div className="riw-help">
-              En celular podrás sacar la foto con la cámara o elegirla desde la
-              galería.
+            <input
+              ref={galleryRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFoto}
+              style={{ display: "none" }}
+            />
+
+            <div className="riw-photo-actions">
+              <button
+                type="button"
+                onClick={() => takePhotoRef.current.click()}
+                className="riw-photo-action-btn"
+              >
+                📸 Tomar foto
+              </button>
+
+              <button
+                type="button"
+                onClick={() => galleryRef.current.click()}
+                className="riw-photo-action-btn"
+              >
+                🖼️ Elegir desde galería
+              </button>
             </div>
 
-            {fotoPreview ? (
+            <div className="riw-help">
+              En celular puedes tomar la foto directamente o elegir una imagen guardada.
+            </div>
+
+            {fotoPreview && (
               <div className="riw-photo-card">
                 <img
                   src={fotoPreview}
@@ -361,24 +329,28 @@ export default function ReportIncidentWorker() {
                   Quitar foto
                 </button>
               </div>
-            ) : null}
+            )}
           </div>
 
+          {/* UBICACIÓN */}
           <div className="riw-field">
             <label className="riw-label">Ubicación</label>
 
             <input
               value={form.ubicacionTexto}
-              onChange={(e) => updateField("ubicacionTexto", e.target.value)}
+              onChange={(e) =>
+                updateField("ubicacionTexto", e.target.value)
+              }
               className="riw-input"
             />
           </div>
 
+          {/* BOTONES */}
           <div className="riw-actions">
             <button
               type="button"
-              className="btn-secondary riw-action-btn"
               onClick={goPortal}
+              className="btn-secondary riw-action-btn"
             >
               Cancelar
             </button>
@@ -391,6 +363,7 @@ export default function ReportIncidentWorker() {
               {saving ? "Enviando..." : "Reportar incidente"}
             </button>
           </div>
+
         </form>
       </div>
     </div>

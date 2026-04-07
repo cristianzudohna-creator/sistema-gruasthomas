@@ -1,5 +1,8 @@
 // ✅ Archivo: src/pages/Camiones.jsx (COMPLETO - PROD FIX + COOKIES FIX + TEXT FIX + HORÓMETRO CRUD SIN EDITAR/SIN COMENTARIO)
 // ✅ NUEVO: CSS propio en Camiones.css
+// ✅ CAMBIO: HORÓMETRO SIN FOTO / SIN EVIDENCIA / SIN VISOR DE IMAGEN
+// ✅ NUEVO: botón "Marcar mantención" para reiniciar ciclo desde una lectura
+
 import { useEffect, useMemo, useState } from "react";
 import "./Admin.css";
 import "./Camiones.css";
@@ -140,26 +143,29 @@ export default function Camiones() {
   const [horoLoading, setHoroLoading] = useState(false);
   const [horoError, setHoroError] = useState("");
   const [horoItems, setHoroItems] = useState([]);
+  const [horoPlan, setHoroPlan] = useState(null);
 
   const [horoFormHoras, setHoroFormHoras] = useState("");
-  const [horoFormFile, setHoroFormFile] = useState(null);
   const [horoSaving, setHoroSaving] = useState(false);
 
   const [horoDeleteConfirmOpen, setHoroDeleteConfirmOpen] = useState(false);
   const [horoDeleteTarget, setHoroDeleteTarget] = useState(null);
 
-  const [photoOpen, setPhotoOpen] = useState(false);
-  const [photoUrl, setPhotoUrl] = useState("");
-  const [photoTitle, setPhotoTitle] = useState("");
+  const [horoResetConfirmOpen, setHoroResetConfirmOpen] = useState(false);
+  const [horoResetTarget, setHoroResetTarget] = useState(null);
 
   function resetHoroForm() {
     setHoroFormHoras("");
-    setHoroFormFile(null);
   }
 
   function askDeleteHorometerRow(r) {
     setHoroDeleteTarget(r);
     setHoroDeleteConfirmOpen(true);
+  }
+
+  function askResetHorometerRow(r) {
+    setHoroResetTarget(r);
+    setHoroResetConfirmOpen(true);
   }
 
   function splitMarcaModelo(mm) {
@@ -512,10 +518,13 @@ export default function Camiones() {
     setHoroOpen(false);
     setHoroVehicle(null);
     setHoroItems([]);
+    setHoroPlan(null);
     setHoroError("");
     resetHoroForm();
     setHoroDeleteConfirmOpen(false);
     setHoroDeleteTarget(null);
+    setHoroResetConfirmOpen(false);
+    setHoroResetTarget(null);
   }
 
   function normalizeHorometerResponse(data) {
@@ -544,16 +553,12 @@ export default function Camiones() {
     return normalizeHorometerResponse(data);
   }
 
-  async function createHorometerRequest(vehicleId, { horas, file }) {
-    const fd = new FormData();
-    fd.append("horas", String(horas));
-    if (file) fd.append("file", file);
-
+  async function createHorometerRequest(vehicleId, { horas }) {
     const res = await fetch(`${API_URL}/vehicles/${vehicleId}/horometers`, {
       method: "POST",
       credentials: "include",
-      headers: tokenHeaders(),
-      body: fd,
+      headers: tokenHeadersJson(),
+      body: JSON.stringify({ horas }),
     });
 
     if (!res.ok) {
@@ -579,11 +584,51 @@ export default function Camiones() {
     return res.json().catch(() => null);
   }
 
+  async function resetHorometerCycleRequest(vehicleId, horas) {
+    const res = await fetch(`${API_URL}/vehicles/${vehicleId}/horometers/reset-cycle`, {
+      method: "POST",
+      credentials: "include",
+      headers: tokenHeadersJson(),
+      body: JSON.stringify({ horas }),
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(txt || `Error ${res.status}`);
+    }
+
+    return res.json().catch(() => null);
+  }
+
   function computeFaltanLabel(faltanHoras) {
     const n = faltanHoras == null ? null : Number(faltanHoras);
     if (n == null || !Number.isFinite(n)) return "—";
     if (n > 0) return `Faltan ${n}h`;
     return `Vencido ${Math.abs(n)}h`;
+  }
+
+  async function loadHorometers(vehicleId) {
+    const { records, plan } = await fetchHorometers(vehicleId);
+
+    const mapped = (records || []).map((r) => {
+      const faltanHoras = r.faltanHoras ?? r.faltan ?? null;
+      const faltanLabel = fixText(r.faltanLabel || computeFaltanLabel(faltanHoras));
+
+      return {
+        id: r.id,
+        horas: r.horas,
+        createdAt: r.createdAt,
+        trabajadorNombre: fixText(r.trabajadorNombre || ""),
+        trabajadorApellido: fixText(r.trabajadorApellido || ""),
+        trabajadorRut: fixText(r.trabajadorRut || ""),
+        faltanHoras,
+        faltanLabel,
+      };
+    });
+
+    mapped.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    setHoroItems(mapped);
+    setHoroPlan(plan || null);
   }
 
   useEffect(() => {
@@ -593,50 +638,16 @@ export default function Camiones() {
       try {
         setHoroLoading(true);
         setHoroError("");
-
-        const { records } = await fetchHorometers(horoVehicle.id);
-
-        const mapped = (records || []).map((r) => {
-          const faltanHoras = r.faltanHoras ?? r.faltan ?? null;
-          const faltanLabel = fixText(r.faltanLabel || computeFaltanLabel(faltanHoras));
-
-          return {
-            id: r.id,
-            horas: r.horas,
-            fotoUrl: r.fotoUrl || r.fotoURL || r.archivoUrl || r.fileUrl || "",
-            createdAt: r.createdAt,
-            trabajadorNombre: fixText(r.trabajadorNombre || ""),
-            trabajadorApellido: fixText(r.trabajadorApellido || ""),
-            trabajadorRut: fixText(r.trabajadorRut || ""),
-            originalName: fixText(r.originalName || r.filename || ""),
-            faltanHoras,
-            faltanLabel,
-          };
-        });
-
-        mapped.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        setHoroItems(mapped);
+        await loadHorometers(horoVehicle.id);
       } catch (e) {
         setHoroError(e?.message || "No se pudo cargar horómetro.");
         setHoroItems([]);
+        setHoroPlan(null);
       } finally {
         setHoroLoading(false);
       }
     })();
   }, [horoOpen, horoVehicle?.id]);
-
-  function openPhoto(url, title) {
-    if (!url) return;
-    setPhotoUrl(url.startsWith("http") ? url : `${API_URL}${url}`);
-    setPhotoTitle(fixText(title || "Evidencia"));
-    setPhotoOpen(true);
-  }
-
-  function closePhoto() {
-    setPhotoOpen(false);
-    setPhotoUrl("");
-    setPhotoTitle("");
-  }
 
   useEffect(() => {
     fetchVehicles();
@@ -964,7 +975,7 @@ export default function Camiones() {
         />
       </div>
 
-      <div className="cards cards-5">
+      <div className="cards cards-3">
         <div
           className={`card ${totalCardActive ? "card-active" : ""}`}
           style={{ cursor: "pointer" }}
@@ -1029,46 +1040,6 @@ export default function Camiones() {
           </div>
           <div className="card-value">{stats.docsPorVencer}</div>
           <div className="card-sub">Documentos • (solo operativos)</div>
-        </div>
-
-        <div
-          className="card danger"
-          style={{ cursor: stats.maintCriticos > 0 ? "pointer" : "default" }}
-          onClick={() => stats.maintCriticos > 0 && openAlerts("MAINT_CRIT")}
-          title={stats.maintCriticos > 0 ? "Click para ver vehículos operativos" : "Sin mantenciones críticas en operativos"}
-        >
-          <div className="cam-card-scope-row">
-            <ScopePill text={scopeText()} logo={scopeLogo()} />
-          </div>
-
-          <div className="card-top">
-            <div className="card-ico" aria-hidden="true">
-              🛠️
-            </div>
-            <div className="card-title">Vencimientos críticos</div>
-          </div>
-          <div className="card-value">{stats.maintCriticos}</div>
-          <div className="card-sub">Mantenciones • (solo operativos)</div>
-        </div>
-
-        <div
-          className="card warn"
-          style={{ cursor: stats.maintPorVencer > 0 ? "pointer" : "default" }}
-          onClick={() => stats.maintPorVencer > 0 && openAlerts("MAINT_SOON")}
-          title={stats.maintPorVencer > 0 ? "Click para ver vehículos operativos" : "Sin mantenciones por vencer en operativos"}
-        >
-          <div className="cam-card-scope-row">
-            <ScopePill text={scopeText()} logo={scopeLogo()} />
-          </div>
-
-          <div className="card-top">
-            <div className="card-ico" aria-hidden="true">
-              ⌛
-            </div>
-            <div className="card-title">Por vencer pronto</div>
-          </div>
-          <div className="card-value">{stats.maintPorVencer}</div>
-          <div className="card-sub">Mantenciones • (solo operativos)</div>
         </div>
       </div>
 
@@ -1368,16 +1339,11 @@ export default function Camiones() {
               <input
                 value={horoFormHoras}
                 onChange={(e) => setHoroFormHoras(e.target.value)}
-                placeholder="Ej: 4565161"
+                placeholder="Ej: 9885"
                 inputMode="numeric"
                 className="search-input cam-horo-hours-input"
                 disabled={horoSaving || horoLoading}
               />
-            </div>
-
-            <div className="cam-horo-form-field">
-              <label className="cam-horo-form-label">Foto</label>
-              <input type="file" accept="image/*" onChange={(e) => setHoroFormFile(e.target.files?.[0] || null)} disabled={horoSaving || horoLoading} />
             </div>
 
             <ActionButton
@@ -1395,29 +1361,9 @@ export default function Camiones() {
 
                 try {
                   setHoroSaving(true);
-
-                  await createHorometerRequest(horoVehicle.id, { horas, file: horoFormFile });
+                  await createHorometerRequest(horoVehicle.id, { horas });
                   resetHoroForm();
-
-                  const { records } = await fetchHorometers(horoVehicle.id);
-                  const mapped = (records || []).map((r) => {
-                    const faltanHoras = r.faltanHoras ?? r.faltan ?? null;
-                    const faltanLabel = fixText(r.faltanLabel || computeFaltanLabel(faltanHoras));
-                    return {
-                      id: r.id,
-                      horas: r.horas,
-                      fotoUrl: r.fotoUrl || "",
-                      createdAt: r.createdAt,
-                      trabajadorNombre: fixText(r.trabajadorNombre || ""),
-                      trabajadorApellido: fixText(r.trabajadorApellido || ""),
-                      trabajadorRut: fixText(r.trabajadorRut || ""),
-                      originalName: fixText(r.originalName || ""),
-                      faltanHoras,
-                      faltanLabel,
-                    };
-                  });
-                  mapped.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-                  setHoroItems(mapped);
+                  await loadHorometers(horoVehicle.id);
                 } catch (e) {
                   alert(e?.message || "No se pudo crear registro de horómetro.");
                 } finally {
@@ -1435,10 +1381,20 @@ export default function Camiones() {
           </div>
         </div>
 
-        <div className="cam-horo-badges-row">
+        <div className="cam-horo-badges-row" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <span className="status ok" style={{ whiteSpace: "nowrap" }}>
             Registros: {horoItems.length}
           </span>
+
+          {horoPlan?.nextDueHours != null ? (
+            <span className="status warn" style={{ whiteSpace: "nowrap" }}>
+              Próxima mantención: {Number(horoPlan.nextDueHours)}h
+            </span>
+          ) : (
+            <span className="status" style={{ whiteSpace: "nowrap" }}>
+              Sin ciclo de mantención
+            </span>
+          )}
         </div>
 
         <div className="cam-horo-table-shell">
@@ -1450,21 +1406,20 @@ export default function Camiones() {
                   <th style={{ width: 90 }}>Horas</th>
                   <th style={{ width: 260 }}>Registrado por</th>
                   <th style={{ width: 170 }}>Faltan</th>
-                  <th style={{ width: 170 }}>Evidencia</th>
-                  <th style={{ width: 170, textAlign: "right" }}>Acciones</th>
+                  <th style={{ width: 280, textAlign: "right" }}>Acciones</th>
                 </tr>
               </thead>
 
               <tbody>
                 {horoLoading ? (
                   <tr>
-                    <td colSpan={6} className="empty">
+                    <td colSpan={5} className="empty">
                       Cargando horómetro...
                     </td>
                   </tr>
                 ) : horoItems.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="empty">
+                    <td colSpan={5} className="empty">
                       No hay registros de horómetro para este vehículo.
                     </td>
                   </tr>
@@ -1509,29 +1464,32 @@ export default function Camiones() {
                           {faltanText}
                         </td>
 
-                        <td>
-                          <div className="cam-horo-evidence-cell">
-                            {r.fotoUrl ? (
-                              <ActionButton
-                                variant="ghost"
-                                type="button"
-                                onClick={() => openPhoto(r.fotoUrl, r.originalName || `Evidencia • ${horoVehicle?.patente || ""}`)}
-                                style={{ height: 34, padding: "0 12px", borderRadius: 12, fontWeight: 900 }}
-                              >
-                                Ver
-                              </ActionButton>
-                            ) : (
-                              <span className="muted">—</span>
-                            )}
-                          </div>
-                        </td>
-
                         <td style={{ textAlign: "right" }}>
-                          <div className="cam-horo-actions-cell">
+                          <div
+                            className="cam-horo-actions-cell"
+                            style={{
+                              display: "flex",
+                              justifyContent: "flex-end",
+                              gap: 8,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <ActionButton
+                              variant="primary"
+                              type="button"
+                              onClick={() => askResetHorometerRow(r)}
+                              disabled={horoSaving}
+                              style={{ height: 34, padding: "0 12px" }}
+                              title="Toma esta lectura como mantención real y reinicia el ciclo"
+                            >
+                              Marcar mantención
+                            </ActionButton>
+
                             <ActionButton
                               variant="ghost"
                               type="button"
                               onClick={() => askDeleteHorometerRow(r)}
+                              disabled={horoSaving}
                               style={{ height: 34, padding: "0 12px", border: "1px solid rgba(200,0,0,0.25)" }}
                             >
                               Eliminar
@@ -1546,6 +1504,42 @@ export default function Camiones() {
             </table>
           </div>
         </div>
+
+        <ConfirmModal
+          open={horoResetConfirmOpen}
+          title="¿Marcar como nueva mantención?"
+          description={
+            <div style={{ fontSize: 13, color: "rgba(0,0,0,.75)" }}>
+              Este registro se tomará como la <b>nueva base del ciclo</b>. <br />
+              Vehículo: <b>{fixText(horoVehicle?.patente || "-")}</b> <br />
+              Horómetro base: <b>{horoResetTarget ? Number(horoResetTarget.horas || 0) : 0}</b> <br />
+              Próxima mantención:{" "}
+              <b>
+                {horoResetTarget ? Number(horoResetTarget.horas || 0) + 500 : 500}
+              </b>
+            </div>
+          }
+          confirmText="Sí, reiniciar ciclo"
+          cancelText="Cancelar"
+          danger={false}
+          loading={horoSaving}
+          onClose={() => !horoSaving && setHoroResetConfirmOpen(false)}
+          onConfirm={async () => {
+            if (!horoVehicle?.id || !horoResetTarget?.horas) return;
+
+            try {
+              setHoroSaving(true);
+              await resetHorometerCycleRequest(horoVehicle.id, Number(horoResetTarget.horas));
+              setHoroResetConfirmOpen(false);
+              setHoroResetTarget(null);
+              await loadHorometers(horoVehicle.id);
+            } catch (e) {
+              alert(e?.message || "No se pudo reiniciar el ciclo de mantención.");
+            } finally {
+              setHoroSaving(false);
+            }
+          }}
+        />
 
         <ConfirmModal
           open={horoDeleteConfirmOpen}
@@ -1568,29 +1562,9 @@ export default function Camiones() {
             try {
               setHoroSaving(true);
               await deleteHorometerRequest(horoVehicle.id, horoDeleteTarget.id);
-
               setHoroDeleteConfirmOpen(false);
               setHoroDeleteTarget(null);
-
-              const { records } = await fetchHorometers(horoVehicle.id);
-              const mapped = (records || []).map((x) => {
-                const faltanHoras = x.faltanHoras ?? x.faltan ?? null;
-                const faltanLabel = fixText(x.faltanLabel || computeFaltanLabel(faltanHoras));
-                return {
-                  id: x.id,
-                  horas: x.horas,
-                  fotoUrl: x.fotoUrl || "",
-                  createdAt: x.createdAt,
-                  trabajadorNombre: fixText(x.trabajadorNombre || ""),
-                  trabajadorApellido: fixText(x.trabajadorApellido || ""),
-                  trabajadorRut: fixText(x.trabajadorRut || ""),
-                  originalName: fixText(x.originalName || ""),
-                  faltanHoras,
-                  faltanLabel,
-                };
-              });
-              mapped.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-              setHoroItems(mapped);
+              await loadHorometers(horoVehicle.id);
             } catch (e) {
               alert(e?.message || "No se pudo eliminar.");
             } finally {
@@ -1598,31 +1572,6 @@ export default function Camiones() {
             }
           }}
         />
-      </Modal>
-
-      <Modal
-        open={photoOpen}
-        onClose={closePhoto}
-        title={fixText(photoTitle || "Evidencia")}
-        subtitle="Imagen subida"
-        width={860}
-        footer={
-          <button className="gt-btn gt-btn-primary" type="button" onClick={closePhoto}>
-            Cerrar
-          </button>
-        }
-      >
-        {!photoUrl ? (
-          <div className="empty">No hay imagen para mostrar.</div>
-        ) : (
-          <div className="cam-photo-wrap">
-            <img
-              src={photoUrl}
-              alt={fixText(photoTitle)}
-              className="cam-photo-img"
-            />
-          </div>
-        )}
       </Modal>
 
       <Modal

@@ -1,5 +1,5 @@
 // ✅ Archivo: src/pages/Admin.jsx (COMPLETO - RESPONSIVE PRO + PERMISOS AJUSTADOS)
-// ✅ Menú "Clientes" SOLO SUPERADMIN
+// ✅ Menú "Clientes" SOLO SUPERADMIN + ADMINISTRADORA
 // ✅ Sidebar responsive (toggle, ESC, lock scroll, close on route change)
 // ✅ AJUSTE: CONTROL_FLOTA YA NO VE:
 //    - Órdenes de trabajo
@@ -86,8 +86,8 @@ export default function Admin() {
   const isAdquisiciones =
     role === "TRABAJADOR" && workerType === "ADQUISICIONES";
   const isJefeTaller =
-  role === "TRABAJADOR" &&
-  (workerType === "JEFE_TALLER" || workerType === "SUPERVISOR");
+    role === "TRABAJADOR" &&
+    (workerType === "JEFE_TALLER" || workerType === "SUPERVISOR");
 
   const canSeeDashboard = isSuperadmin;
   const canSeeCamiones = isSuperadmin || isControlFlota;
@@ -100,7 +100,9 @@ export default function Admin() {
   const canSeeConfiguracion = isSuperadmin;
   const canSeePapelera = isSuperadmin;
   const canSeePapeleraOt = isSuperadmin;
-  const canSeeClientes = isSuperadmin;
+
+  // ✅ CLIENTES: SOLO SUPERADMIN + ADMINISTRADORA
+  const canSeeClientes = isSuperadmin || isAdministradora;
 
   // ✅ CONTROL_FLOTA YA NO VE INCIDENTES / TALLER
   const canSeeIncidentes = isSuperadmin || isJefeTaller;
@@ -150,7 +152,7 @@ export default function Admin() {
     if (isAdministradora) return "ADMINISTRADORA";
     if (isAdquisiciones) return "ADQUISICIONES";
     if (workerType === "JEFE_TALLER") return "JEFE DE TALLER";
-if (workerType === "SUPERVISOR") return "SUPERVISOR";
+    if (workerType === "SUPERVISOR") return "SUPERVISOR";
     if (role) return role;
     return "Usuario";
   }, [
@@ -160,6 +162,7 @@ if (workerType === "SUPERVISOR") return "SUPERVISOR";
     isAdquisiciones,
     isJefeTaller,
     role,
+    workerType,
   ]);
 
   useEffect(() => {
@@ -442,7 +445,7 @@ if (workerType === "SUPERVISOR") return "SUPERVISOR";
                 setSidebarOpen(false);
                 navigate("/admin/clientes");
               }}
-              title="Administración de clientes (solo SUPERADMIN)"
+              title="Administración de clientes"
             >
               <span className="sb-ico" aria-hidden="true">🏢</span>
               <span>Clientes</span>

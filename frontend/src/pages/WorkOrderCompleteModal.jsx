@@ -5,6 +5,12 @@
 // - Firma sigue siendo solo lectura en administración.
 // ✅ CAMBIO NUEVO:
 // - "Dirección de la faena" -> "Obra/Tramo"
+// ✅ CAMBIO NUEVO:
+// - "Días de trabajo" ahora muestra día + fecha usando diasProgramados cuando exista
+//   Ej: SAB 05-04-2026 | DOM 06-04-2026
+// ✅ CAMBIO NUEVO:
+// - La firma se recorta y centra automáticamente al guardarse,
+//   para que en el PDF salga centrada aunque el cliente firme en cualquier parte.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -96,6 +102,18 @@ function pick(...vals) {
     if (s.trim() !== "") return v;
   }
   return "";
+}
+
+function fmtDDMMYYYYFromISO(iso) {
+  if (!iso) return "";
+  const [y, m, d] = String(iso).slice(0, 10).split("-");
+  return `${d}-${m}-${y}`;
+}
+
+function dowLabelFromISO(iso) {
+  const date = new Date(String(iso).slice(0, 10) + "T00:00:00");
+  const dias = ["DOM", "LUN", "MAR", "MIE", "JUE", "VIE", "SAB"];
+  return dias[date.getDay()] || "";
 }
 
 /* =========================
@@ -254,6 +272,100 @@ function SignaturePad({
     return c.getContext("2d");
   }
 
+  function exportCenteredSignature() {
+    const c = canvasRef.current;
+    if (!c) return "";
+
+    const rect = c.getBoundingClientRect();
+    const viewW = Math.max(1, Math.round(rect.width));
+    const viewH = Math.max(1, Math.round(rect.height));
+
+    const src = document.createElement("canvas");
+    src.width = viewW;
+    src.height = viewH;
+
+    const sctx = src.getContext("2d");
+    if (!sctx) return "";
+
+    sctx.fillStyle = "#ffffff";
+    sctx.fillRect(0, 0, viewW, viewH);
+    sctx.drawImage(c, 0, 0, viewW, viewH);
+
+    const img = sctx.getImageData(0, 0, viewW, viewH);
+    const data = img.data;
+
+    let minX = viewW;
+    let minY = viewH;
+    let maxX = -1;
+    let maxY = -1;
+
+    for (let y = 0; y < viewH; y++) {
+      for (let x = 0; x < viewW; x++) {
+        const i = (y * viewW + x) * 4;
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const a = data[i + 3];
+
+        const isInk = a > 10 && (r < 245 || g < 245 || b < 245);
+
+        if (isInk) {
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+
+    if (maxX < 0 || maxY < 0) return "";
+
+    const pad = 8;
+    minX = Math.max(0, minX - pad);
+    minY = Math.max(0, minY - pad);
+    maxX = Math.min(viewW - 1, maxX + pad);
+    maxY = Math.min(viewH - 1, maxY + pad);
+
+    const cropW = Math.max(1, maxX - minX + 1);
+    const cropH = Math.max(1, maxY - minY + 1);
+
+    const out = document.createElement("canvas");
+    out.width = viewW;
+    out.height = viewH;
+
+    const octx = out.getContext("2d");
+    if (!octx) return "";
+
+    octx.fillStyle = "#ffffff";
+    octx.fillRect(0, 0, viewW, viewH);
+
+    const maxDrawW = viewW * 0.82;
+    const maxDrawH = viewH * 0.72;
+    const scale = Math.min(maxDrawW / cropW, maxDrawH / cropH, 1);
+
+    const drawW = cropW * scale;
+    const drawH = cropH * scale;
+    const dx = (viewW - drawW) / 2;
+    const dy = (viewH - drawH) / 2;
+
+    octx.imageSmoothingEnabled = true;
+    octx.imageSmoothingQuality = "high";
+
+    octx.drawImage(
+      src,
+      minX,
+      minY,
+      cropW,
+      cropH,
+      dx,
+      dy,
+      drawW,
+      drawH
+    );
+
+    return out.toDataURL("image/png");
+  }
+
   function resizeCanvas() {
     const c = canvasRef.current;
     if (!c) return;
@@ -353,9 +465,7 @@ function SignaturePad({
     if (!drawingRef.current) return;
     drawingRef.current = false;
 
-    const c = canvasRef.current;
-    if (!c) return;
-    const dataUrl = hasInkRef.current ? c.toDataURL("image/png") : "";
+    const dataUrl = hasInkRef.current ? exportCenteredSignature() : "";
     onChange?.(dataUrl);
     e?.preventDefault?.();
   }
@@ -622,11 +732,11 @@ export default function WorkOrderCompleteModal({
     else if (!isValidHora(f.llegadaPlanta)) e.llegadaPlanta = "HH:MM";
 
     if (normalizeText(f.colacion)) {
-  const n = Number(f.colacion);
-  if (isNaN(n) || n < 0) {
-    e.colacion = "Debe ser un número válido";
-  }
-}
+      const n = Number(f.colacion);
+      if (isNaN(n) || n < 0) {
+        e.colacion = "Debe ser un número válido";
+      }
+    }
 
     if (!normalizeText(f.movimientos)) e.movimientos = "Obligatorio";
 
@@ -750,7 +860,18 @@ export default function WorkOrderCompleteModal({
       comuna: normalizeText(pick(d?.comuna)),
       ciudad: normalizeText(pick(d?.ciudad)),
       horario: normalizeText(pick(d?.horario, d?.horarioLlegada)),
-      diasTrabajo: Array.isArray(d?.diasTrabajo) ? d.diasTrabajo.join(", ") : "",
+      diasTrabajo: (() => {
+        const diasProg = Array.isArray(d?.diasProgramados) ? d.diasProgramados : [];
+
+        if (!diasProg.length) {
+          return Array.isArray(d?.diasTrabajo) ? d.diasTrabajo.join(", ") : "";
+        }
+
+        return diasProg
+          .slice(0, 10)
+          .map((iso) => `${dowLabelFromISO(iso)} ${fmtDDMMYYYYFromISO(iso)}`)
+          .join(" | ");
+      })(),
       camion: normalizeText(pick(d?.camion, d?.camionNumero)),
       conductor: normalizeText(pick(d?.conductor)),
       rigger: normalizeText(pick(d?.rigger)),
@@ -963,37 +1084,37 @@ export default function WorkOrderCompleteModal({
                 />
 
                 <div>
-  <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.75, marginBottom: 6 }}>
-    Horas de colación (opcional)
-  </div>
+                  <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.75, marginBottom: 6 }}>
+                    Horas de colación (opcional)
+                  </div>
 
-  <input
-    type="number"
-    min="0"
-    max="12"
-    step="1"
-    className="gt-input"
-    placeholder="Ej: 1"
-    value={f.colacion ?? ""}
-    onChange={(e) =>
-      setField(
-        "colacion",
-        e.target.value === "" ? "" : Number(e.target.value)
-      )
-    }
-    disabled={saving || savingDraft}
-  />
+                  <input
+                    type="number"
+                    min="0"
+                    max="12"
+                    step="1"
+                    className="gt-input"
+                    placeholder="Ej: 1"
+                    value={f.colacion ?? ""}
+                    onChange={(e) =>
+                      setField(
+                        "colacion",
+                        e.target.value === "" ? "" : Number(e.target.value)
+                      )
+                    }
+                    disabled={saving || savingDraft}
+                  />
 
-  <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4 }}>
-    Cantidad de horas (ej: 1, 2, 3)
-  </div>
+                  <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4 }}>
+                    Cantidad de horas (ej: 1, 2, 3)
+                  </div>
 
-  {errors.colacion && (
-    <div style={{ color: "#dc2626", fontSize: 12, marginTop: 4 }}>
-      {errors.colacion}
-    </div>
-  )}
-</div>
+                  {errors.colacion && (
+                    <div style={{ color: "#dc2626", fontSize: 12, marginTop: 4 }}>
+                      {errors.colacion}
+                    </div>
+                  )}
+                </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                   <LabeledInput

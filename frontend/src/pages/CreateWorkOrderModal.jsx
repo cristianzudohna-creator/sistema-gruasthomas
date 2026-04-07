@@ -29,6 +29,9 @@
 // ✅ FIX UI NUEVO:
 // - Textarea de descripción sin resize manual
 // - Alto fijo + scroll interno
+//
+// ✅ CAMBIO NUEVO:
+// - "Detalle del servicio" YA NO es obligatorio
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -1470,8 +1473,6 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
     if (!normalizeText(f.conductor)) e.conductor = "Obligatorio";
     if (!normalizeText(f.conductorId)) e.conductor = "Selecciona un operador de la lista";
 
-    if (!normalizeText(f.nota)) e.nota = "Obligatorio";
-
     setErrors(e);
 
     const first = Object.keys(e)[0];
@@ -1684,85 +1685,93 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
           </div>
 
           {/* ===== EQUIPO ===== */}
-          <div className="ot-box">
-            <div className="ot-box-title">Equipo</div>
+          {/* ===== EQUIPO ===== */}
+<div className="ot-box">
+  <div className="ot-box-title">Equipo</div>
 
-            <div className="ot-grid-2">
-              <VehicleAutocomplete
-                label="Patente"
-                placeholder="Escribe para buscar (ej: AB)"
-                value={f.camion}
-                empresa={f.empresa}
-                onChangeValue={(v) => setField("camion", v)}
-                onPickVehicle={(veh) => {
-                  const vEmp = String(veh?.empresa || "").toUpperCase();
-                  if (vEmp) setField("empresa", vEmp);
-                }}
-                disabled={saving}
-                error={errors.camion}
-              />
+  {/* fila 1 */}
+  <div className="ot-grid-2">
+    <VehicleAutocomplete
+      label="Patente"
+      placeholder="Escribe para buscar (ej: AB)"
+      value={f.camion}
+      empresa={f.empresa}
+      onChangeValue={(v) => setField("camion", v)}
+      onPickVehicle={(veh) => {
+        const vEmp = String(veh?.empresa || "").toUpperCase();
+        if (vEmp) setField("empresa", vEmp);
+      }}
+      disabled={saving}
+      error={errors.camion}
+    />
 
-              <WorkerAutocomplete
-                label="Operador"
-                placeholder="Haz click para ver la lista o escribe..."
-                value={f.conductor}
-                onChangeValue={(v) => {
-                  setField("conductor", v);
-                  setField("conductorId", "");
-                }}
-                onPickUser={(u) => {
-                  const name = `${u?.nombre || ""}${u?.apellido ? " " + u.apellido : ""}`.trim();
-                  const uEmp = String(u?.empresa || "").toUpperCase();
+    <WorkerAutocomplete
+      label="Operador"
+      placeholder="Haz click para ver la lista o escribe..."
+      value={f.conductor}
+      onChangeValue={(v) => {
+        setField("conductor", v);
+        setField("conductorId", "");
+      }}
+      onPickUser={(u) => {
+        const name = `${u?.nombre || ""}${u?.apellido ? " " + u.apellido : ""}`.trim();
+        const uEmp = String(u?.empresa || "").toUpperCase();
 
-                  if (!isSuperadmin && uEmp && uEmp !== String(f.empresa || "").toUpperCase()) {
-                    setField("empresa", uEmp);
-                    setField("rigger", "");
-                  }
+        if (!isSuperadmin && uEmp && uEmp !== String(f.empresa || "").toUpperCase()) {
+          setField("empresa", uEmp);
+          setField("rigger", "");
+        }
 
-                  setField("conductor", name);
-                  setField("conductorId", u?.id || "");
-                }}
-                disabled={saving}
-                error={errors.conductor}
-                workerType="OPERADOR"
-                empresa={f.empresa}
-                allowSuperadminBoth={isSuperadmin}
-              />
+        setField("conductor", name);
+        setField("conductorId", u?.id || "");
+      }}
+      disabled={saving}
+      error={errors.conductor}
+      workerType="OPERADOR"
+      empresa={f.empresa}
+      allowSuperadminBoth={isSuperadmin}
+    />
+  </div>
 
-              <WorkerAutocomplete
-                label="Rigger (opcional)"
-                placeholder="Escribe para buscar (ej: Aug)"
-                value={f.rigger}
-                onChangeValue={(v) => setField("rigger", v)}
-                onPickUser={(u) => {
-                  const name = `${u?.nombre || ""}${u?.apellido ? " " + u.apellido : ""}`.trim();
-                  const uEmp = String(u?.empresa || "").toUpperCase();
+  {/* fila 2 */}
+  <div className="ot-grid-2" style={{ marginTop: 12 }}>
+    <WorkerAutocomplete
+      label="Rigger (opcional)"
+      placeholder="Escribe para buscar (ej: Aug)"
+      value={f.rigger}
+      onChangeValue={(v) => setField("rigger", v)}
+      onPickUser={(u) => {
+        const name = `${u?.nombre || ""}${u?.apellido ? " " + u.apellido : ""}`.trim();
+        const uEmp = String(u?.empresa || "").toUpperCase();
 
-                  if (!isSuperadmin && uEmp && uEmp !== String(f.empresa || "").toUpperCase()) {
-                    setField("empresa", uEmp);
-                    setField("conductor", "");
-                    setField("conductorId", "");
-                  }
+        if (!isSuperadmin && uEmp && uEmp !== String(f.empresa || "").toUpperCase()) {
+          setField("empresa", uEmp);
+          setField("conductor", "");
+          setField("conductorId", "");
+        }
 
-                  setField("rigger", name || "");
-                }}
-                disabled={saving}
-                error={errors.rigger}
-                workerType="RIGGER"
-                empresa={f.empresa}
-                allowSuperadminBoth={isSuperadmin}
-              />
+        setField("rigger", name || "");
+      }}
+      disabled={saving}
+      error={errors.rigger}
+      workerType="RIGGER"
+      empresa={f.empresa}
+      allowSuperadminBoth={isSuperadmin}
+    />
 
-              <div className="ot-span" style={{ marginTop: 2 }}>
-                <MiniCalendarMulti
-                  valueISO={f.diasProgramados}
-                  onChangeISO={(arr) => setField("diasProgramados", arr)}
-                  disabled={saving}
-                  error={errors.diasProgramados}
-                />
-              </div>
-            </div>
-          </div>
+    <div />
+  </div>
+
+  {/* calendario abajo, igual que editar */}
+  <div style={{ marginTop: 14 }}>
+    <MiniCalendarMulti
+      valueISO={f.diasProgramados}
+      onChangeISO={(arr) => setField("diasProgramados", arr)}
+      disabled={saving}
+      error={errors.diasProgramados}
+    />
+  </div>
+</div>
 
           {/* ✅ FOTOS */}
           <div className="ot-box">
@@ -1844,12 +1853,11 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
             <div className="ot-box-title">Descripción</div>
 
             <LabeledTextarea
-              label="Detalle del servicio"
+              label="Detalle del servicio (opcional)"
               placeholder="Ej: ingresar por portón norte..."
               value={f.nota}
               onChange={(e) => setField("nota", e.target.value)}
               disabled={saving}
-              error={errors.nota}
             />
           </div>
         </form>

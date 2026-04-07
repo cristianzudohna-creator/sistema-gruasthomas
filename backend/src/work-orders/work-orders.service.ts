@@ -128,8 +128,19 @@ function cleanDiasProgramados(v: any): string[] {
 
 function fmtDateOnly(d: any) {
   if (!d) return "";
+
+  if (typeof d === "string") {
+    const s = d.trim();
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      const [yy, mm, dd] = s.split("-");
+      return `${dd}/${mm}/${yy}`;
+    }
+  }
+
   const x = new Date(d);
   if (Number.isNaN(x.getTime())) return "";
+
   const dd = String(x.getDate()).padStart(2, "0");
   const mm = String(x.getMonth() + 1).padStart(2, "0");
   const yy = String(x.getFullYear());
@@ -2215,7 +2226,22 @@ async exportPdfZipByFilters(
     };
 
     const otNum = `OT-${String(wo.id).slice(0, 6).toUpperCase()}`;
-    const fecha = fmtDateOnly(wo.createdAt);
+    const fechaServicio =
+  cleanStr((wr as any)?.fechaServicio) ||
+  cleanStr((wr as any)?.fecha) ||
+  (Array.isArray((wo as any)?.diasProgramados) && (wo as any).diasProgramados.length > 0
+    ? (wo as any).diasProgramados[0]
+    : null) ||
+  (wo as any).finishedAt ||
+  wo.createdAt;
+
+const fecha =
+  typeof fechaServicio === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fechaServicio)
+    ? (() => {
+        const [yy, mm, dd] = fechaServicio.split("-");
+        return `${dd}/${mm}/${yy}`;
+      })()
+    : fmtDateOnly(fechaServicio);
 
     const cliente = cleanStr(wo.cliente) || cleanStr((wo as any).lugar) || "—";
     const direccion = cleanStr((wo as any).direccion) || "—";

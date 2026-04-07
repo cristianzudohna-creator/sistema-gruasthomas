@@ -140,6 +140,43 @@
   line-height: 1.45;
 }
 
+/* ✅ FOTO PRO */
+.riw-photo-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.riw-photo-action-btn {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #f1f5f9;
+  color: #0f172a;
+  font-weight: 800;
+  font-size: 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+
+.riw-photo-action-btn:hover {
+  background: #e8eef5;
+}
+
+.riw-photo-action-btn:active {
+  transform: scale(0.995);
+}
+
+.riw-photo-action-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .riw-photo-card {
   margin-top: 10px;
   border: 1px solid rgba(15, 23, 42, 0.08);
@@ -213,7 +250,8 @@
 
   .riw-input,
   .riw-textarea,
-  .riw-file {
+  .riw-file,
+  .riw-photo-action-btn {
     font-size: 16px;
   }
 
