@@ -742,6 +742,9 @@ model WorkshopTask {
   trabajoRealizado String?
   observaciones    String?
 
+  // ✅ NUEVO: problema libre de repuesto (Adquisiciones)
+  problemaRepuesto String?
+
   startedAt DateTime?
   closedAt  DateTime?
 

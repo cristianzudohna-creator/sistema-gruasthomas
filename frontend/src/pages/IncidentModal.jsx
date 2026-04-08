@@ -8,16 +8,17 @@
 // ✅ NUEVO: buscador de vehículo por patente / marca-modelo
 // ✅ FOTO: estilo igual al modal de finalizar tarea
 // ✅ NUEVO: la lista de vehículos solo aparece cuando escriben
+// ✅ FIX AHORA:
+// - usa getToken real desde auth.js
+// - evita inconsistencias de token
+// - mantiene submit controlado por React
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
+import { getToken } from "../auth/auth";
 import "./Admin.css";
 
 const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
-
-function getToken() {
-  return localStorage.getItem("access_token") || localStorage.getItem("token") || "";
-}
 
 function getUserFromStorage() {
   try {
@@ -55,7 +56,6 @@ function fmtVehicle(vehicle) {
 }
 
 export default function IncidentModal({ open, onClose, onCreated }) {
-  const token = useMemo(() => getToken(), []);
   const currentUser = useMemo(() => getUserFromStorage(), []);
 
   const takePhotoInputRef = useRef(null);
@@ -98,15 +98,16 @@ export default function IncidentModal({ open, onClose, onCreated }) {
   }, [vehicles]);
 
   const selectedVehicle = useMemo(() => {
-    return availableVehicles.find((v) => String(v?.id) === String(form.vehicleId)) || null;
+    return (
+      availableVehicles.find((v) => String(v?.id) === String(form.vehicleId)) ||
+      null
+    );
   }, [availableVehicles, form.vehicleId]);
 
   const filteredVehicles = useMemo(() => {
     const q = String(vehicleQuery || "").trim().toLowerCase();
 
-    if (!q) {
-      return [];
-    }
+    if (!q) return [];
 
     return availableVehicles
       .filter((vehicle) => {
@@ -140,6 +141,8 @@ export default function IncidentModal({ open, onClose, onCreated }) {
     try {
       setLoadingVehicles(true);
       setError("");
+
+      const token = getToken();
 
       const res = await fetch(`${API_URL}/vehicles`, {
         headers: {
@@ -211,6 +214,7 @@ export default function IncidentModal({ open, onClose, onCreated }) {
 
   async function submit(e) {
     if (e?.preventDefault) e.preventDefault();
+    if (e?.stopPropagation) e.stopPropagation();
 
     const reportedById = currentUser?.id ? String(currentUser.id) : "";
     const empresa =
@@ -237,6 +241,8 @@ export default function IncidentModal({ open, onClose, onCreated }) {
     setError("");
 
     try {
+      const token = getToken();
+
       const payload = {
         patente: selectedVehicle?.patente || "",
         reportedById,
@@ -288,13 +294,14 @@ export default function IncidentModal({ open, onClose, onCreated }) {
   };
 
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="Reportar incidente"
-      width={640}
-    >
-      <form onSubmit={submit} style={{ display: "grid", gap: 16 }}>
+    <Modal open={open} onClose={onClose} title="Reportar incidente" width={640}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        style={{ display: "grid", gap: 16 }}
+      >
         {error ? (
           <div
             style={{
@@ -476,7 +483,8 @@ export default function IncidentModal({ open, onClose, onCreated }) {
                       lineHeight: 1.45,
                     }}
                   >
-                    En celular puedes tomar la foto directamente o elegir una imagen guardada.
+                    En celular puedes tomar la foto directamente o elegir una
+                    imagen guardada.
                   </div>
 
                   {photoPreview ? (
@@ -536,9 +544,10 @@ export default function IncidentModal({ open, onClose, onCreated }) {
           </button>
 
           <button
-            type="submit"
+            type="button"
             className="btn-primary"
             disabled={saving || loadingVehicles}
+            onClick={submit}
           >
             {saving ? "Creando..." : "Crear incidente"}
           </button>

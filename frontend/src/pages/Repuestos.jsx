@@ -7,6 +7,11 @@
 // ✅ Muestra texto limpio del repuesto pedido
 // ✅ Muestra foto del repuesto con botón "Ver imagen"
 // ✅ Compatible con local y producción
+// ✅ NUEVO:
+// - Permite reportar problema libre del repuesto
+// - Muestra el problema en la lista
+// - Permite editar / actualizar el problema
+// - Modal para escribir problema
 
 import { useEffect, useMemo, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -324,6 +329,31 @@ function RequestedPartContent({
   );
 }
 
+function ProblemBlock({ problem }) {
+  const text = String(problem || "").trim();
+  if (!text) return null;
+
+  return (
+    <div
+      style={{
+        marginTop: 10,
+        padding: "10px 12px",
+        borderRadius: 12,
+        background: "rgba(245, 158, 11, 0.10)",
+        border: "1px solid rgba(245, 158, 11, 0.25)",
+        color: "#92400e",
+        fontSize: 13,
+        lineHeight: 1.45,
+        fontWeight: 700,
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-word",
+      }}
+    >
+      ⚠ Problema reportado: {text}
+    </div>
+  );
+}
+
 export default function Repuestos() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -334,6 +364,10 @@ export default function Repuestos() {
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
   const [imageViewerSrc, setImageViewerSrc] = useState("");
   const [imageViewerTitle, setImageViewerTitle] = useState("");
+
+  const [problemModalOpen, setProblemModalOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [problemText, setProblemText] = useState("");
 
   const user = getUser();
 
@@ -361,6 +395,18 @@ export default function Repuestos() {
     setImageViewerOpen(false);
     setImageViewerSrc("");
     setImageViewerTitle("");
+  }
+
+  function openProblemModal(item) {
+    setSelectedItem(item || null);
+    setProblemText(String(item?.problemaRepuesto || "").trim());
+    setProblemModalOpen(true);
+  }
+
+  function closeProblemModal() {
+    setProblemModalOpen(false);
+    setSelectedItem(null);
+    setProblemText("");
   }
 
   async function loadData() {
@@ -447,10 +493,66 @@ export default function Repuestos() {
     }
   }
 
+  async function saveProblem() {
+    if (!selectedItem?.id) return;
+
+    try {
+      setSavingId(selectedItem.id);
+      setMessage("");
+      setError("");
+
+      const res = await fetch(`${API_URL}/workshop/tasks/${selectedItem.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({
+          problemaRepuesto: problemText,
+        }),
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(txt || `HTTP ${res.status}`);
+      }
+
+      setItems((prev) =>
+        prev.map((row) =>
+          String(row.id) === String(selectedItem.id)
+            ? {
+                ...row,
+                problemaRepuesto: problemText,
+                updatedAt: new Date().toISOString(),
+              }
+            : row
+        )
+      );
+
+      setMessage(
+        problemText.trim()
+          ? "Problema del repuesto guardado correctamente."
+          : "Problema del repuesto eliminado correctamente."
+      );
+
+      closeProblemModal();
+    } catch (err) {
+      console.error("Error guardando problema", err);
+      setError(err?.message || "No se pudo guardar el problema.");
+    } finally {
+      setSavingId("");
+    }
+  }
+
   useEffect(() => {
     if (!isSuperadmin && !isAdquisiciones) return;
     loadData();
   }, [isSuperadmin, isAdquisiciones]);
+
+  const selectedIsSaving = useMemo(
+    () => selectedItem && String(savingId) === String(selectedItem.id),
+    [savingId, selectedItem]
+  );
 
   if (!isSuperadmin && !isAdquisiciones) {
     return (
@@ -535,6 +637,7 @@ export default function Repuestos() {
                             compact
                             onOpenImage={openImageViewer}
                           />
+                          <ProblemBlock problem={item?.problemaRepuesto} />
                         </span>
                       </div>
 
@@ -587,11 +690,21 @@ export default function Repuestos() {
                         </button>
                       ) : null}
 
+                      <button
+                        type="button"
+                        className="btn-secondary rep-action-btn"
+                        disabled={isSaving}
+                        onClick={() => openProblemModal(item)}
+                      >
+                        {item?.problemaRepuesto
+                          ? "Editar problema"
+                          : "Reportar problema"}
+                      </button>
+
                       {!canMoveToEnCompra(status) &&
                       !canMoveToComprado(status) &&
-                      !canMoveToEntregado(status) ? (
-                        <span className="rep-no-actions">Sin acciones</span>
-                      ) : null}
+                      !canMoveToEntregado(status) &&
+                      !item?.problemaRepuesto ? null : null}
                     </div>
                   </article>
                 );
@@ -627,6 +740,7 @@ export default function Repuestos() {
                             item={item}
                             onOpenImage={openImageViewer}
                           />
+                          <ProblemBlock problem={item?.problemaRepuesto} />
                         </td>
                         <td>{formatDate(requestDate)}</td>
                         <td>{formatTime(requestDate)}</td>
@@ -670,9 +784,21 @@ export default function Repuestos() {
                               </button>
                             ) : null}
 
+                            <button
+                              type="button"
+                              className="btn-secondary rep-table-btn"
+                              disabled={isSaving}
+                              onClick={() => openProblemModal(item)}
+                            >
+                              {item?.problemaRepuesto
+                                ? "Editar problema"
+                                : "Reportar problema"}
+                            </button>
+
                             {!canMoveToEnCompra(status) &&
                             !canMoveToComprado(status) &&
-                            !canMoveToEntregado(status) ? (
+                            !canMoveToEntregado(status) &&
+                            !item?.problemaRepuesto ? (
                               <span className="rep-no-actions">Sin acciones</span>
                             ) : null}
                           </div>
@@ -711,6 +837,85 @@ export default function Repuestos() {
               objectFit: "contain",
             }}
           />
+        </div>
+      </Modal>
+
+      <Modal
+        open={problemModalOpen}
+        onClose={closeProblemModal}
+        title="Reportar problema del repuesto"
+      >
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+            paddingTop: 4,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 14,
+              color: "#475569",
+              lineHeight: 1.45,
+            }}
+          >
+            Aquí puedes dejar cualquier contratiempo de compra para que lo vea
+            SuperAdmin o Jefe de Taller.
+          </div>
+
+          <textarea
+            placeholder="Ej: No hay stock en Chile, falta presupuesto, proveedor informó demora de 10 días, etc."
+            value={problemText}
+            onChange={(e) => setProblemText(e.target.value)}
+            rows={5}
+            style={{
+              width: "100%",
+              borderRadius: 12,
+              border: "1px solid rgba(0,0,0,0.14)",
+              padding: 12,
+              resize: "none",
+              outline: "none",
+              fontSize: 14,
+              lineHeight: 1.5,
+            }}
+          />
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={closeProblemModal}
+              disabled={selectedIsSaving}
+            >
+              Cancelar
+            </button>
+
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setProblemText("")}
+              disabled={selectedIsSaving}
+            >
+              Limpiar
+            </button>
+
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={saveProblem}
+              disabled={selectedIsSaving}
+            >
+              {selectedIsSaving ? "Guardando..." : "Guardar"}
+            </button>
+          </div>
         </div>
       </Modal>
     </div>

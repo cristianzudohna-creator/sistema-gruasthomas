@@ -75,6 +75,12 @@ export class UpdateWorkshopTaskDto {
   @MaxLength(2000)
   observaciones?: string;
 
+  // ✅ NUEVO: problema libre del repuesto
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  problemaRepuesto?: string;
+
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })

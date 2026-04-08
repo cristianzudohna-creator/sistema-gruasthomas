@@ -22,6 +22,14 @@
 // - La foto se muestra en modal preview
 // - Incidentes ahora también muestran su foto si existe incident.fotoUrl
 // - NO usa localhost en producción
+// ✅ NUEVO AHORA:
+// - Si la tarea independiente tiene problemaRepuesto, muestra bloque "PROBLEMAS CON EL REPUESTO"
+// - Botón "Ver problema"
+// - Modal para ver el problema completo
+// - Si no hay problema, no se muestra nada
+// ✅ NUEVO TAMBIÉN:
+// - En INCIDENTES REPORTADOS toma el problema desde latestTask.problemaRepuesto
+// - Muestra "PROBLEMAS CON EL REPUESTO" + botón "Ver problema"
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -253,17 +261,14 @@ function parseObservationWithImage(text) {
 function getBackendOrigin() {
   const api = String(API_URL || "").trim();
 
-  // ✅ Producción con proxy nginx: /api
   if (api === "/api") {
     return window.location.origin;
   }
 
-  // ✅ API absoluta
   if (api.startsWith("http://") || api.startsWith("https://")) {
     return api.replace(/\/api\/?$/, "");
   }
 
-  // ✅ Otros casos relativos
   return window.location.origin;
 }
 
@@ -349,6 +354,9 @@ export default function Incidents() {
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState("");
 
+  const [problemModalOpen, setProblemModalOpen] = useState(false);
+  const [selectedProblemText, setSelectedProblemText] = useState("");
+
   const token = useMemo(() => getToken(), []);
   const user = useMemo(() => getUserFromStorage(), []);
 
@@ -400,6 +408,16 @@ export default function Incidents() {
   function closeImageModal() {
     setSelectedImage("");
     setImageModalOpen(false);
+  }
+
+  function openProblemModal(problemText) {
+    setSelectedProblemText(String(problemText || "").trim());
+    setProblemModalOpen(true);
+  }
+
+  function closeProblemModal() {
+    setSelectedProblemText("");
+    setProblemModalOpen(false);
   }
 
   function authHeaders(extra = {}) {
@@ -784,6 +802,9 @@ export default function Incidents() {
                     const latestTask = getLatestTask(incident);
                     const principal = getPrincipalAssignment(latestTask);
                     const helpers = getHelperAssignments(latestTask);
+                    const problemaRepuesto = String(
+                      latestTask?.problemaRepuesto || ""
+                    ).trim();
 
                     const isClosing = closingId === incident.id;
                     const isDeleting = deletingIncidentId === incident.id;
@@ -873,6 +894,21 @@ export default function Incidents() {
                               <span>Sin apoyos</span>
                             )}
                           </div>
+
+                          {problemaRepuesto ? (
+                            <div className="inc-meta__item">
+                              <b>PROBLEMAS CON EL REPUESTO</b>
+                              <div style={{ marginTop: 8 }}>
+                                <button
+                                  type="button"
+                                  onClick={() => openProblemModal(problemaRepuesto)}
+                                  className="btn-secondary inc-action-btn"
+                                >
+                                  Ver problema
+                                </button>
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
 
                         {(canShowOperationalActions || canShowDeleteIncident) && (
@@ -964,6 +1000,10 @@ export default function Incidents() {
                       parseObservationWithImage(observations);
                     const finalImageUrl = buildUploadUrl(imageUrl);
 
+                    const problemaRepuesto = String(
+                      task?.problemaRepuesto || ""
+                    ).trim();
+
                     return (
                       <article key={task.id} className="inc-card">
                         <div className="inc-card__top">
@@ -1036,6 +1076,21 @@ export default function Incidents() {
                                   </button>
                                 </div>
                               ) : null}
+                            </div>
+                          ) : null}
+
+                          {problemaRepuesto ? (
+                            <div className="inc-meta__item">
+                              <b>PROBLEMAS CON EL REPUESTO</b>
+                              <div style={{ marginTop: 8 }}>
+                                <button
+                                  type="button"
+                                  onClick={() => openProblemModal(problemaRepuesto)}
+                                  className="btn-secondary inc-action-btn"
+                                >
+                                  Ver problema
+                                </button>
+                              </div>
                             </div>
                           ) : null}
                         </div>
@@ -1142,6 +1197,53 @@ export default function Incidents() {
           ) : (
             <div style={{ opacity: 0.7 }}>No hay imagen disponible</div>
           )}
+        </div>
+      </Modal>
+
+      <Modal
+        open={problemModalOpen}
+        onClose={closeProblemModal}
+        title="Problema con el repuesto"
+        subtitle="Detalle reportado por Adquisiciones"
+        width={700}
+      >
+        <div
+          style={{
+            padding: "6px 2px 2px",
+          }}
+        >
+          <div
+            style={{
+              background: "rgba(245, 158, 11, 0.10)",
+              border: "1px solid rgba(245, 158, 11, 0.28)",
+              color: "#92400e",
+              borderRadius: 14,
+              padding: 16,
+              fontSize: 15,
+              lineHeight: 1.6,
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+              fontWeight: 600,
+            }}
+          >
+            {selectedProblemText || "Sin detalle disponible."}
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              marginTop: 14,
+            }}
+          >
+            <button
+              type="button"
+              onClick={closeProblemModal}
+              className="btn-primary"
+            >
+              Cerrar
+            </button>
+          </div>
         </div>
       </Modal>
     </div>

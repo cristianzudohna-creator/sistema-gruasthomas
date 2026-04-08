@@ -395,6 +395,9 @@ export default function WorkshopMyTasks() {
   const [imageViewerSrc, setImageViewerSrc] = useState("");
   const [imageViewerTitle, setImageViewerTitle] = useState("");
 
+  const [problemModalOpen, setProblemModalOpen] = useState(false);
+  const [problemModalText, setProblemModalText] = useState("");
+
   function goPortal() {
     navigate("/trabajador");
   }
@@ -421,6 +424,16 @@ export default function WorkshopMyTasks() {
     setImageViewerOpen(false);
     setImageViewerSrc("");
     setImageViewerTitle("");
+  }
+
+  function openProblemModal(problemText) {
+    setProblemModalText(String(problemText || "").trim());
+    setProblemModalOpen(true);
+  }
+
+  function closeProblemModal() {
+    setProblemModalOpen(false);
+    setProblemModalText("");
   }
 
   async function loadTasks() {
@@ -844,6 +857,9 @@ export default function WorkshopMyTasks() {
               const parsedObservation = parseObservation(
                 getTaskObservations(task)
               );
+              const problemaRepuesto = String(
+                task?.problemaRepuesto || ""
+              ).trim();
 
               const isHistoryTask =
                 taskStatus === "TERMINADA" || taskStatus === "CANCELADA";
@@ -994,6 +1010,23 @@ export default function WorkshopMyTasks() {
                     {getTaskObservations(task) ? (
                       <div className="wmt-field wmt-field--wide">
                         <div className="wmt-field__label">OBSERVACIONES</div>
+
+                        {problemaRepuesto ? (
+                          <div style={{ marginBottom: 12 }}>
+                            <div className="wmt-field__label">
+                              PROBLEMAS CON EL REPUESTO
+                            </div>
+
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={() => openProblemModal(problemaRepuesto)}
+                              style={{ marginTop: 8 }}
+                            >
+                              Ver problema
+                            </button>
+                          </div>
+                        ) : null}
 
                         {parsedObservation.text ? (
                           <div className="wmt-observation-box">
@@ -1464,6 +1497,46 @@ export default function WorkshopMyTasks() {
               objectFit: "contain",
             }}
           />
+        </div>
+      </Modal>
+
+      <Modal
+        open={problemModalOpen}
+        onClose={closeProblemModal}
+        title="Problema con el repuesto"
+        size="md"
+      >
+        <div className="wmt-modal-body">
+          <div className="wmt-modal-text">
+            Aquí puedes ver el detalle del problema informado por Adquisiciones.
+          </div>
+
+          <div
+            style={{
+              marginTop: 12,
+              padding: 14,
+              borderRadius: 14,
+              background: "#fff7ed",
+              border: "1px solid #fdba74",
+              color: "#7c2d12",
+              fontWeight: 600,
+              lineHeight: 1.6,
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {problemModalText || "Sin detalle disponible."}
+          </div>
+
+          <div className="modal-actions">
+            <button
+              type="button"
+              onClick={closeProblemModal}
+              className="btn-primary"
+            >
+              Cerrar
+            </button>
+          </div>
         </div>
       </Modal>
     </div>

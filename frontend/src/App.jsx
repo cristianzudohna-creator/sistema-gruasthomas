@@ -57,22 +57,42 @@ function NotificationListener() {
         unsubscribe = onMessage(messaging, (payload) => {
           console.log("🔥 Notificación recibida en foreground:", payload);
 
+          // ✅ FIX:
+          // Solo navegar si la notificación trae una URL/link real.
           const rawUrl =
             payload?.data?.url ||
             payload?.fcmOptions?.link ||
-            "/";
+            "";
 
-          const finalUrl = String(rawUrl || "").trim() || "/";
+          const finalUrl = String(rawUrl || "").trim();
+
+          // ✅ Si no viene ruta, no navegar
+          if (!finalUrl) {
+            console.log("ℹ️ La notificación no trae URL. No se navega.");
+            return;
+          }
 
           try {
-            const urlObj = finalUrl.startsWith("http://") || finalUrl.startsWith("https://")
-              ? new URL(finalUrl)
-              : new URL(finalUrl, window.location.origin);
+            const urlObj =
+              finalUrl.startsWith("http://") || finalUrl.startsWith("https://")
+                ? new URL(finalUrl)
+                : new URL(finalUrl, window.location.origin);
 
             const sameOrigin = urlObj.origin === window.location.origin;
-            const pathToNavigate = sameOrigin
-              ? `${urlObj.pathname}${urlObj.search}${urlObj.hash}`
-              : "/";
+
+            // ✅ Si no es mismo origen, no navegar por seguridad
+            if (!sameOrigin) {
+              console.log("ℹ️ URL externa detectada. No se navega:", finalUrl);
+              return;
+            }
+
+            const pathToNavigate = `${urlObj.pathname}${urlObj.search}${urlObj.hash}`.trim();
+
+            // ✅ Evitar navegar vacío o a rutas inválidas
+            if (!pathToNavigate) {
+              console.log("ℹ️ Ruta vacía. No se navega.");
+              return;
+            }
 
             console.log("➡️ Navegando a:", pathToNavigate);
             navigate(pathToNavigate);
@@ -330,7 +350,6 @@ export default function App() {
     </BrowserRouter>
   );
 }
-
 
 
 

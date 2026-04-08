@@ -1,4 +1,7 @@
-// ✅ Archivo: src/workshop/workshop.service.ts (COMPLETO + FOTO EN SOLICITUD DE REPUESTO + EXCEL GLOBAL + NOTIFICACIÓN A ADQUISICIONES)
+// ✅ Archivo: src/workshop/workshop.service.ts
+// ✅ COMPLETO + FOTO EN SOLICITUD DE REPUESTO + EXCEL GLOBAL + NOTIFICACIÓN A ADQUISICIONES
+// ✅ NUEVO AHORA:
+// - soporte para problemaRepuesto en WorkshopTask
 
 import {
   Injectable,
@@ -1926,6 +1929,10 @@ export class WorkshopService {
           diagnostico: dto.diagnostico,
           trabajoRealizado: dto.trabajoRealizado,
           observaciones: dto.observaciones,
+          problemaRepuesto:
+            (dto as any).problemaRepuesto !== undefined
+              ? String((dto as any).problemaRepuesto || '').trim() || null
+              : undefined,
           estimatedCost: dto.estimatedCost,
           actualCost: dto.actualCost,
         },
@@ -2081,29 +2088,41 @@ export class WorkshopService {
     }
 
     const nextStatus = dto.status
-      ? (dto.status as WorkshopTaskStatus)
-      : existingTask.status;
+  ? (dto.status as WorkshopTaskStatus)
+  : existingTask.status;
 
-    const normalizedObservaciones =
-      typeof dto.observaciones === 'string'
-        ? dto.observaciones.trim()
-        : undefined;
+const normalizedObservaciones =
+  typeof dto.observaciones === 'string'
+    ? dto.observaciones.trim()
+    : undefined;
 
-    const data: Prisma.WorkshopTaskUpdateInput = {
-      empresa: dto.empresa,
-      titulo: dto.titulo,
-      descripcion: dto.descripcion,
-      priority: dto.priority,
-      status: dto.status,
-      diagnostico: dto.diagnostico,
-      trabajoRealizado: dto.trabajoRealizado,
-      observaciones:
-        normalizedObservaciones !== undefined
-          ? normalizedObservaciones
-          : dto.observaciones,
-      estimatedCost: dto.estimatedCost,
-      actualCost: dto.actualCost,
-    };
+const problemaRepuestoRaw = (dto as any).problemaRepuesto;
+const problemaRepuesto =
+  problemaRepuestoRaw !== undefined
+    ? String(problemaRepuestoRaw || '').trim()
+    : undefined;
+
+const data: Prisma.WorkshopTaskUpdateInput = {
+  empresa: dto.empresa,
+  titulo: dto.titulo,
+  descripcion: dto.descripcion,
+  priority: dto.priority,
+  status: dto.status,
+  diagnostico: dto.diagnostico,
+  trabajoRealizado: dto.trabajoRealizado,
+  observaciones:
+    normalizedObservaciones !== undefined
+      ? normalizedObservaciones
+      : dto.observaciones,
+  estimatedCost: dto.estimatedCost,
+  actualCost: dto.actualCost,
+
+  // ✅ NUEVO
+  problemaRepuesto:
+    problemaRepuesto !== undefined
+      ? problemaRepuesto || null
+      : undefined,
+};
 
     if (nextStatus === WorkshopTaskStatus.EN_REPARACION) {
       data.startedAt = existingTask.startedAt ?? new Date();
@@ -2780,57 +2799,57 @@ export class WorkshopService {
   }
 
   private async notifyPartRequested(task: any) {
-  try {
-    const users = await this.prisma.user.findMany({
-      where: {
-        activo: true,
-        role: Role.TRABAJADOR,
-        workerType: WorkerType.ADQUISICIONES,
-      },
-      select: {
-        id: true,
-        nombre: true,
-        apellido: true,
-        empresa: true,
-      },
-    });
+    try {
+      const users = await this.prisma.user.findMany({
+        where: {
+          activo: true,
+          role: Role.TRABAJADOR,
+          workerType: WorkerType.ADQUISICIONES,
+        },
+        select: {
+          id: true,
+          nombre: true,
+          apellido: true,
+          empresa: true,
+        },
+      });
 
-    console.log(
-      '👀 Usuarios ADQUISICIONES encontrados:',
-      users.map((u) => ({
-        id: u.id,
-        nombre: `${u.nombre || ''} ${u.apellido || ''}`.trim(),
-        empresa: u.empresa,
-      })),
-    );
+      console.log(
+        '👀 Usuarios ADQUISICIONES encontrados:',
+        users.map((u) => ({
+          id: u.id,
+          nombre: `${u.nombre || ''} ${u.apellido || ''}`.trim(),
+          empresa: u.empresa,
+        })),
+      );
 
-    if (!users.length) {
-      console.log('⚠️ No hay usuarios de ADQUISICIONES para notificar');
-      return;
-    }
-
-    const codigo = String(task?.codigo || '').trim() || 'SIN CÓDIGO';
-    const titulo = String(task?.titulo || '').trim() || 'Tarea de taller';
-
-    for (const user of users) {
-      try {
-        await this.firebaseService.sendNotificationToUser(
-          user.id,
-          '🛠️ Repuesto solicitado',
-          `La tarea ${codigo} solicitó repuesto: ${titulo}`,
-          '/admin/repuestos',
-        );
-
-        console.log(`✅ Notificación de repuesto enviada a ${user.id} (${codigo})`);
-      } catch (error) {
-        console.error(
-          `❌ Error notificando repuesto a ${user.id} (${codigo}):`,
-          error,
-        );
+      if (!users.length) {
+        console.log('⚠️ No hay usuarios de ADQUISICIONES para notificar');
+        return;
       }
+
+      const codigo = String(task?.codigo || '').trim() || 'SIN CÓDIGO';
+      const titulo = String(task?.titulo || '').trim() || 'Tarea de taller';
+
+      for (const user of users) {
+        try {
+          await this.firebaseService.sendNotificationToUser(
+            user.id,
+            '🛠️ Repuesto solicitado',
+            `La tarea ${codigo} solicitó repuesto: ${titulo}`,
+            '/admin/repuestos',
+          );
+
+          console.log(`✅ Notificación de repuesto enviada a ${user.id} (${codigo})`);
+        } catch (error) {
+          console.error(
+            `❌ Error notificando repuesto a ${user.id} (${codigo}):`,
+            error,
+          );
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error general notifyPartRequested:', error);
     }
-  } catch (error) {
-    console.error('❌ Error general notifyPartRequested:', error);
   }
-}
 }

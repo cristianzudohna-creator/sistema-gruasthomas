@@ -353,6 +353,9 @@ export default function WorkshopTasksWorker() {
   const [imageViewerSrc, setImageViewerSrc] = useState("");
   const [imageViewerTitle, setImageViewerTitle] = useState("");
 
+  const [problemModalOpen, setProblemModalOpen] = useState(false);
+  const [problemModalText, setProblemModalText] = useState("");
+
   function goPortal() {
     navigate("/trabajador");
   }
@@ -379,6 +382,16 @@ export default function WorkshopTasksWorker() {
     setImageViewerOpen(false);
     setImageViewerSrc("");
     setImageViewerTitle("");
+  }
+
+  function openProblemModal(problemText) {
+    setProblemModalText(String(problemText || "").trim());
+    setProblemModalOpen(true);
+  }
+
+  function closeProblemModal() {
+    setProblemModalOpen(false);
+    setProblemModalText("");
   }
 
   async function loadTasks() {
@@ -779,6 +792,7 @@ export default function WorkshopTasksWorker() {
               const parsedObservation = parseObservation(
                 getTaskObservations(task)
               );
+              const problemaRepuesto = String(task?.problemaRepuesto || "").trim();
 
               const canStartRepair =
                 task?.id &&
@@ -934,6 +948,23 @@ export default function WorkshopTasksWorker() {
                     {task?.observaciones ? (
                       <div className="wtw-field wtw-field--wide">
                         <div className="wtw-field__label">OBSERVACIÓN</div>
+
+                        {problemaRepuesto ? (
+                          <div style={{ marginBottom: 12 }}>
+                            <div className="wtw-field__label">
+                              PROBLEMA CON EL REPUESTO
+                            </div>
+
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={() => openProblemModal(problemaRepuesto)}
+                              style={{ marginTop: 8 }}
+                            >
+                              Ver problema
+                            </button>
+                          </div>
+                        ) : null}
 
                         {parsedObservation.text ? (
                           <div className="wtw-observation-box">
@@ -1403,6 +1434,46 @@ export default function WorkshopTasksWorker() {
               objectFit: "contain",
             }}
           />
+        </div>
+      </Modal>
+
+      <Modal
+        open={problemModalOpen}
+        onClose={closeProblemModal}
+        title="Problema con el repuesto"
+        size="md"
+      >
+        <div className="wtw-modal-body">
+          <div className="wtw-modal-text">
+            Aquí puedes ver el detalle del problema informado por Adquisiciones.
+          </div>
+
+          <div
+            style={{
+              marginTop: 12,
+              padding: 14,
+              borderRadius: 14,
+              background: "#fff7ed",
+              border: "1px solid #fdba74",
+              color: "#7c2d12",
+              fontWeight: 600,
+              lineHeight: 1.6,
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {problemModalText || "Sin detalle disponible."}
+          </div>
+
+          <div className="modal-actions">
+            <button
+              type="button"
+              onClick={closeProblemModal}
+              className="btn-primary"
+            >
+              Cerrar
+            </button>
+          </div>
         </div>
       </Modal>
     </div>
