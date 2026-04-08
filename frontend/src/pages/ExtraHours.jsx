@@ -1,4 +1,4 @@
-// ✅ Archivo: src/pages/ExtraHours.jsx (COMPLETO)
+// ✅ Archivo: src/pages/ExtraHours.jsx (COMPLETO + FIX FECHA)
 // ✅ SUPERADMIN puede crear + revisar
 // ✅ JEFE_TALLER puede crear + revisar + firmar/rechazar
 // ✅ SUPERVISOR puede crear + revisar + firmar/rechazar
@@ -9,6 +9,7 @@
 // ✅ NUEVO: firma real con canvas (sin prompt)
 // ✅ NUEVO: botón eliminar reporte
 // ✅ NUEVO: eliminar con ConfirmModal bonito
+// ✅ FIX FECHA: no usar toLocaleDateString directo para YYYY-MM-DD
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -56,11 +57,25 @@ function norm(value) {
 
 function fmtDate(value) {
   if (!value) return "—";
-  try {
-    return new Date(value).toLocaleDateString("es-CL");
-  } catch {
-    return String(value);
+
+  const str = String(value).trim();
+
+  // ✅ Caso seguro: YYYY-MM-DD
+  const match = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) {
+    const [, y, m, d] = match;
+    return `${d}-${m}-${y}`;
   }
+
+  // ✅ fallback si viene fecha con hora
+  const parsed = new Date(str);
+  if (Number.isNaN(parsed.getTime())) return "—";
+
+  const day = String(parsed.getDate()).padStart(2, "0");
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const year = parsed.getFullYear();
+
+  return `${day}-${month}-${year}`;
 }
 
 function prettyWorkerType(value) {

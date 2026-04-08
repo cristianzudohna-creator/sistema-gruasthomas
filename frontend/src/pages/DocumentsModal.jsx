@@ -33,19 +33,16 @@ function ActionsMenu({ disabled, options }) {
     const width = 230;
     const gap = 10;
 
-    // LEFT: que nunca se vaya fuera
     let left = r.right - width;
     const maxLeft = window.innerWidth - width - 8;
     left = Math.max(8, Math.min(left, maxLeft));
 
-    // Alto del menú (real si ya está renderizado)
-    let menuH = 160; // fallback
+    let menuH = 160;
     if (useRealMenuHeight && menuRef.current) {
       const mr = menuRef.current.getBoundingClientRect();
       if (mr.height) menuH = mr.height;
     }
 
-    // espacio abajo / arriba
     const spaceBelow = window.innerHeight - r.bottom - 8;
     const spaceAbove = r.top - 8;
 
@@ -55,8 +52,6 @@ function ActionsMenu({ disabled, options }) {
     }
 
     let top = placement === "bottom" ? r.bottom + gap : r.top - gap - menuH;
-
-    // clamp vertical
     top = Math.max(8, Math.min(top, window.innerHeight - menuH - 8));
 
     setPos({ top, left, width, placement });
@@ -73,14 +68,12 @@ function ActionsMenu({ disabled, options }) {
     else close();
   }
 
-  // 1) Cuando abre, primero calcula con fallback
   useEffect(() => {
     if (!open) return;
     compute({ useRealMenuHeight: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // 2) Después de renderizar el menú, recalcula con altura REAL
   useEffect(() => {
     if (!open) return;
     const t = setTimeout(() => compute({ useRealMenuHeight: true }), 0);
@@ -88,7 +81,6 @@ function ActionsMenu({ disabled, options }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, options?.length]);
 
-  // Cierre al click afuera / escape, reposición en scroll/resize
   useEffect(() => {
     if (!open) return;
 
@@ -106,7 +98,6 @@ function ActionsMenu({ disabled, options }) {
     window.addEventListener("mousedown", onDown, true);
     window.addEventListener("keydown", onKey);
     window.addEventListener("resize", onReposition);
-    // importante: scroll en capture para capturar scroll dentro del modal también
     window.addEventListener("scroll", onReposition, true);
 
     return () => {
@@ -160,21 +151,6 @@ function ActionsMenu({ disabled, options }) {
           }}
         >
           {(options || []).map((op, idx) => {
-            if (op.type === "link") {
-              return (
-                <a
-                  key={idx}
-                  href={op.href}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={close}
-                  style={menuItemStyle(op)}
-                >
-                  {fixText(op.label)}
-                </a>
-              );
-            }
-
             return (
               <button
                 key={idx}
@@ -234,6 +210,7 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [docs, setDocs] = useState([]);
@@ -247,20 +224,16 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
   const [observacion, setObservacion] = useState("");
   const [file, setFile] = useState(null);
 
-  // ✅ CONFIRM GUARDAR
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
-  const [pendingSave, setPendingSave] = useState(null); // { kind: "create" | "update" }
+  const [pendingSave, setPendingSave] = useState(null);
 
-  // ✅ CONFIRM ELIMINAR
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [toDelete, setToDelete] = useState(null);
 
-  // ✅ RESPONSIVE: ancho modal según viewport (tablet/celular)
   const [modalWidth, setModalWidth] = useState(980);
   useEffect(() => {
     function compute() {
       const w = window.innerWidth || 1200;
-      // 980 desktop, 900 tablet, 96vw móvil
       if (w >= 1100) return setModalWidth(980);
       if (w >= 900) return setModalWidth(900);
       setModalWidth(Math.max(320, Math.floor(w * 0.96)));
@@ -292,7 +265,7 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
 
   function flashSuccess(msg) {
     setSuccess(msg);
-    setTimeout(() => setSuccess(""), 2000);
+    setTimeout(() => setSuccess(""), 2200);
   }
 
   function getAuthHeaders() {
@@ -309,11 +282,9 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
     return `${base}${path}`;
   }
 
-  // ✅ FIX: Aquí se corrige TODO lo que se muestra al usuario
   function displayTipo(doc) {
     if (!doc) return "-";
 
-    // OTRO => muestra el nombre escrito por el usuario
     if (String(doc.type || "").toUpperCase() === "OTRO") {
       return fixText((doc.nombre || "Otro").trim());
     }
@@ -324,10 +295,146 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
   }
 
   function displayVence(doc) {
-  // ✅ limpio en tabla
-  if (!doc?.fechaVencimiento) return "Sin vencimiento";
-  return String(doc.fechaVencimiento).slice(0, 10);
-}
+    if (!doc?.fechaVencimiento) return "Sin vencimiento";
+    return String(doc.fechaVencimiento).slice(0, 10);
+  }
+
+  function sanitizeForFilename(text) {
+    return String(text || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[\/\\:*?"<>|#%&{}$!'@+=`~^,.;()\[\]]+/g, " ")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .trim()
+      .replace(/^-+|-+$/g, "");
+  }
+
+  function getVehiclePatentForFilename() {
+    const patente = fixText(vehicle?.patente || "");
+    return sanitizeForFilename(patente).replace(/-/g, "").toUpperCase() || "SINPATENTE";
+  }
+
+  function getExtensionFromUrl(url) {
+    const clean = String(url || "").split("?")[0].split("#")[0];
+    const match = clean.match(/\.([a-zA-Z0-9]+)$/);
+    return match?.[1]?.toLowerCase?.() || "";
+  }
+
+  function getExtensionFromMimeType(contentType) {
+    const ct = String(contentType || "").toLowerCase();
+    if (ct.includes("pdf")) return "pdf";
+    if (ct.includes("word")) return "doc";
+    if (ct.includes("officedocument.wordprocessingml.document")) return "docx";
+    return "";
+  }
+
+  function getSafeDocumentFilename(doc, fallbackUrl = "", contentType = "") {
+    const tipo = sanitizeForFilename(displayTipo(doc) || "DOCUMENTO").toUpperCase();
+    const patente = getVehiclePatentForFilename();
+    let ext = getExtensionFromUrl(fallbackUrl) || getExtensionFromMimeType(contentType) || "pdf";
+    if (!["pdf", "doc", "docx"].includes(ext)) ext = "pdf";
+    return `${tipo}-${patente}.${ext}`;
+  }
+
+  async function fetchFileBlob(fileUrl) {
+    const res = await fetch(fileUrl, {
+      method: "GET",
+      headers: {
+        ...getAuthHeaders(),
+      },
+    });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(txt || `Error ${res.status} al descargar el archivo.`);
+    }
+
+    const blob = await res.blob();
+    const contentType = res.headers.get("content-type") || blob.type || "";
+    return { blob, contentType };
+  }
+
+  function triggerBrowserDownload(blob, fileName) {
+    const blobUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1500);
+  }
+
+  async function handleDownload(doc) {
+    try {
+      if (!doc?.archivoUrl) {
+        setError("Este documento no tiene archivo para descargar.");
+        return;
+      }
+
+      setError("");
+      setSuccess("");
+      setActionLoadingId(doc.id);
+
+      const fileUrl = toAbsoluteFileUrl(doc.archivoUrl);
+      const { blob, contentType } = await fetchFileBlob(fileUrl);
+      const fileName = getSafeDocumentFilename(doc, fileUrl, contentType);
+
+      triggerBrowserDownload(blob, fileName);
+      flashSuccess(`✅ Archivo descargado como ${fileName}`);
+    } catch (e) {
+      console.error("handleDownload error:", e);
+      setError(fixText(e?.message || "No se pudo descargar el archivo."));
+    } finally {
+      setActionLoadingId("");
+    }
+  }
+
+  async function handleShare(doc) {
+    try {
+      if (!doc?.archivoUrl) {
+        setError("Este documento no tiene archivo para compartir.");
+        return;
+      }
+
+      if (!navigator.share) {
+        setError("Tu dispositivo no soporta compartir archivos desde el navegador.");
+        return;
+      }
+
+      setError("");
+      setSuccess("");
+      setActionLoadingId(doc.id);
+
+      const fileUrl = toAbsoluteFileUrl(doc.archivoUrl);
+      const { blob, contentType } = await fetchFileBlob(fileUrl);
+      const fileName = getSafeDocumentFilename(doc, fileUrl, contentType);
+      const safeType = contentType || "application/octet-stream";
+
+      const sharedFile = new File([blob], fileName, { type: safeType });
+
+      if (navigator.canShare && !navigator.canShare({ files: [sharedFile] })) {
+        throw new Error("Este dispositivo no permite compartir este archivo desde el navegador.");
+      }
+
+      await navigator.share({
+        title: fileName,
+        text: `Documento del vehículo ${fixText(vehicle?.patente || "")}`,
+        files: [sharedFile],
+      });
+
+      flashSuccess(`✅ Archivo preparado para compartir: ${fileName}`);
+    } catch (e) {
+      if (e?.name === "AbortError") {
+        return;
+      }
+      console.error("handleShare error:", e);
+      setError(fixText(e?.message || "No se pudo compartir el archivo."));
+    } finally {
+      setActionLoadingId("");
+    }
+  }
 
   async function fetchDocs() {
     if (!vehicle?.id) return;
@@ -581,7 +688,6 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
     setMode("edit");
     setEditingDocId(doc.id);
 
-    // ✅ FIX: al cargar para editar también limpiamos texto
     setNombre(
       String(doc.type || "").toUpperCase() === "OTRO"
         ? fixText(doc.nombre || "")
@@ -616,7 +722,7 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
 
   const footer = !isFormOpen ? (
     <>
-      <button className="gt-btn" type="button" onClick={onClose} disabled={saving}>
+      <button className="gt-btn" type="button" onClick={onClose} disabled={saving || !!actionLoadingId}>
         Cerrar
       </button>
 
@@ -629,7 +735,7 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
           setMode("add");
           resetForm();
         }}
-        disabled={saving}
+        disabled={saving || !!actionLoadingId}
       >
         + Agregar documento
       </button>
@@ -652,12 +758,14 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
     return { tipo, vence, archivo };
   }, [toDelete]);
 
+  const canUseNativeShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
+
   return (
     <>
       <Modal open={open} onClose={onClose} title={title} subtitle={subtitle} width={modalWidth} footer={footer}>
         {!isFormOpen && (
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-            <button className="gt-btn ghost" type="button" onClick={fetchDocs} disabled={loading || saving}>
+            <button className="gt-btn ghost" type="button" onClick={fetchDocs} disabled={loading || saving || !!actionLoadingId}>
               {loading ? "Cargando..." : "Refrescar"}
             </button>
           </div>
@@ -805,6 +913,7 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
                     docs.map((d) => {
                       const fileUrl = d?.archivoUrl ? toAbsoluteFileUrl(d.archivoUrl) : "";
                       const vence = displayVence(d);
+                      const rowBusy = actionLoadingId === d.id;
 
                       return (
                         <tr key={d.id}>
@@ -813,8 +922,8 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
                           </td>
 
                           <td className="col-vence" title={vence}>
-  <span className="vence-text">{vence}</span>
-</td>
+                            <span className="vence-text">{vence}</span>
+                          </td>
 
                           <td className="col-estado">
                             <span className={pillClass(d.estado)} title={fixText(d.observacion || "")}>
@@ -824,11 +933,34 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
 
                           <td className="col-actions">
                             <ActionsMenu
-                              disabled={saving}
+                              disabled={saving || rowBusy}
                               options={[
                                 fileUrl
-                                  ? { type: "link", label: "Ver / Descargar", href: fileUrl }
+                                  ? {
+                                      label: rowBusy ? "Procesando..." : "Descargar",
+                                      onClick: () => handleDownload(d),
+                                      disabled: rowBusy,
+                                    }
                                   : { label: "Sin archivo", disabled: true },
+
+                                fileUrl && canUseNativeShare
+                                  ? {
+                                      label: rowBusy ? "Procesando..." : "Compartir",
+                                      onClick: () => handleShare(d),
+                                      disabled: rowBusy,
+                                    }
+                                  : {
+                                      label: "Compartir no disponible",
+                                      disabled: true,
+                                    },
+
+                                fileUrl
+                                  ? {
+                                      label: "Abrir archivo",
+                                      onClick: () => window.open(fileUrl, "_blank", "noopener,noreferrer"),
+                                    }
+                                  : { label: "Sin archivo", disabled: true },
+
                                 { label: "Editar", onClick: () => onEditClick(d) },
                                 { label: "Eliminar", danger: true, onClick: () => askDelete(d) },
                               ]}

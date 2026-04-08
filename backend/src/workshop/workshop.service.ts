@@ -2,6 +2,9 @@
 // ✅ COMPLETO + FOTO EN SOLICITUD DE REPUESTO + EXCEL GLOBAL + NOTIFICACIÓN A ADQUISICIONES
 // ✅ NUEVO AHORA:
 // - soporte para problemaRepuesto en WorkshopTask
+// ✅ FIX FECHA HORAS EXTRAS:
+// - evitar new Date("YYYY-MM-DD")
+// - parseo manual local seguro para no correr un día por timezone
 
 import {
   Injectable,
@@ -194,13 +197,26 @@ export class WorkshopService {
     return Math.round((diffMinutes / 60) * 100) / 100;
   }
 
+  // ✅ FIX: parse seguro YYYY-MM-DD en local para evitar corrimiento por timezone
   private parseExtraHourDate(fecha: any) {
     const raw = String(fecha || '').trim();
     if (!raw) {
       throw new BadRequestException('La fecha es obligatoria');
     }
 
-    const d = new Date(raw);
+    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) {
+      throw new BadRequestException(
+        'Fecha inválida. Formato requerido: YYYY-MM-DD',
+      );
+    }
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+
+    const d = new Date(year, month - 1, day, 12, 0, 0, 0);
+
     if (Number.isNaN(d.getTime())) {
       throw new BadRequestException('Fecha inválida');
     }
@@ -208,8 +224,18 @@ export class WorkshopService {
     return d;
   }
 
+  // ✅ FIX: mostrar fecha sin corrimiento cuando venga string YYYY-MM-DD
   private formatDateOnly(value: Date | string | null | undefined) {
     if (!value) return '—';
+
+    if (typeof value === 'string') {
+      const raw = value.trim();
+      const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (match) {
+        const [, yyyy, mm, dd] = match;
+        return `${dd}-${mm}-${yyyy}`;
+      }
+    }
 
     const d = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(d.getTime())) return '—';
@@ -845,19 +871,35 @@ export class WorkshopService {
     let fromDate: Date | undefined;
     let toDate: Date | undefined;
 
+    // ✅ FIX: parse manual YYYY-MM-DD
     if (from) {
-      const d = new Date(from);
-      if (!Number.isNaN(d.getTime())) {
-        d.setHours(0, 0, 0, 0);
-        fromDate = d;
+      const m = String(from).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (m) {
+        fromDate = new Date(
+          Number(m[1]),
+          Number(m[2]) - 1,
+          Number(m[3]),
+          0,
+          0,
+          0,
+          0,
+        );
       }
     }
 
+    // ✅ FIX: parse manual YYYY-MM-DD
     if (to) {
-      const d = new Date(to);
-      if (!Number.isNaN(d.getTime())) {
-        d.setHours(23, 59, 59, 999);
-        toDate = d;
+      const m = String(to).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (m) {
+        toDate = new Date(
+          Number(m[1]),
+          Number(m[2]) - 1,
+          Number(m[3]),
+          23,
+          59,
+          59,
+          999,
+        );
       }
     }
 
@@ -935,19 +977,35 @@ export class WorkshopService {
     let fromDate: Date | undefined;
     let toDate: Date | undefined;
 
+    // ✅ FIX: parse manual YYYY-MM-DD
     if (from) {
-      const d = new Date(from);
-      if (!Number.isNaN(d.getTime())) {
-        d.setHours(0, 0, 0, 0);
-        fromDate = d;
+      const m = String(from).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (m) {
+        fromDate = new Date(
+          Number(m[1]),
+          Number(m[2]) - 1,
+          Number(m[3]),
+          0,
+          0,
+          0,
+          0,
+        );
       }
     }
 
+    // ✅ FIX: parse manual YYYY-MM-DD
     if (to) {
-      const d = new Date(to);
-      if (!Number.isNaN(d.getTime())) {
-        d.setHours(23, 59, 59, 999);
-        toDate = d;
+      const m = String(to).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (m) {
+        toDate = new Date(
+          Number(m[1]),
+          Number(m[2]) - 1,
+          Number(m[3]),
+          23,
+          59,
+          59,
+          999,
+        );
       }
     }
 
@@ -1045,19 +1103,35 @@ export class WorkshopService {
     let fromDate: Date | undefined;
     let toDate: Date | undefined;
 
+    // ✅ FIX: parse manual YYYY-MM-DD
     if (from) {
-      const d = new Date(from);
-      if (!Number.isNaN(d.getTime())) {
-        d.setHours(0, 0, 0, 0);
-        fromDate = d;
+      const m = String(from).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (m) {
+        fromDate = new Date(
+          Number(m[1]),
+          Number(m[2]) - 1,
+          Number(m[3]),
+          0,
+          0,
+          0,
+          0,
+        );
       }
     }
 
+    // ✅ FIX: parse manual YYYY-MM-DD
     if (to) {
-      const d = new Date(to);
-      if (!Number.isNaN(d.getTime())) {
-        d.setHours(23, 59, 59, 999);
-        toDate = d;
+      const m = String(to).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (m) {
+        toDate = new Date(
+          Number(m[1]),
+          Number(m[2]) - 1,
+          Number(m[3]),
+          23,
+          59,
+          59,
+          999,
+        );
       }
     }
 
@@ -2088,41 +2162,41 @@ export class WorkshopService {
     }
 
     const nextStatus = dto.status
-  ? (dto.status as WorkshopTaskStatus)
-  : existingTask.status;
+      ? (dto.status as WorkshopTaskStatus)
+      : existingTask.status;
 
-const normalizedObservaciones =
-  typeof dto.observaciones === 'string'
-    ? dto.observaciones.trim()
-    : undefined;
+    const normalizedObservaciones =
+      typeof dto.observaciones === 'string'
+        ? dto.observaciones.trim()
+        : undefined;
 
-const problemaRepuestoRaw = (dto as any).problemaRepuesto;
-const problemaRepuesto =
-  problemaRepuestoRaw !== undefined
-    ? String(problemaRepuestoRaw || '').trim()
-    : undefined;
+    const problemaRepuestoRaw = (dto as any).problemaRepuesto;
+    const problemaRepuesto =
+      problemaRepuestoRaw !== undefined
+        ? String(problemaRepuestoRaw || '').trim()
+        : undefined;
 
-const data: Prisma.WorkshopTaskUpdateInput = {
-  empresa: dto.empresa,
-  titulo: dto.titulo,
-  descripcion: dto.descripcion,
-  priority: dto.priority,
-  status: dto.status,
-  diagnostico: dto.diagnostico,
-  trabajoRealizado: dto.trabajoRealizado,
-  observaciones:
-    normalizedObservaciones !== undefined
-      ? normalizedObservaciones
-      : dto.observaciones,
-  estimatedCost: dto.estimatedCost,
-  actualCost: dto.actualCost,
+    const data: Prisma.WorkshopTaskUpdateInput = {
+      empresa: dto.empresa,
+      titulo: dto.titulo,
+      descripcion: dto.descripcion,
+      priority: dto.priority,
+      status: dto.status,
+      diagnostico: dto.diagnostico,
+      trabajoRealizado: dto.trabajoRealizado,
+      observaciones:
+        normalizedObservaciones !== undefined
+          ? normalizedObservaciones
+          : dto.observaciones,
+      estimatedCost: dto.estimatedCost,
+      actualCost: dto.actualCost,
 
-  // ✅ NUEVO
-  problemaRepuesto:
-    problemaRepuesto !== undefined
-      ? problemaRepuesto || null
-      : undefined,
-};
+      // ✅ NUEVO
+      problemaRepuesto:
+        problemaRepuesto !== undefined
+          ? problemaRepuesto || null
+          : undefined,
+    };
 
     if (nextStatus === WorkshopTaskStatus.EN_REPARACION) {
       data.startedAt = existingTask.startedAt ?? new Date();

@@ -1,4 +1,4 @@
-// ✅ Archivo: src/pages/AdminExtraHours.jsx (COMPLETO + MISMO DISEÑO + FECHAS MANUALES + EXCEL GLOBAL)
+// ✅ Archivo: src/pages/AdminExtraHours.jsx (COMPLETO + FIX FECHA SIN TIMEZONE + FIX localeCompare)
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./Admin.css";
@@ -42,9 +42,24 @@ function parseDateSafe(value) {
 }
 
 function formatDate(date) {
-  const d = parseDateSafe(date);
-  if (!d) return "-";
-  return d.toLocaleDateString("es-CL");
+  if (!date) return "-";
+
+  const str = String(date).trim();
+
+  const match = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) {
+    const [, y, m, d] = match;
+    return `${d}-${m}-${y}`;
+  }
+
+  const parsed = new Date(str);
+  if (Number.isNaN(parsed.getTime())) return "-";
+
+  const day = String(parsed.getDate()).padStart(2, "0");
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const year = parsed.getFullYear();
+
+  return `${day}-${month}-${year}`;
 }
 
 function toDateOnly(value) {
@@ -124,6 +139,7 @@ export default function AdminExtraHours() {
 
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -160,6 +176,7 @@ export default function AdminExtraHours() {
       }
     }
 
+    // ✅ FIX REAL
     const allWorkers = Array.from(map.values()).sort((a, b) =>
       a.fullName.localeCompare(b.fullName, "es", { sensitivity: "base" })
     );
@@ -276,9 +293,7 @@ export default function AdminExtraHours() {
               ? errJson.message.join(", ")
               : errJson.message;
           }
-        } catch {
-          // nada
-        }
+        } catch {}
 
         throw new Error(message);
       }
@@ -343,9 +358,7 @@ export default function AdminExtraHours() {
               ? errJson.message.join(", ")
               : errJson.message;
           }
-        } catch {
-          // nada
-        }
+        } catch {}
 
         throw new Error(message);
       }

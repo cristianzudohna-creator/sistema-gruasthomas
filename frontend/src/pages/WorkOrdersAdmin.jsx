@@ -10,6 +10,8 @@
 // ✅ NUEVO: descarga ZIP de múltiples OT filtradas
 // ✅ NUEVO: descarga EXCEL de OTs aprobadas por rango de fecha
 // ✅ NUEVO: abre automáticamente detalle de OT si viene ?otId=... en la URL
+// ✅ NUEVO: aprobar OT sin comentario
+// ✅ NUEVO: rechazar OT sin motivo
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -718,14 +720,12 @@ export default function WorkOrdersAdmin() {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewMode, setReviewMode] = useState("approve");
   const [reviewRow, setReviewRow] = useState(null);
-  const [reviewText, setReviewText] = useState("");
   const [reviewSaving, setReviewSaving] = useState(false);
   const [reviewErr, setReviewErr] = useState("");
 
   function openApprove(row) {
     setReviewMode("approve");
     setReviewRow(row);
-    setReviewText(String(row?.approvalComment || "").trim());
     setReviewErr("");
     setReviewOpen(true);
   }
@@ -733,18 +733,12 @@ export default function WorkOrdersAdmin() {
   function openReject(row) {
     setReviewMode("reject");
     setReviewRow(row);
-    setReviewText(String(row?.rejectReason || "").trim());
     setReviewErr("");
     setReviewOpen(true);
   }
 
   async function confirmReview() {
     if (!reviewRow?.id) return;
-
-    if (reviewMode === "reject" && !reviewText.trim()) {
-      setReviewErr("Escribe un motivo de rechazo.");
-      return;
-    }
 
     const targetId = reviewRow.id;
 
@@ -753,18 +747,13 @@ export default function WorkOrdersAdmin() {
       setReviewErr("");
 
       if (reviewMode === "approve") {
-        await apiPatch(`/work-orders/${targetId}/approve`, {
-          comentario: reviewText.trim() || undefined,
-        });
+        await apiPatch(`/work-orders/${targetId}/approve`, {});
       } else {
-        await apiPatch(`/work-orders/${targetId}/reject`, {
-          motivo: reviewText.trim(),
-        });
+        await apiPatch(`/work-orders/${targetId}/reject`, {});
       }
 
       setReviewOpen(false);
       setReviewRow(null);
-      setReviewText("");
 
       await loadAll();
       await refreshDetailIfOpen(targetId);
@@ -806,7 +795,6 @@ export default function WorkOrdersAdmin() {
     if (targetId) await refreshDetailIfOpen(targetId);
   }
 
-  // ✅ NUEVO: abrir OT automáticamente si viene ?otId=...
   useEffect(() => {
     const otId = String(searchParams.get("otId") || "").trim();
 
@@ -1389,8 +1377,8 @@ export default function WorkOrdersAdmin() {
         }
         subtitle={
           reviewMode === "approve"
-            ? "Confirma el visto bueno (y opcionalmente deja un comentario)."
-            : "Rechazar deja la OT como RECHAZADA para que el trabajador la corrija y la re-envíe."
+            ? "Confirma el visto bueno."
+            : "Confirma el rechazo de esta OT."
         }
         width={720}
         footer={
@@ -1438,23 +1426,6 @@ export default function WorkOrdersAdmin() {
             <Badge>Camión: {reviewRow?.camion || "—"}</Badge>
             <Badge>Conductor: {reviewRow?.conductor || "—"}</Badge>
           </div>
-        </div>
-
-        <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.75, marginBottom: 6 }}>
-          {reviewMode === "approve" ? "Comentario (opcional)" : "Motivo (obligatorio)"}
-        </div>
-
-        <textarea
-          className="gt-input"
-          value={reviewText}
-          onChange={(e) => setReviewText(e.target.value)}
-          placeholder={reviewMode === "approve" ? "Ej: OK, todo correcto." : "Ej: Falta hora llegada / faltan movimientos."}
-          style={{ height: 120, resize: "vertical" }}
-          disabled={reviewSaving}
-        />
-
-        <div style={{ marginTop: 10, opacity: 0.7, fontWeight: 900, fontSize: 12 }}>
-          Esto quedará guardado en la OT (comentario o motivo) y el trabajador lo verá en su detalle.
         </div>
       </Modal>
 

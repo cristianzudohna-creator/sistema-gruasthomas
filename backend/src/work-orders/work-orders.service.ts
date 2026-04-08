@@ -66,6 +66,10 @@
 // ✅ NUEVO (NOTIFICACIONES):
 // - Al completar la OT se notifica a usuarios SUPERADMIN y ADMINISTRADORA
 // - Se mantiene la notificación al operador al crear la OT
+//
+// ✅ FIX EXCEL FECHA:
+// - FECHA usa diasProgramados[0] si existe
+// - si no existe, fallback a createdAt
 
 import {
   BadRequestException,
@@ -639,11 +643,26 @@ export class WorkOrdersService {
   }
 
   private parseExcelDateOnly(value: any): Date | null {
-    if (!value) return null;
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return null;
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+  if (!value) return null;
+
+  if (typeof value === "string") {
+    const s = value.trim();
+
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) {
+      const year = Number(m[1]);
+      const month = Number(m[2]);
+      const day = Number(m[3]);
+
+      return new Date(year, month - 1, day, 0, 0, 0, 0);
+    }
   }
+
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+}
 
   private parseColacionHours(value: any): number {
     const raw = cleanStr(value);
@@ -750,7 +769,14 @@ export class WorkOrdersService {
     const wr = safeParseWorkerReport(item.workerReport);
     const detalleHoras = wr?.detalleHoras || {};
 
-    const fecha = this.parseExcelDateOnly(item.createdAt);
+    // ✅ FIX: usar diasProgramados[0] si existe; si no, usar createdAt
+    const fechaProgramada =
+      Array.isArray(item.diasProgramados) && item.diasProgramados.length > 0
+        ? item.diasProgramados[0]
+        : null;
+
+    const fecha = this.parseExcelDateOnly(fechaProgramada || item.createdAt);
+
     const estado = "Firmada";
     const ot = `OT-${String(item.id).slice(0, 6).toUpperCase()}`;
     const empresa = cleanStr(item.cliente) || "";
@@ -839,221 +865,102 @@ export class WorkOrdersService {
   }
 
   private async notifyOtCompletedAdmins(workOrder: any, completedByUserId?: string) {
-  try {
-    // 🔥 1. SUPERADMIN (SIN FILTRO EMPRESA)
-    const superAdmins = await this.prisma.user.findMany({
-      where: {
-        activo: true,
-        role: "SUPERADMIN",
-      },
-      select: {
-        id: true,
-        role: true,
-        nombre: true,
-        apellido: true,
-        email: true,
-      },
-    });
-
-    // 🔥 2. ADMINISTRADORA (CON FILTRO EMPRESA)
-    const administradoras = await this.prisma.user.findMany({
-      where: {
-        activo: true,
-        role: "ADMINISTRADORA",
-        ...(workOrder?.empresa ? { empresa: workOrder.empresa } : {}),
-      },
-      select: {
-        id: true,
-        role: true,
-        nombre: true,
-        apellido: true,
-        email: true,
-      },
-    });
-
-    // 🔥 UNIR Y EVITAR DUPLICADOS
-    const destinatariosMap = new Map<string, any>();
-
-    [...superAdmins, ...administradoras].forEach((u) => {
-      destinatariosMap.set(u.id, u);
-    });
-
-    const destinatarios = Array.from(destinatariosMap.values());
-
-    if (!destinatarios.length) {
-      console.log(
-        `⚠️ No se encontraron usuarios para notificar OT completada ${workOrder?.id}`
-      );
-      return;
-    }
-
-    const codigoOt = `OT-${String(workOrder?.id || "")
-      .slice(0, 6)
-      .toUpperCase()}`;
-
-    let nombreOperador = "el operador";
-
-    if (completedByUserId) {
-      const operador = await this.prisma.user.findUnique({
-        where: { id: completedByUserId },
-        select: { nombre: true, apellido: true, email: true },
+    try {
+      const superAdmins = await this.prisma.user.findMany({
+        where: {
+          activo: true,
+          role: "SUPERADMIN",
+        },
+        select: {
+          id: true,
+          role: true,
+          nombre: true,
+          apellido: true,
+          email: true,
+        },
       });
 
-      nombreOperador =
-        [operador?.nombre, operador?.apellido].filter(Boolean).join(" ").trim() ||
-        cleanStr(operador?.email) ||
-        "el operador";
-    }
+      const administradoras = await this.prisma.user.findMany({
+        where: {
+          activo: true,
+          role: "ADMINISTRADORA",
+          ...(workOrder?.empresa ? { empresa: workOrder.empresa } : {}),
+        },
+        select: {
+          id: true,
+          role: true,
+          nombre: true,
+          apellido: true,
+          email: true,
+        },
+      });
 
-    const body = `La OT ${codigoOt} fue completada por ${nombreOperador}.`;
+      const destinatariosMap = new Map<string, any>();
 
-    for (const user of destinatarios) {
-      try {
-        await this.firebaseService.sendNotificationToUser(
-          user.id,
-          "OT completada",
-          body,
-          "/admin/ordenes-trabajo"
-        );
+      [...superAdmins, ...administradoras].forEach((u) => {
+        destinatariosMap.set(u.id, u);
+      });
 
+      const destinatarios = Array.from(destinatariosMap.values());
+
+      if (!destinatarios.length) {
         console.log(
-          `✅ Notificación OT completada enviada a ${user.role}: ${user.id}`
+          `⚠️ No se encontraron usuarios para notificar OT completada ${workOrder?.id}`
         );
-      } catch (error) {
-        console.error(
-          `❌ Error enviando notificación OT completada a ${user.role} (${user.id}):`,
-          error
-        );
+        return;
       }
+
+      const codigoOt = `OT-${String(workOrder?.id || "")
+        .slice(0, 6)
+        .toUpperCase()}`;
+
+      let nombreOperador = "el operador";
+
+      if (completedByUserId) {
+        const operador = await this.prisma.user.findUnique({
+          where: { id: completedByUserId },
+          select: { nombre: true, apellido: true, email: true },
+        });
+
+        nombreOperador =
+          [operador?.nombre, operador?.apellido].filter(Boolean).join(" ").trim() ||
+          cleanStr(operador?.email) ||
+          "el operador";
+      }
+
+      const body = `La OT ${codigoOt} fue completada por ${nombreOperador}.`;
+
+      for (const user of destinatarios) {
+        try {
+          await this.firebaseService.sendNotificationToUser(
+            user.id,
+            "OT completada",
+            body,
+            "/admin/ordenes-trabajo"
+          );
+
+          console.log(
+            `✅ Notificación OT completada enviada a ${user.role}: ${user.id}`
+          );
+        } catch (error) {
+          console.error(
+            `❌ Error enviando notificación OT completada a ${user.role} (${user.id}):`,
+            error
+          );
+        }
+      }
+    } catch (error) {
+      console.error("❌ Error general notificando OT completada a admins:", error);
     }
-  } catch (error) {
-    console.error("❌ Error general notificando OT completada a admins:", error);
-  }
-}
-
-async exportPdfZipByFilters(
-  filters: {
-    from?: string;
-    to?: string;
-    operatorId?: string;
-    operatorName?: string;
-    riggerName?: string;
-  },
-  actor?: any
-): Promise<{ buffer: Buffer; filename: string; total: number }> {
-  if (!this.isOtAdminRole(actor)) {
-    throw new ForbiddenException("No autorizado.");
   }
 
-  const from = cleanStr(filters?.from);
-  const to = cleanStr(filters?.to);
-  const operatorId = cleanStr(filters?.operatorId);
-  const operatorName = cleanStr(filters?.operatorName);
-  const riggerName = cleanStr(filters?.riggerName);
-
-  const createdAt: any = {};
-  const gte = this.parseStartDate(from);
-  const lt = this.parseEndExclusiveDate(to);
-
-  if (from && !gte) {
-    throw new BadRequestException("Fecha desde inválida. Usa YYYY-MM-DD.");
-  }
-  if (to && !lt) {
-    throw new BadRequestException("Fecha hasta inválida. Usa YYYY-MM-DD.");
-  }
-
-  if (gte) createdAt.gte = gte;
-  if (lt) createdAt.lt = lt;
-
-  if (gte && lt && gte >= lt) {
-    throw new BadRequestException("El rango de fechas es inválido.");
-  }
-
-  const whereEmpresa = await this.empresaWhereByActor(actor);
-
-  const andWhere: any[] = [
-    whereEmpresa,
-    this.whereActivosOnly(),
-    { status: WorkOrderStatus.APROBADA },
-  ];
-
-  if (Object.keys(createdAt).length > 0) {
-    andWhere.push({ createdAt });
-  }
-
-  if (operatorId) {
-    andWhere.push({
-      assignedToId: operatorId,
-    });
-  }
-
-  if (operatorName) {
-    andWhere.push({
-      OR: [
-        { operador: { contains: operatorName, mode: "insensitive" } },
-        { conductor: { contains: operatorName, mode: "insensitive" } },
-      ],
-    });
-  }
-
-  if (riggerName) {
-    andWhere.push({
-      rigger: { contains: riggerName, mode: "insensitive" },
-    });
-  }
-
-  const items = await this.prisma.workOrder.findMany({
-    where: {
-      AND: andWhere,
-    },
-    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    select: {
-      id: true,
-      createdAt: true,
-      status: true,
-    },
-  });
-
-  if (!items.length) {
-    throw new NotFoundException("No se encontraron OTs APROBADAS con esos filtros.");
-  }
-
-  const zipName = await this.buildZipFileName({
-    from,
-    to,
-    operatorId,
-    operatorName,
-    riggerName,
-  });
-
-  const archive = archiver("zip", { zlib: { level: 9 } });
-  const zipPromise = zipBufferFromArchiver(archive);
-
-  let index = 1;
-  for (const item of items) {
-    const { buffer } = await this.generatePdf(item.id, actor);
-    const seq = String(index).padStart(3, "0");
-    const datePart = fmtIsoDateOnly(item.createdAt) || "SIN_FECHA";
-    const otNum = `OT-${String(item.id).slice(0, 6).toUpperCase()}`;
-    const entryName = `${seq}_${safeFilePart(otNum)}_${datePart}.pdf`;
-    archive.append(buffer, { name: entryName });
-    index += 1;
-  }
-
-  await archive.finalize();
-  const buffer = await zipPromise;
-
-  return {
-    buffer,
-    filename: zipName,
-    total: items.length,
-  };
-}
-
-  async exportApprovedExcel(
+  async exportPdfZipByFilters(
     filters: {
       from?: string;
       to?: string;
+      operatorId?: string;
+      operatorName?: string;
+      riggerName?: string;
     },
     actor?: any
   ): Promise<{ buffer: Buffer; filename: string; total: number }> {
@@ -1063,6 +970,9 @@ async exportPdfZipByFilters(
 
     const from = cleanStr(filters?.from);
     const to = cleanStr(filters?.to);
+    const operatorId = cleanStr(filters?.operatorId);
+    const operatorName = cleanStr(filters?.operatorName);
+    const riggerName = cleanStr(filters?.riggerName);
 
     const createdAt: any = {};
     const gte = this.parseStartDate(from);
@@ -1094,6 +1004,27 @@ async exportPdfZipByFilters(
       andWhere.push({ createdAt });
     }
 
+    if (operatorId) {
+      andWhere.push({
+        assignedToId: operatorId,
+      });
+    }
+
+    if (operatorName) {
+      andWhere.push({
+        OR: [
+          { operador: { contains: operatorName, mode: "insensitive" } },
+          { conductor: { contains: operatorName, mode: "insensitive" } },
+        ],
+      });
+    }
+
+    if (riggerName) {
+      andWhere.push({
+        rigger: { contains: riggerName, mode: "insensitive" },
+      });
+    }
+
     const items = await this.prisma.workOrder.findMany({
       where: {
         AND: andWhere,
@@ -1103,13 +1034,6 @@ async exportPdfZipByFilters(
         id: true,
         createdAt: true,
         status: true,
-        cliente: true,
-        direccionFaena: true,
-        lugar: true,
-        operador: true,
-        conductor: true,
-        rigger: true,
-        workerReport: true,
       },
     });
 
@@ -1117,75 +1041,180 @@ async exportPdfZipByFilters(
       throw new NotFoundException("No se encontraron OTs APROBADAS con esos filtros.");
     }
 
-    const workbook = new ExcelJS.Workbook();
-    workbook.creator = "Sistema Grúas Thomas";
-    workbook.lastModifiedBy = "Sistema Grúas Thomas";
-    workbook.created = new Date();
-    workbook.modified = new Date();
+    const zipName = await this.buildZipFileName({
+      from,
+      to,
+      operatorId,
+      operatorName,
+      riggerName,
+    });
 
-    const operadoresSheet = this.addExcelTemplateSheet(
-      workbook,
-      "OPERADORES",
-      "OPERADOR"
-    );
-    const riggersSheet = this.addExcelTemplateSheet(
-      workbook,
-      "RIGGER",
-      "RIGGER"
-    );
+    const archive = archiver("zip", { zlib: { level: 9 } });
+    const zipPromise = zipBufferFromArchiver(archive);
 
-    let operadoresCount = 0;
-    let riggersCount = 0;
-
+    let index = 1;
     for (const item of items) {
-      const operador =
-        cleanStr(item.operador) || cleanStr(item.conductor) || "";
-      const rigger = cleanStr(item.rigger) || "";
-
-      if (operador) {
-        this.addExcelDataRow({
-          sheet: operadoresSheet,
-          item,
-          personName: operador,
-          personType: "OPERADOR",
-        });
-        operadoresCount += 1;
-      }
-
-      if (rigger) {
-        this.addExcelDataRow({
-          sheet: riggersSheet,
-          item,
-          personName: rigger,
-          personType: "RIGGER",
-        });
-        riggersCount += 1;
-      }
+      const { buffer } = await this.generatePdf(item.id, actor);
+      const seq = String(index).padStart(3, "0");
+      const datePart = fmtIsoDateOnly(item.createdAt) || "SIN_FECHA";
+      const otNum = `OT-${String(item.id).slice(0, 6).toUpperCase()}`;
+      const entryName = `${seq}_${safeFilePart(otNum)}_${datePart}.pdf`;
+      archive.append(buffer, { name: entryName });
+      index += 1;
     }
 
-    if (operadoresCount === 0) {
-      const row = operadoresSheet.addRow({
-        observaciones: "Sin registros para el período seleccionado",
-      });
-      this.styleExcelBodyRow(row);
-    }
-
-    if (riggersCount === 0) {
-      const row = riggersSheet.addRow({
-        observaciones: "Sin registros para el período seleccionado",
-      });
-      this.styleExcelBodyRow(row);
-    }
-
-    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
-    const filename = this.buildExcelFileName({ from, to });
+    await archive.finalize();
+    const buffer = await zipPromise;
 
     return {
       buffer,
-      filename,
+      filename: zipName,
       total: items.length,
     };
   }
+
+  async exportApprovedExcel(
+  filters: {
+    from?: string;
+    to?: string;
+  },
+  actor?: any
+): Promise<{ buffer: Buffer; filename: string; total: number }> {
+  if (!this.isOtAdminRole(actor)) {
+    throw new ForbiddenException("No autorizado.");
+  }
+
+  const from = cleanStr(filters?.from);
+  const to = cleanStr(filters?.to);
+
+  // ✅ ahora validamos como fechas ISO "YYYY-MM-DD"
+  const fromIso = from ? this.parseISODateOnly(from) : null;
+  const toIso = to ? this.parseISODateOnly(to) : null;
+
+  if (from && !fromIso) {
+    throw new BadRequestException("Fecha desde inválida. Usa YYYY-MM-DD.");
+  }
+  if (to && !toIso) {
+    throw new BadRequestException("Fecha hasta inválida. Usa YYYY-MM-DD.");
+  }
+
+  // ✅ si viene solo una fecha, usamos esa misma como inicio/fin
+  const rangeFrom = fromIso || toIso;
+  const rangeTo = toIso || fromIso;
+
+  if (rangeFrom && rangeTo && rangeFrom > rangeTo) {
+    throw new BadRequestException("El rango de fechas es inválido.");
+  }
+
+  const whereEmpresa = await this.empresaWhereByActor(actor);
+
+  const andWhere: any[] = [
+    whereEmpresa,
+    this.whereActivosOnly(),
+    { status: WorkOrderStatus.APROBADA },
+  ];
+
+  // ✅ filtro por diasProgramados en vez de createdAt
+  if (rangeFrom && rangeTo) {
+    const days = this.listIsoDaysBetween(rangeFrom, rangeTo);
+    andWhere.push({
+      diasProgramados: { hasSome: days },
+    });
+  }
+
+  const items = await this.prisma.workOrder.findMany({
+    where: {
+      AND: andWhere,
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: {
+      id: true,
+      createdAt: true,
+      status: true,
+      cliente: true,
+      direccionFaena: true,
+      lugar: true,
+      operador: true,
+      conductor: true,
+      rigger: true,
+      workerReport: true,
+      diasProgramados: true,
+    },
+  });
+
+  if (!items.length) {
+    throw new NotFoundException("No se encontraron OTs APROBADAS con esos filtros.");
+  }
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Sistema Grúas Thomas";
+  workbook.lastModifiedBy = "Sistema Grúas Thomas";
+  workbook.created = new Date();
+  workbook.modified = new Date();
+
+  const operadoresSheet = this.addExcelTemplateSheet(
+    workbook,
+    "OPERADORES",
+    "OPERADOR"
+  );
+  const riggersSheet = this.addExcelTemplateSheet(
+    workbook,
+    "RIGGER",
+    "RIGGER"
+  );
+
+  let operadoresCount = 0;
+  let riggersCount = 0;
+
+  for (const item of items) {
+    const operador =
+      cleanStr(item.operador) || cleanStr(item.conductor) || "";
+    const rigger = cleanStr(item.rigger) || "";
+
+    if (operador) {
+      this.addExcelDataRow({
+        sheet: operadoresSheet,
+        item,
+        personName: operador,
+        personType: "OPERADOR",
+      });
+      operadoresCount += 1;
+    }
+
+    if (rigger) {
+      this.addExcelDataRow({
+        sheet: riggersSheet,
+        item,
+        personName: rigger,
+        personType: "RIGGER",
+      });
+      riggersCount += 1;
+    }
+  }
+
+  if (operadoresCount === 0) {
+    const row = operadoresSheet.addRow({
+      observaciones: "Sin registros para el período seleccionado",
+    });
+    this.styleExcelBodyRow(row);
+  }
+
+  if (riggersCount === 0) {
+    const row = riggersSheet.addRow({
+      observaciones: "Sin registros para el período seleccionado",
+    });
+    this.styleExcelBodyRow(row);
+  }
+
+  const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+  const filename = this.buildExcelFileName({ from, to });
+
+  return {
+    buffer,
+    filename,
+    total: items.length,
+  };
+}
 
   async searchClients(search: string, actor?: any) {
     const q = cleanStr(search);
@@ -1418,7 +1447,6 @@ async exportPdfZipByFilters(
       },
     });
 
-    // 🔔 NOTIFICACIÓN SOLO AL OPERADOR ASIGNADO
     if (created.assignedToId) {
       try {
         await this.firebaseService.sendNotificationToUser(
@@ -1895,7 +1923,6 @@ async exportPdfZipByFilters(
       },
     });
 
-    // 🔔 NOTIFICAR A SUPERADMIN + ADMINISTRADORA
     await this.notifyOtCompletedAdmins(after, userId);
 
     return after;
@@ -2019,7 +2046,6 @@ async exportPdfZipByFilters(
     }
 
     const motivo = cleanStr(reason);
-    if (!motivo) throw new BadRequestException("Motivo de rechazo es obligatorio.");
 
     const before = this.snapshotWorkOrder(exists);
 
@@ -2070,11 +2096,13 @@ async exportPdfZipByFilters(
   private listIsoDaysBetween(fromISO: string, toISO: string, maxDays = 370): string[] {
     const out: string[] = [];
     let cur = fromISO;
+
     for (let i = 0; i < maxDays; i++) {
       out.push(cur);
       if (cur === toISO) break;
       cur = this.addDaysISO(cur, 1);
     }
+
     return out;
   }
 
@@ -2227,21 +2255,21 @@ async exportPdfZipByFilters(
 
     const otNum = `OT-${String(wo.id).slice(0, 6).toUpperCase()}`;
     const fechaServicio =
-  cleanStr((wr as any)?.fechaServicio) ||
-  cleanStr((wr as any)?.fecha) ||
-  (Array.isArray((wo as any)?.diasProgramados) && (wo as any).diasProgramados.length > 0
-    ? (wo as any).diasProgramados[0]
-    : null) ||
-  (wo as any).finishedAt ||
-  wo.createdAt;
+      cleanStr((wr as any)?.fechaServicio) ||
+      cleanStr((wr as any)?.fecha) ||
+      (Array.isArray((wo as any)?.diasProgramados) && (wo as any).diasProgramados.length > 0
+        ? (wo as any).diasProgramados[0]
+        : null) ||
+      (wo as any).finishedAt ||
+      wo.createdAt;
 
-const fecha =
-  typeof fechaServicio === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fechaServicio)
-    ? (() => {
-        const [yy, mm, dd] = fechaServicio.split("-");
-        return `${dd}/${mm}/${yy}`;
-      })()
-    : fmtDateOnly(fechaServicio);
+    const fecha =
+      typeof fechaServicio === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fechaServicio)
+        ? (() => {
+            const [yy, mm, dd] = fechaServicio.split("-");
+            return `${dd}/${mm}/${yy}`;
+          })()
+        : fmtDateOnly(fechaServicio);
 
     const cliente = cleanStr(wo.cliente) || cleanStr((wo as any).lugar) || "—";
     const direccion = cleanStr((wo as any).direccion) || "—";
@@ -2551,9 +2579,6 @@ const fecha =
     doc.text("R.U.T.", rutX1, labelY, { width: rutX2 - rutX1, align: "center" });
     doc.text("Firma", firmaX1, labelY, { width: firmaX2 - firmaX1, align: "center" });
 
-    // ============================
-    // 🔵 FRANJA AZUL
-    // ============================
     const footerX = 52;
     const footerY = 760;
     const footerW = 470;
@@ -2585,14 +2610,8 @@ const fecha =
         { width: footerW, align: "center" }
       );
 
-    // ============================
-    // 🟠 LOGO SGS
-    // ============================
     const sgsPath = path.join(process.cwd(), "uploads/branding/sgs.png");
 
-    // ============================
-    // 🟠 LOGO SGS (AJUSTADO PRO)
-    // ============================
     const logoSize = 50;
 
     doc.image(
@@ -2625,7 +2644,6 @@ const fecha =
     return { buffer, filename };
   }
 }
-
 
 
 

@@ -1,5 +1,4 @@
-// ✅ Archivo: src/pages/ReportIncidentWorker.jsx
-// ✅ VERSION FINAL PRO
+// ✅ Archivo: src/pages/ReportIncidentWorker.jsx (PRO + TOAST BONITO)
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -64,11 +63,21 @@ export default function ReportIncidentWorker() {
   const [fotoBase64, setFotoBase64] = useState("");
   const [fotoPreview, setFotoPreview] = useState("");
 
+  const [toast, setToast] = useState(null);
+
   const [form, setForm] = useState({
     patente: "",
     descripcion: "",
     ubicacionTexto: "",
   });
+
+  function showToast(message, type = "success") {
+    setToast({ message, type });
+
+    setTimeout(() => {
+      setToast(null);
+    }, 2500);
+  }
 
   function goPortal() {
     navigate("/trabajador", { replace: true });
@@ -108,7 +117,6 @@ export default function ReportIncidentWorker() {
     setForm((prev) => ({ ...prev, [name]: value }));
   }
 
-  // ✅ SOLO muestra cuando escriben
   const filteredVehicles = useMemo(() => {
     const q = normalizePlate(form.patente);
     if (!q) return [];
@@ -154,7 +162,7 @@ export default function ReportIncidentWorker() {
     const descripcion = form.descripcion.trim();
 
     if (!patente || !descripcion) {
-      alert("Completa los campos obligatorios");
+      showToast("Completa los campos obligatorios", "error");
       return;
     }
 
@@ -177,10 +185,14 @@ export default function ReportIncidentWorker() {
         }),
       });
 
-      alert("Incidente enviado");
-      goPortal();
+      showToast("✅ Incidente enviado correctamente");
+
+      setTimeout(() => {
+        goPortal();
+      }, 1200);
+
     } catch {
-      alert("Error al enviar");
+      showToast("❌ Error al enviar", "error");
     } finally {
       setSaving(false);
     }
@@ -193,7 +205,6 @@ export default function ReportIncidentWorker() {
     <div className="riw-page">
       <div className="riw-card">
 
-        {/* HEADER */}
         <div className="riw-toolbar">
           <button onClick={goPortal} className="btn-secondary">
             ← Volver
@@ -214,7 +225,6 @@ export default function ReportIncidentWorker() {
 
         <form onSubmit={submit} className="riw-form">
 
-          {/* PATENTE */}
           <div className="riw-field riw-field--autocomplete">
             <label className="riw-label">Patente</label>
 
@@ -255,7 +265,6 @@ export default function ReportIncidentWorker() {
             </div>
           </div>
 
-          {/* DESCRIPCIÓN */}
           <div className="riw-field">
             <label className="riw-label">¿Qué pasó?</label>
 
@@ -269,7 +278,6 @@ export default function ReportIncidentWorker() {
             />
           </div>
 
-          {/* FOTO PRO */}
           <div className="riw-field">
             <label className="riw-label">Foto</label>
 
@@ -291,48 +299,26 @@ export default function ReportIncidentWorker() {
             />
 
             <div className="riw-photo-actions">
-              <button
-                type="button"
-                onClick={() => takePhotoRef.current.click()}
-                className="riw-photo-action-btn"
-              >
+              <button type="button" onClick={() => takePhotoRef.current.click()} className="riw-photo-action-btn">
                 📸 Tomar foto
               </button>
 
-              <button
-                type="button"
-                onClick={() => galleryRef.current.click()}
-                className="riw-photo-action-btn"
-              >
+              <button type="button" onClick={() => galleryRef.current.click()} className="riw-photo-action-btn">
                 🖼️ Elegir desde galería
               </button>
             </div>
 
-            <div className="riw-help">
-              En celular puedes tomar la foto directamente o elegir una imagen guardada.
-            </div>
-
             {fotoPreview && (
               <div className="riw-photo-card">
-                <img
-                  src={fotoPreview}
-                  alt="Vista previa"
-                  className="riw-photo-preview"
-                />
+                <img src={fotoPreview} alt="Vista previa" className="riw-photo-preview" />
 
-                <button
-                  type="button"
-                  className="btn-secondary riw-remove-photo-btn"
-                  onClick={removeFoto}
-                  disabled={saving}
-                >
+                <button type="button" className="btn-secondary" onClick={removeFoto}>
                   Quitar foto
                 </button>
               </div>
             )}
           </div>
 
-          {/* UBICACIÓN */}
           <div className="riw-field">
             <label className="riw-label">Ubicación</label>
 
@@ -345,27 +331,40 @@ export default function ReportIncidentWorker() {
             />
           </div>
 
-          {/* BOTONES */}
           <div className="riw-actions">
-            <button
-              type="button"
-              onClick={goPortal}
-              className="btn-secondary riw-action-btn"
-            >
+            <button type="button" onClick={goPortal} className="btn-secondary">
               Cancelar
             </button>
 
-            <button
-              type="submit"
-              className="btn-primary riw-action-btn"
-              disabled={saving}
-            >
+            <button type="submit" className="btn-primary" disabled={saving}>
               {saving ? "Enviando..." : "Reportar incidente"}
             </button>
           </div>
-
         </form>
       </div>
+
+      {/* ✅ TOAST */}
+      {toast && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 20,
+            right: 20,
+            padding: "14px 18px",
+            borderRadius: 14,
+            fontWeight: 900,
+            zIndex: 9999,
+            color: "#fff",
+            background:
+              toast.type === "error"
+                ? "#dc2626"
+                : "#16a34a",
+            boxShadow: "0 10px 25px rgba(0,0,0,0.25)",
+          }}
+        >
+          {toast.message}
+        </div>
+      )}
     </div>
   );
 }
