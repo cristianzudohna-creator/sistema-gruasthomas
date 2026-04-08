@@ -2,6 +2,7 @@
 // ✅ COMPLETO + FOTO EN SOLICITUD DE REPUESTO + EXCEL GLOBAL + NOTIFICACIÓN A ADQUISICIONES
 // ✅ NUEVO AHORA:
 // - soporte para problemaRepuesto en WorkshopTask
+// - notificación al SUPERADMIN y JEFE_TALLER cuando el responsable termina la tarea
 // ✅ FIX FECHA HORAS EXTRAS:
 // - evitar new Date("YYYY-MM-DD")
 // - parseo manual local seguro para no correr un día por timezone
@@ -2694,6 +2695,9 @@ export class WorkshopService {
       });
     }
 
+    // ✅ NUEVO: notificar a SUPERADMIN + JEFE_TALLER
+    await this.notifyWorkshopTaskFinished(updatedTask, userId);
+
     return updatedTask;
   }
 
@@ -2924,6 +2928,101 @@ export class WorkshopService {
       }
     } catch (error) {
       console.error('❌ Error general notifyPartRequested:', error);
+    }
+  }
+
+  private async notifyWorkshopTaskFinished(task: any, finishedByUserId?: string) {
+    try {
+      const superAdmins = await this.prisma.user.findMany({
+        where: {
+          activo: true,
+          role: Role.SUPERADMIN,
+        },
+        select: {
+          id: true,
+          role: true,
+          workerType: true,
+          nombre: true,
+          apellido: true,
+          email: true,
+        },
+      });
+
+      const jefesTaller = await this.prisma.user.findMany({
+        where: {
+          activo: true,
+          role: Role.TRABAJADOR,
+          workerType: WorkerType.JEFE_TALLER,
+          ...(task?.empresa ? { empresa: task.empresa } : {}),
+        },
+        select: {
+          id: true,
+          role: true,
+          workerType: true,
+          nombre: true,
+          apellido: true,
+          email: true,
+        },
+      });
+
+      const destinatariosMap = new Map<string, any>();
+      [...superAdmins, ...jefesTaller].forEach((u) => {
+        destinatariosMap.set(u.id, u);
+      });
+
+      const destinatarios = Array.from(destinatariosMap.values());
+
+      if (!destinatarios.length) {
+        console.log(
+          `⚠️ No se encontraron usuarios para notificar tarea terminada ${task?.id}`,
+        );
+        return;
+      }
+
+      const codigo = String(task?.codigo || '').trim() || 'SIN CÓDIGO';
+      const titulo = String(task?.titulo || '').trim() || 'Tarea de taller';
+
+      let nombreResponsable = 'el responsable';
+
+      if (finishedByUserId) {
+        const user = await this.prisma.user.findUnique({
+          where: { id: finishedByUserId },
+          select: {
+            nombre: true,
+            apellido: true,
+            email: true,
+          },
+        });
+
+        nombreResponsable =
+          [user?.nombre, user?.apellido].filter(Boolean).join(' ').trim() ||
+          String(user?.email || '').trim() ||
+          'el responsable';
+      }
+
+      const body = `La tarea ${codigo} fue terminada por ${nombreResponsable}: ${titulo}`;
+
+      for (const user of destinatarios) {
+        try {
+          await this.firebaseService.sendNotificationToUser(
+            user.id,
+            '✅ Tarea de taller terminada',
+            body,
+            '/admin/incidentes',
+          );
+
+          console.log(
+            `✅ Notificación de tarea terminada enviada a ${user.role}${user.workerType ? `/${user.workerType}` : ''}: ${user.id}`,
+          );
+        } catch (error) {
+          console.error(
+            `❌ Error notificando tarea terminada a ${user.role}${user.workerType ? `/${user.workerType}` : ''} (${user.id}):`,
+            error,
+          );
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error general notifyWorkshopTaskFinished:', error);
     }
   }
 }
