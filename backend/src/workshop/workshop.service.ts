@@ -3,6 +3,7 @@
 // ✅ NUEVO AHORA:
 // - soporte para problemaRepuesto en WorkshopTask
 // - notificación al SUPERADMIN y JEFE_TALLER cuando el responsable termina la tarea
+// - notificación de INCIDENTE RESUELTO a quien reportó, JEFE_TALLER y SUPERADMIN
 // ✅ FIX FECHA HORAS EXTRAS:
 // - evitar new Date("YYYY-MM-DD")
 // - parseo manual local seguro para no correr un día por timezone
@@ -872,7 +873,6 @@ export class WorkshopService {
     let fromDate: Date | undefined;
     let toDate: Date | undefined;
 
-    // ✅ FIX: parse manual YYYY-MM-DD
     if (from) {
       const m = String(from).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
       if (m) {
@@ -888,7 +888,6 @@ export class WorkshopService {
       }
     }
 
-    // ✅ FIX: parse manual YYYY-MM-DD
     if (to) {
       const m = String(to).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
       if (m) {
@@ -978,7 +977,6 @@ export class WorkshopService {
     let fromDate: Date | undefined;
     let toDate: Date | undefined;
 
-    // ✅ FIX: parse manual YYYY-MM-DD
     if (from) {
       const m = String(from).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
       if (m) {
@@ -994,7 +992,6 @@ export class WorkshopService {
       }
     }
 
-    // ✅ FIX: parse manual YYYY-MM-DD
     if (to) {
       const m = String(to).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
       if (m) {
@@ -1104,7 +1101,6 @@ export class WorkshopService {
     let fromDate: Date | undefined;
     let toDate: Date | undefined;
 
-    // ✅ FIX: parse manual YYYY-MM-DD
     if (from) {
       const m = String(from).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
       if (m) {
@@ -1120,7 +1116,6 @@ export class WorkshopService {
       }
     }
 
-    // ✅ FIX: parse manual YYYY-MM-DD
     if (to) {
       const m = String(to).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
       if (m) {
@@ -2192,7 +2187,6 @@ export class WorkshopService {
       estimatedCost: dto.estimatedCost,
       actualCost: dto.actualCost,
 
-      // ✅ NUEVO
       problemaRepuesto:
         problemaRepuesto !== undefined
           ? problemaRepuesto || null
@@ -2693,9 +2687,12 @@ export class WorkshopService {
           cerradoEn: new Date(),
         },
       });
+
+      // ✅ NUEVO: notificar incidente resuelto
+      await this.notifyIncidentResolved(updatedTask.incidentId, userId);
     }
 
-    // ✅ NUEVO: notificar a SUPERADMIN + JEFE_TALLER
+    // ✅ Mantener notificación de tarea terminada
     await this.notifyWorkshopTaskFinished(updatedTask, userId);
 
     return updatedTask;
@@ -3023,6 +3020,133 @@ export class WorkshopService {
       }
     } catch (error) {
       console.error('❌ Error general notifyWorkshopTaskFinished:', error);
+    }
+  }
+
+  private async notifyIncidentResolved(incidentId: string, resolvedByUserId?: string) {
+    try {
+      const incident = await this.prisma.vehicleIncident.findUnique({
+        where: { id: incidentId },
+        include: {
+          vehicle: {
+            select: {
+              id: true,
+              patente: true,
+            },
+          },
+          reportedBy: {
+            select: {
+              id: true,
+              nombre: true,
+              apellido: true,
+              email: true,
+              role: true,
+              workerType: true,
+            },
+          },
+        },
+      });
+
+      if (!incident) {
+        console.log(`⚠️ No se encontró incidente para notificar resolución: ${incidentId}`);
+        return;
+      }
+
+      const superAdmins = await this.prisma.user.findMany({
+        where: {
+          activo: true,
+          role: Role.SUPERADMIN,
+        },
+        select: {
+          id: true,
+          role: true,
+          workerType: true,
+          nombre: true,
+          apellido: true,
+          email: true,
+        },
+      });
+
+      const jefesTaller = await this.prisma.user.findMany({
+        where: {
+          activo: true,
+          role: Role.TRABAJADOR,
+          workerType: WorkerType.JEFE_TALLER,
+          ...(incident?.empresa ? { empresa: incident.empresa } : {}),
+        },
+        select: {
+          id: true,
+          role: true,
+          workerType: true,
+          nombre: true,
+          apellido: true,
+          email: true,
+        },
+      });
+
+      const destinatariosMap = new Map<string, any>();
+
+      if (incident.reportedBy?.id) {
+        destinatariosMap.set(incident.reportedBy.id, incident.reportedBy);
+      }
+
+      [...superAdmins, ...jefesTaller].forEach((u) => {
+        destinatariosMap.set(u.id, u);
+      });
+
+      const destinatarios = Array.from(destinatariosMap.values());
+
+      if (!destinatarios.length) {
+        console.log(
+          `⚠️ No se encontraron usuarios para notificar incidente resuelto ${incident?.id}`,
+        );
+        return;
+      }
+
+      const patente =
+        String(incident?.vehicle?.patente || '').trim() || 'SIN PATENTE';
+
+      let nombreResponsable = 'Alguien';
+
+      if (resolvedByUserId) {
+        const user = await this.prisma.user.findUnique({
+          where: { id: resolvedByUserId },
+          select: {
+            nombre: true,
+            apellido: true,
+            email: true,
+          },
+        });
+
+        nombreResponsable =
+          [user?.nombre, user?.apellido].filter(Boolean).join(' ').trim() ||
+          String(user?.email || '').trim() ||
+          'Alguien';
+      }
+
+      const body = `${nombreResponsable} resolvió el incidente de la patente ${patente}`;
+
+      for (const user of destinatarios) {
+        try {
+          await this.firebaseService.sendNotificationToUser(
+            user.id,
+            '✅ Incidente resuelto',
+            body,
+            '/admin/incidentes',
+          );
+
+          console.log(
+            `✅ Notificación de incidente resuelto enviada a ${user.role || 'USER'}${user.workerType ? `/${user.workerType}` : ''}: ${user.id}`,
+          );
+        } catch (error) {
+          console.error(
+            `❌ Error notificando incidente resuelto a ${user.role || 'USER'}${user.workerType ? `/${user.workerType}` : ''} (${user.id}):`,
+            error,
+          );
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error general notifyIncidentResolved:', error);
     }
   }
 }
