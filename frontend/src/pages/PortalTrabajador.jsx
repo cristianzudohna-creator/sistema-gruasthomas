@@ -1,4 +1,12 @@
-// ✅ Archivo: src/pages/PortalTrabajador.jsx (COMPLETO FINAL PRO + PREVENCION FIX)
+// ✅ Archivo: src/pages/PortalTrabajador.jsx
+// ✅ COMPLETO + CARD PREVENCIÓN COMPRAS INSUMOS
+// ✅ FIX:
+// - mostrar "Supervisor taller mecánico" en vez de "SUPERVISOR"
+// - agregar "Supervisor de terreno"
+// - Supervisor de terreno SOLO puede usar:
+//   1) Órdenes de trabajo
+//   2) Reportar incidente
+// - Supervisor taller mecánico también puede ver Órdenes de trabajo
 
 import { useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
@@ -36,6 +44,35 @@ function pickWorkerType(user) {
   );
 }
 
+function workerTypeLabel(value) {
+  const type = norm(value);
+  if (!type) return "";
+
+  const map = {
+    CONDUCTOR: "Conductor",
+    OPERADOR: "Operador",
+    RIGGER: "Rigger",
+    MECANICO: "Mecánico",
+    JEFE_TALLER: "Jefe de taller",
+    ADMINISTRACION: "Administración",
+    ADQUISICIONES: "Adquisiciones",
+    ASEO: "Aseo",
+    AYUDANTE_DE_MECANICO: "Ayudante de mecánico",
+    AYUDANTE_MECANICO: "Ayudante de mecánico",
+    CASA_PARTICULAR: "Casa particular",
+    LAVADOR_EQUIPOS: "Lavador equipos",
+    MECANICO_HIDRAULICO: "Mecánico hidráulico",
+    NOCHERO: "Nochero",
+    PREVENCION: "Prevención",
+    SOLDADOR: "Soldador",
+    SUPERVISOR: "Supervisor taller mecánico",
+    SUPERVISOR_TERRENO: "Supervisor de terreno",
+    OTRO: "Otro",
+  };
+
+  return map[type] || type;
+}
+
 export default function PortalTrabajador() {
   const navigate = useNavigate();
 
@@ -52,6 +89,7 @@ export default function PortalTrabajador() {
 
   const role = norm(user?.role || user?.rol || user?.perfil || "TRABAJADOR");
   const workerType = pickWorkerType(user);
+  const workerTypeText = workerTypeLabel(workerType);
 
   const isAdquisiciones =
     role === "TRABAJADOR" && workerType === "ADQUISICIONES";
@@ -59,11 +97,12 @@ export default function PortalTrabajador() {
   const isPrevencion =
     role === "TRABAJADOR" && workerType === "PREVENCION";
 
-  // 🔥 FIX: SUPERVISOR incluido como jefe de taller
+  const isSupervisorTerreno =
+    role === "TRABAJADOR" && workerType === "SUPERVISOR_TERRENO";
+
   const isJefeTaller =
     workerType === "JEFE_TALLER" || workerType === "SUPERVISOR";
 
-  // 🔥 FIX: SUPERVISOR ahora es trabajador de taller
   const isWorkshopWorker =
     workerType === "JEFE_TALLER" ||
     workerType === "SUPERVISOR" ||
@@ -72,7 +111,6 @@ export default function PortalTrabajador() {
     workerType === "AYUDANTE_MECANICO" ||
     workerType === "MECANICO_HIDRAULICO";
 
-  // 🔥 FIX: SUPERVISOR puede usar horas extras
   const canUseExtraHours =
     workerType === "JEFE_TALLER" ||
     workerType === "SUPERVISOR" ||
@@ -84,14 +122,24 @@ export default function PortalTrabajador() {
   const canReportIncident =
     workerType === "OPERADOR" ||
     workerType === "RIGGER" ||
-    workerType === "PREVENCION";
+    workerType === "PREVENCION" ||
+    workerType === "SUPERVISOR_TERRENO";
 
-  // 🔥 FIX CLAVE: PREVENCION NO ve OT
   const canUseWorkOrders =
-    !isWorkshopWorker &&
-    !isAdquisiciones &&
-    !isPrevencion &&
-    workerType !== "SUPERVISOR";
+    workerType === "SUPERVISOR" ||
+    isSupervisorTerreno ||
+    (!isWorkshopWorker &&
+      !isAdquisiciones &&
+      !isPrevencion &&
+      workerType !== "SUPERVISOR");
+
+  // ✅ Solicitud de insumos: JEFE_TALLER / SUPERVISOR
+  const canRequestSupplies =
+    role === "SUPERADMIN" || isJefeTaller;
+
+  // ✅ Compras de insumos: PREVENCIÓN
+  const canManageSupplies =
+    role === "TRABAJADOR" && workerType === "PREVENCION";
 
   function onLogout() {
     logout();
@@ -121,9 +169,11 @@ export default function PortalTrabajador() {
             <h1 className="ptw-title">Portal del Trabajador</h1>
             <p className="ptw-subtitle">
               {isPrevencion
-                ? "Acceso rápido para reportar incidentes"
+                ? "Acceso rápido para reportar incidentes y gestionar compras de insumos"
                 : isWorkshopWorker
-                ? "Acceso rápido a incidentes, tareas y horas extras"
+                ? "Acceso rápido a incidentes, tareas, horas extras y órdenes de trabajo"
+                : isSupervisorTerreno
+                ? "Acceso rápido a órdenes de trabajo y reporte de incidentes"
                 : "Acceso rápido a formularios"}
             </p>
           </div>
@@ -138,7 +188,7 @@ export default function PortalTrabajador() {
                 <div className="ptw-account__name">{displayName}</div>
                 <div className="ptw-account__meta">
                   {role}
-                  {workerType ? ` · ${workerType}` : ""}
+                  {workerTypeText ? ` · ${workerTypeText}` : ""}
                 </div>
               </div>
             </div>
@@ -150,7 +200,7 @@ export default function PortalTrabajador() {
         </section>
 
         <section className="ptw-grid">
-          {/* 🔥 JEFE TALLER + SUPERVISOR */}
+          {/* 🔥 JEFE TALLER / SUPERVISOR TALLER */}
           {isJefeTaller && (
             <button
               className="ptw-card ptw-card--admin"
@@ -167,13 +217,53 @@ export default function PortalTrabajador() {
                 <div className="ptw-badge">Admin</div>
               </div>
 
-              <div className="ptw-card__cta">
-                Ir a Incidentes / Taller →
-              </div>
+              <div className="ptw-card__cta">Ir a Incidentes / Taller →</div>
             </button>
           )}
 
-          {/* ✅ OT solo para trabajadores permitidos */}
+          {/* ✅ SOLICITUD DE INSUMOS */}
+          {canRequestSupplies && (
+            <button
+              className="ptw-card ptw-card--admin"
+              onClick={() => navigate("/admin/solicitud-insumos")}
+            >
+              <div className="ptw-card__top">
+                <div className="ptw-icon">📦</div>
+                <div>
+                  <div className="ptw-card__title">Solicitud de insumos</div>
+                  <div className="ptw-card__sub">
+                    Solicitar materiales e insumos para taller
+                  </div>
+                </div>
+                <div className="ptw-badge">Admin</div>
+              </div>
+
+              <div className="ptw-card__cta">Crear solicitud →</div>
+            </button>
+          )}
+
+          {/* ✅ PREVENCIÓN - COMPRAS DE INSUMOS */}
+          {canManageSupplies && (
+            <button
+              className="ptw-card"
+              onClick={() => navigate("/trabajador/prevencion-insumos")}
+            >
+              <div className="ptw-card__top">
+                <div className="ptw-icon">🦺</div>
+                <div>
+                  <div className="ptw-card__title">Compras de insumos</div>
+                  <div className="ptw-card__sub">
+                    Revisar solicitudes pendientes y marcar comprados
+                  </div>
+                </div>
+                <div className="ptw-badge">Disponible</div>
+              </div>
+
+              <div className="ptw-card__cta">Ver solicitudes →</div>
+            </button>
+          )}
+
+          {/* OT */}
           {canUseWorkOrders && (
             <button
               className="ptw-card"
@@ -194,7 +284,7 @@ export default function PortalTrabajador() {
             </button>
           )}
 
-          {/* 🔥 TALLER */}
+          {/* TALLER */}
           {isWorkshopWorker && (
             <>
               <button

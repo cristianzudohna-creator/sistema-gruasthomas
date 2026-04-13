@@ -68,4 +68,17 @@ export class UpdateIncidentDto {
   @IsInt()
   @Min(0)
   horometro?: number;
+
+  // ✅ NUEVO: permite reemplazar o eliminar la foto del incidente
+  // - si viene base64 => reemplaza la foto
+  // - si viene "" => elimina la foto
+  @IsOptional()
+  @IsString()
+  foto?: string;
+
+  // ✅ NUEVO: nombre original del archivo de foto
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  fotoNombre?: string;
 }

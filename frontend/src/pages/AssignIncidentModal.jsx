@@ -11,6 +11,10 @@
 // - FIX: ahora también aparecen los JEFE_TALLER
 // - FIX NUEVO: ahora también aparecen los SUPERVISOR
 // - FIX NUEVO: pide más usuarios al backend para no quedarse solo con 10
+// ✅ NUEVO AHORA:
+// - Título dinámico: asignar / editar asignación
+// - Botón dinámico: asignar / guardar asignación
+// - Botón "Asignarme a mí" para JEFE_TALLER / SUPERVISOR
 
 import { useEffect, useMemo, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -24,6 +28,21 @@ function getToken() {
     localStorage.getItem("token") ||
     ""
   );
+}
+
+function getUserFromStorage() {
+  try {
+    const raw =
+      localStorage.getItem("user") ||
+      localStorage.getItem("me") ||
+      localStorage.getItem("profile");
+
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 function norm(value) {
@@ -156,6 +175,7 @@ export default function AssignIncidentModal({
   onSaved,
 }) {
   const token = useMemo(() => getToken(), []);
+  const currentUser = useMemo(() => getUserFromStorage(), []);
 
   const [loadingWorkers, setLoadingWorkers] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -167,6 +187,21 @@ export default function AssignIncidentModal({
   const [helperSearch, setHelperSearch] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
+
+  const currentUserId = String(currentUser?.id || "");
+  const currentUserWorkerType = norm(
+    currentUser?.workerType ||
+      currentUser?.tipoTrabajador ||
+      currentUser?.worker_type ||
+      currentUser?.tipo_trabajador ||
+      currentUser?.cargo ||
+      currentUser?.type
+  );
+
+  const canSelfAssign =
+    currentUserId &&
+    (currentUserWorkerType === "JEFE_TALLER" ||
+      currentUserWorkerType === "SUPERVISOR");
 
   function authHeaders(extra = {}) {
     return {
@@ -207,7 +242,32 @@ export default function AssignIncidentModal({
         .filter((w) => w?.id)
         .filter(isAllowedWorkshopWorker);
 
-      setWorkers(arr);
+      const existsCurrent = arr.some(
+        (w) => String(w.id) === String(currentUserId)
+      );
+
+      const normalizedCurrent =
+        currentUserId && currentUser?.nombre
+          ? {
+              id: String(currentUserId),
+              nombre:
+                [currentUser?.nombre, currentUser?.apellido]
+                  .filter(Boolean)
+                  .join(" ")
+                  .trim() ||
+                currentUser?.email ||
+                "Mi usuario",
+              email: currentUser?.email || "",
+              workerType: currentUserWorkerType,
+            }
+          : null;
+
+      const finalWorkers =
+        canSelfAssign && normalizedCurrent && !existsCurrent
+          ? [normalizedCurrent, ...arr]
+          : arr;
+
+      setWorkers(finalWorkers);
     } catch (err) {
       setError(err?.message || "No se pudieron cargar los técnicos");
     } finally {
@@ -235,6 +295,13 @@ export default function AssignIncidentModal({
     loadWorkers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, incident?.id]);
+
+  const hasExistingAssignment = useMemo(() => {
+    return Boolean(
+      String(selectedWorkerId || "").trim() ||
+        (Array.isArray(helperIds) && helperIds.length > 0)
+    );
+  }, [selectedWorkerId, helperIds]);
 
   const principalOptions = useMemo(() => {
     if (!workerTypeFilter) return workers;
@@ -300,6 +367,13 @@ export default function AssignIncidentModal({
     setHelperIds((prev) => prev.filter((x) => String(x) !== id));
   }
 
+  function handleAssignToMe() {
+    if (!canSelfAssign || !currentUserId) return;
+    setSelectedWorkerId(String(currentUserId));
+    setHelperIds((prev) => prev.filter((x) => String(x) !== String(currentUserId)));
+    setWorkerTypeFilter("");
+  }
+
   async function handleSave() {
     if (!incident?.id) {
       setError("No se recibió el incidente");
@@ -355,7 +429,12 @@ export default function AssignIncidentModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Asignar incidente" size="lg">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={hasExistingAssignment ? "Editar asignación" : "Asignar incidente"}
+      size="lg"
+    >
       <div style={{ display: "grid", gap: 16 }}>
         <div
           style={{
@@ -423,6 +502,24 @@ export default function AssignIncidentModal({
             </div>
           </div>
         </div>
+
+        {canSelfAssign ? (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-start",
+            }}
+          >
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={handleAssignToMe}
+              disabled={saving || loadingWorkers}
+            >
+              Asignarme a mí
+            </button>
+          </div>
+        ) : null}
 
         <div className="modal-form">
           <div>
@@ -671,7 +768,13 @@ export default function AssignIncidentModal({
             disabled={saving || loadingWorkers}
             className="btn-primary"
           >
-            {saving ? "Asignando..." : "Asignar incidente"}
+            {saving
+              ? hasExistingAssignment
+                ? "Guardando..."
+                : "Asignando..."
+              : hasExistingAssignment
+              ? "Guardar asignación"
+              : "Asignar incidente"}
           </button>
         </div>
       </div>

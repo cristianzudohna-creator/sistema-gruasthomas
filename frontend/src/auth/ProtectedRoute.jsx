@@ -1,10 +1,11 @@
-// ✅ Archivo: frontend/src/auth/ProtectedRoute.jsx (COMPLETO)
+// ✅ Archivo: frontend/src/auth/ProtectedRoute.jsx (COMPLETO + FIX SOLICITUD INSUMOS)
 // ✅ NUEVO: si user.mustChangePassword === true => obliga a /cambiar-contrasena
 // ✅ FIX: JEFE_TALLER puede entrar a /admin/incidentes
 // ✅ FIX: JEFE_TALLER / SUPERVISOR puede entrar a /admin/horas-extras
 // ✅ FIX: ADQUISICIONES puede entrar a /admin/repuestos
 // ✅ FIX NUEVO: TRABAJADOR normal NO puede entrar a /admin y se redirige a su módulo
 // ✅ FIX NUEVO NOTIFICACIONES: evita redirección prematura cuando la app abre desde notificación
+// ✅ NUEVO: JEFE_TALLER / SUPERVISOR puede entrar a /admin/solicitud-insumos
 
 import { Navigate, useLocation, Link } from "react-router-dom";
 import { getToken, getUser } from "./auth";
@@ -69,6 +70,15 @@ function canAccessSpecialRoute(user, pathname) {
     role === "TRABAJADOR" &&
     (workerType === "JEFE_TALLER" || workerType === "SUPERVISOR") &&
     path.startsWith("/admin/horas-extras")
+  ) {
+    return true;
+  }
+
+  // ✅ NUEVO: JEFE_TALLER + SUPERVISOR → Solicitud de insumos
+  if (
+    role === "TRABAJADOR" &&
+    (workerType === "JEFE_TALLER" || workerType === "SUPERVISOR") &&
+    path.startsWith("/admin/solicitud-insumos")
   ) {
     return true;
   }
@@ -215,42 +225,39 @@ function NoAccess({ user }) {
 export default function ProtectedRoute({ children, role }) {
   const location = useLocation();
 
-  // ✅ FIX NOTIFICACIONES:
-  // evita redirección inmediata cuando la app se abre desde una notificación
   const [bootReady, setBootReady] = useState(false);
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-  const loadSession = () => {
-    try {
-      const t = getToken();
-      const u = getUser();
+    const loadSession = () => {
+      try {
+        const t = getToken();
+        const u = getUser();
 
-      setToken(t);
-      setUser(u);
-    } catch (error) {
-      console.error("❌ Error cargando sesión:", error);
-      setToken(null);
-      setUser(null);
-    } finally {
-      setTimeout(() => setBootReady(true), 120);
-    }
-  };
+        setToken(t);
+        setUser(u);
+      } catch (error) {
+        console.error("❌ Error cargando sesión:", error);
+        setToken(null);
+        setUser(null);
+      } finally {
+        setTimeout(() => setBootReady(true), 120);
+      }
+    };
 
-  loadSession();
-
-  // 🔥 ESCUCHAR cambios en localStorage
-  const handleStorage = () => {
     loadSession();
-  };
 
-  window.addEventListener("storage", handleStorage);
+    const handleStorage = () => {
+      loadSession();
+    };
 
-  return () => {
-    window.removeEventListener("storage", handleStorage);
-  };
-}, []);
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
 
   if (!bootReady) {
     return null;
@@ -280,12 +287,10 @@ export default function ProtectedRoute({ children, role }) {
   const userRole = norm(user?.role);
   const currentPath = String(location.pathname || "").toLowerCase();
 
-  // ✅ Permisos especiales primero
   if (canAccessSpecialRoute(user, currentPath)) {
     return children;
   }
 
-  // ✅ TRABAJADOR normal no entra a /admin
   if (
     userRole === "TRABAJADOR" &&
     currentPath.startsWith("/admin") &&

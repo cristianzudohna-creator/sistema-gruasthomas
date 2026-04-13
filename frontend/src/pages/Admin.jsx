@@ -1,4 +1,5 @@
-// ✅ Archivo: src/pages/Admin.jsx (COMPLETO - RESPONSIVE PRO + PERMISOS AJUSTADOS)
+// ✅ Archivo: src/pages/Admin.jsx
+// ✅ COMPLETO - RESPONSIVE PRO + PERMISOS AJUSTADOS + SOLICITUD INSUMOS
 // ✅ Menú "Clientes" SOLO SUPERADMIN + ADMINISTRADORA
 // ✅ Sidebar responsive (toggle, ESC, lock scroll, close on route change)
 // ✅ AJUSTE: CONTROL_FLOTA YA NO VE:
@@ -8,6 +9,8 @@
 // ✅ Menú "Repuestos / Solicitudes" SOLO SUPERADMIN + TRABAJADOR ADQUISICIONES
 // ✅ Menú "Horas Extras (PDF)" para ADMINISTRADORA + SUPERADMIN
 // ✅ FIX: ADQUISICIONES YA NO VE "Firmar Horas Extras"
+// ✅ NUEVO: "Solicitud de insumos" para SUPERADMIN + JEFE_TALLER + SUPERVISOR
+// ✅ NUEVO: "Compras de insumos" para SUPERADMIN
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useNavigate, useLocation, Link } from "react-router-dom";
@@ -92,7 +95,6 @@ export default function Admin() {
   const canSeeDashboard = isSuperadmin;
   const canSeeCamiones = isSuperadmin || isControlFlota;
 
-  // ✅ CONTROL_FLOTA YA NO VE ÓRDENES
   const canSeeWorkOrders = isSuperadmin || isAdministradora;
 
   const canSeeTrabajadores = isSuperadmin;
@@ -101,25 +103,23 @@ export default function Admin() {
   const canSeePapelera = isSuperadmin;
   const canSeePapeleraOt = isSuperadmin;
 
-  // ✅ CLIENTES: SOLO SUPERADMIN + ADMINISTRADORA
   const canSeeClientes = isSuperadmin || isAdministradora;
 
-  // ✅ CONTROL_FLOTA YA NO VE INCIDENTES / TALLER
   const canSeeIncidentes = isSuperadmin || isJefeTaller;
 
-  // ✅ SOLO SUPERADMIN + ADQUISICIONES
   const canSeeRepuestos = isSuperadmin || isAdquisiciones;
 
-  // ✅ FIX: ADQUISICIONES YA NO VE HORAS EXTRAS
-  // ✅ SUPERADMIN sí ve
-  // ✅ otros trabajadores sí ven
-  // ✅ ADQUISICIONES no ve
   const canSeeExtraHours =
     isSuperadmin ||
     (role === "TRABAJADOR" && workerType !== "ADQUISICIONES");
 
-  // ✅ Horas Extras PDF (administración)
   const canSeeExtraHoursAdmin = isSuperadmin || isAdministradora;
+
+  // ✅ Solicitud de insumos
+  const canSeeSolicitudInsumos = isSuperadmin || isJefeTaller;
+
+  // ✅ Compras de insumos
+  const canSeeComprasInsumos = isSuperadmin;
 
   const isDashboard = path === "/admin";
 
@@ -133,6 +133,9 @@ export default function Admin() {
 
   const isIncidentes = path.startsWith("/admin/incidentes");
   const isRepuestos = path.startsWith("/admin/repuestos");
+
+  const isSolicitudInsumos = path.startsWith("/admin/solicitud-insumos");
+  const isComprasInsumos = path.startsWith("/admin/prevencion-insumos");
 
   const isExtraHours =
     path === "/admin/horas-extras" ||
@@ -160,7 +163,6 @@ export default function Admin() {
     isControlFlota,
     isAdministradora,
     isAdquisiciones,
-    isJefeTaller,
     role,
     workerType,
   ]);
@@ -234,6 +236,8 @@ export default function Admin() {
     if (isWorkOrdersEliminados) return "Órdenes eliminadas";
     if (isWorkOrders) return "Órdenes de trabajo";
 
+    if (isSolicitudInsumos) return "Solicitud de insumos";
+    if (isComprasInsumos) return "Compras de insumos";
     if (isIncidentes) return "Incidentes / Taller";
     if (isRepuestos) return "Repuestos / Solicitudes";
     if (isExtraHoursAdmin) return "Horas Extras (Administración PDF)";
@@ -389,6 +393,36 @@ export default function Admin() {
             >
               <span className="sb-ico" aria-hidden="true">🔧</span>
               <span>Incidentes / Taller</span>
+            </button>
+          ) : null}
+
+          {canSeeSolicitudInsumos ? (
+            <button
+              className={`sb-item ${isSolicitudInsumos ? "active" : ""}`}
+              type="button"
+              onClick={() => {
+                setSidebarOpen(false);
+                navigate("/admin/solicitud-insumos");
+              }}
+              title="Solicitud de insumos"
+            >
+              <span className="sb-ico" aria-hidden="true">📦</span>
+              <span>Solicitud de insumos</span>
+            </button>
+          ) : null}
+
+          {canSeeComprasInsumos ? (
+            <button
+              className={`sb-item ${isComprasInsumos ? "active" : ""}`}
+              type="button"
+              onClick={() => {
+                setSidebarOpen(false);
+                navigate("/admin/prevencion-insumos");
+              }}
+              title="Compras de insumos"
+            >
+              <span className="sb-ico" aria-hidden="true">🦺</span>
+              <span>Compras de insumos</span>
             </button>
           ) : null}
 

@@ -1,4 +1,13 @@
-// ✅ Archivo: src/workshop/workshop.controller.ts (COMPLETO + FIX PREVENCION INCIDENTES)
+// ✅ Archivo: src/workshop/workshop.controller.ts
+// ✅ COMPLETO + FIX PREVENCION INCIDENTES
+// ✅ NUEVO AHORA:
+// - solicitar insumos a PREVENCION (libre, sin tarea)
+// - listar solicitudes de insumos
+// - marcar insumo como comprado
+// - cancelar solicitud de insumo
+// ✅ NUEVO AHORA:
+// - updateIncident envía userId al service para notificación de resolución
+// - closeIncident envía userId al service para notificación de resolución
 
 import {
   Body,
@@ -54,7 +63,6 @@ export class WorkshopController {
     return this.workshopService.getExtraHourReportsForJefe(userId);
   }
 
-  // 🔥 IMPORTANTE: ahora soporta query params from/to
   @Get('extra-hours/administracion')
   getExtraHoursForAdmin(@Req() req: any) {
     const userId = req?.user?.id || req?.user?.sub;
@@ -68,7 +76,7 @@ export class WorkshopController {
   }
 
   // ============================
-  // ✅ PDF POR TRABAJADOR
+  // PDF POR TRABAJADOR
   // ============================
 
   @Get('extra-hours/pdf/:workerId')
@@ -94,7 +102,7 @@ export class WorkshopController {
   }
 
   // ============================
-  // 🆕 EXCEL GLOBAL
+  // EXCEL GLOBAL
   // ============================
 
   @Get('extra-hours/excel')
@@ -121,7 +129,11 @@ export class WorkshopController {
   }
 
   @Patch('extra-hours/:id/sign')
-  signExtraHourReport(@Param('id') id: string, @Body() dto: any, @Req() req: any) {
+  signExtraHourReport(
+    @Param('id') id: string,
+    @Body() dto: any,
+    @Req() req: any,
+  ) {
     const userId = req?.user?.id || req?.user?.sub;
 
     return this.workshopService.signExtraHourReport(
@@ -170,13 +182,19 @@ export class WorkshopController {
   }
 
   @Patch('incidents/:id')
-  updateIncident(@Param('id') id: string, @Body() dto: UpdateIncidentDto) {
-    return this.workshopService.updateIncident(id, dto);
+  updateIncident(
+    @Param('id') id: string,
+    @Body() dto: UpdateIncidentDto,
+    @Req() req: any,
+  ) {
+    const userId = req?.user?.id || req?.user?.sub;
+    return this.workshopService.updateIncident(id, dto, userId);
   }
 
   @Patch('incidents/:id/close')
-  closeIncident(@Param('id') id: string) {
-    return this.workshopService.closeIncident(id);
+  closeIncident(@Param('id') id: string, @Req() req: any) {
+    const userId = req?.user?.id || req?.user?.sub;
+    return this.workshopService.closeIncident(id, userId);
   }
 
   @Patch('incidents/:id/assign')
@@ -253,7 +271,8 @@ export class WorkshopController {
   @Patch('tasks/:id/finish')
   finishWorkshopTaskByWorker(
     @Param('id') id: string,
-    @Body() dto: {
+    @Body()
+    dto: {
       trabajoRealizado?: string;
       fotoEvidencia?: string;
     },
@@ -261,11 +280,44 @@ export class WorkshopController {
   ) {
     const userId = req?.user?.id || req?.user?.sub;
 
-    return this.workshopService.finishWorkshopTaskByWorker(
-      id,
-      userId,
-      dto,
-    );
+    return this.workshopService.finishWorkshopTaskByWorker(id, userId, dto);
+  }
+
+  // ============================
+  // INSUMOS -> PREVENCION
+  // ============================
+
+  @Post('supplies/request')
+  requestSupply(
+    @Body()
+    dto: {
+      nombre: string;
+      observacion?: string;
+      fotoDataUrl?: string;
+      fotoNombre?: string;
+    },
+    @Req() req: any,
+  ) {
+    const userId = req?.user?.id || req?.user?.sub;
+    return this.workshopService.requestSupply(userId, dto);
+  }
+
+  @Get('supplies')
+  getSupplyRequests(@Req() req: any) {
+    const userId = req?.user?.id || req?.user?.sub;
+    return this.workshopService.getSupplyRequests(userId);
+  }
+
+  @Patch('supplies/:id/purchase')
+  markSupplyAsPurchased(@Param('id') id: string, @Req() req: any) {
+    const userId = req?.user?.id || req?.user?.sub;
+    return this.workshopService.markSupplyAsPurchased(id, userId);
+  }
+
+  @Patch('supplies/:id/cancel')
+  cancelSupplyRequest(@Param('id') id: string, @Req() req: any) {
+    const userId = req?.user?.id || req?.user?.sub;
+    return this.workshopService.cancelSupplyRequest(id, userId);
   }
 
   // ============================

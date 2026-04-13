@@ -7,6 +7,7 @@
 // ✅ Botón Eliminar incidente
 // ✅ Botón Eliminar tarea de taller independiente
 // ✅ ConfirmModal bonito para eliminar
+// ✅ ConfirmModal bonito para marcar incidente como resuelto
 // ✅ Modal real de creación de tarea
 // ✅ FIX: JEFE_TALLER = TRABAJADOR + workerType JEFE_TALLER
 // ✅ NUEVO:
@@ -30,6 +31,14 @@
 // ✅ NUEVO TAMBIÉN:
 // - En INCIDENTES REPORTADOS toma el problema desde latestTask.problemaRepuesto
 // - Muestra "PROBLEMAS CON EL REPUESTO" + botón "Ver problema"
+// ✅ NUEVO AHORA:
+// - Botón "Editar incidente"
+// - IncidentModal reutilizado en modo edición
+// - SUPERADMIN / CONTROL_FLOTA / JEFE_TALLER pueden editar incidente
+// ✅ NUEVO AHORA:
+// - Botón "Editar tarea"
+// - CreateWorkshopTaskModal reutilizado en modo edición de tarea
+// - SUPERADMIN / CONTROL_FLOTA / JEFE_TALLER pueden editar tarea independiente
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -262,6 +271,12 @@ function getBackendOrigin() {
   const api = String(API_URL || "").trim();
 
   if (api === "/api") {
+    const host = window.location.hostname;
+
+    if (host === "localhost" || host === "127.0.0.1") {
+      return `${window.location.protocol}//${host}:3000`;
+    }
+
     return window.location.origin;
   }
 
@@ -343,6 +358,12 @@ export default function Incidents() {
   const [assignOpen, setAssignOpen] = useState(false);
   const [selectedIncident, setSelectedIncident] = useState(null);
 
+  const [editingIncident, setEditingIncident] = useState(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+
+  const [editingTask, setEditingTask] = useState(null);
+  const [editTaskModalOpen, setEditTaskModalOpen] = useState(false);
+
   const [closingId, setClosingId] = useState(null);
   const [deletingIncidentId, setDeletingIncidentId] = useState(null);
   const [deletingTaskId, setDeletingTaskId] = useState(null);
@@ -350,6 +371,9 @@ export default function Incidents() {
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [confirmDeleteType, setConfirmDeleteType] = useState(null);
   const [confirmDeleteItem, setConfirmDeleteItem] = useState(null);
+
+  const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
+  const [incidentToClose, setIncidentToClose] = useState(null);
 
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState("");
@@ -396,6 +420,11 @@ export default function Incidents() {
     role === "CONTROL_FLOTA" ||
     isJefeTaller;
 
+  const canEditWorkshopTask =
+    role === "SUPERADMIN" ||
+    role === "CONTROL_FLOTA" ||
+    isJefeTaller;
+
   function goBackToPortal() {
     navigate("/trabajador");
   }
@@ -418,6 +447,37 @@ export default function Incidents() {
   function closeProblemModal() {
     setSelectedProblemText("");
     setProblemModalOpen(false);
+  }
+
+  function openEditIncidentModal(incident) {
+    setEditingIncident(incident);
+    setEditModalOpen(true);
+  }
+
+  function closeEditIncidentModal() {
+    setEditModalOpen(false);
+    setEditingIncident(null);
+  }
+
+  function openEditTaskModal(task) {
+    setEditingTask(task);
+    setEditTaskModalOpen(true);
+  }
+
+  function closeEditTaskModal() {
+    setEditTaskModalOpen(false);
+    setEditingTask(null);
+  }
+
+  function openCloseIncidentModal(incident) {
+    setIncidentToClose(incident);
+    setConfirmCloseOpen(true);
+  }
+
+  function closeCloseIncidentModal() {
+    if (closingId) return;
+    setConfirmCloseOpen(false);
+    setIncidentToClose(null);
   }
 
   function authHeaders(extra = {}) {
@@ -514,27 +574,27 @@ export default function Incidents() {
     setConfirmDeleteItem(null);
   }
 
-  async function closeIncident(id) {
-    const ok = window.confirm(
-      "¿Seguro que quieres marcar este incidente como resuelto?"
-    );
+  async function confirmCloseIncident() {
+    if (!incidentToClose?.id) return;
 
-    if (!ok) return;
-
-    setClosingId(id);
+    setClosingId(incidentToClose.id);
 
     try {
-      const res = await fetch(`${API_URL}/workshop/incidents/${id}/close`, {
-        method: "PATCH",
-        headers: authHeaders(),
-        credentials: "include",
-      });
+      const res = await fetch(
+        `${API_URL}/workshop/incidents/${incidentToClose.id}/close`,
+        {
+          method: "PATCH",
+          headers: authHeaders(),
+          credentials: "include",
+        }
+      );
 
       if (!res.ok) {
         const text = await res.text().catch(() => "");
         throw new Error(text || `Error HTTP ${res.status}`);
       }
 
+      closeCloseIncidentModal();
       await loadAll();
     } catch (err) {
       window.alert(err?.message || "No se pudo cerrar el incidente");
@@ -641,6 +701,20 @@ export default function Incidents() {
   const confirmDeleteLoading =
     (confirmDeleteType === "incident" && !!deletingIncidentId) ||
     (confirmDeleteType === "task" && !!deletingTaskId);
+
+  const confirmCloseDescription = (
+    <div className="inc-confirm-box">
+      <div className="inc-confirm-text">
+        Este incidente se marcará como resuelto y pasará a historial.
+      </div>
+
+      <div className="inc-confirm-card">
+        <div>
+          <b>Vehículo:</b> {fmtVehicle(incidentToClose)}
+        </div>
+      </div>
+    </div>
+  );
 
   const filteredIncidents = useMemo(() => {
     const q = String(query || "").trim().toLowerCase();
@@ -916,6 +990,15 @@ export default function Incidents() {
                             {canShowOperationalActions && (
                               <>
                                 <button
+                                  type="button"
+                                  className="btn-primary inc-action-btn"
+                                  onClick={() => openEditIncidentModal(incident)}
+                                  disabled={isDeleting || isClosing}
+                                >
+                                  Editar incidente
+                                </button>
+
+                                <button
                                   className="btn-primary inc-action-btn"
                                   onClick={() => openAssignModal(incident)}
                                   disabled={isDeleting}
@@ -927,7 +1010,7 @@ export default function Incidents() {
 
                                 <button
                                   className="btn-secondary inc-action-btn"
-                                  onClick={() => closeIncident(incident.id)}
+                                  onClick={() => openCloseIncidentModal(incident)}
                                   disabled={isClosing || isDeleting}
                                 >
                                   {isClosing
@@ -995,6 +1078,8 @@ export default function Incidents() {
                       taskStatus === "TERMINADA" || taskStatus === "CANCELADA";
 
                     const canShowDeleteTask = canDeleteWorkshopTask;
+                    const canShowEditTask = canEditWorkshopTask && !isHistoryTask;
+
                     const observations = getTaskObservations(task);
                     const { cleanText, imageUrl } =
                       parseObservationWithImage(observations);
@@ -1095,16 +1180,29 @@ export default function Incidents() {
                           ) : null}
                         </div>
 
-                        {canShowDeleteTask ? (
+                        {(canShowEditTask || canShowDeleteTask) ? (
                           <div className="inc-actions">
-                            <button
-                              type="button"
-                              onClick={() => openDeleteTaskModal(task)}
-                              disabled={isDeletingTask}
-                              className="inc-danger-btn inc-action-btn"
-                            >
-                              {isDeletingTask ? "Eliminando..." : "Eliminar"}
-                            </button>
+                            {canShowEditTask ? (
+                              <button
+                                type="button"
+                                onClick={() => openEditTaskModal(task)}
+                                disabled={isDeletingTask}
+                                className="btn-primary inc-action-btn"
+                              >
+                                Editar tarea
+                              </button>
+                            ) : null}
+
+                            {canShowDeleteTask ? (
+                              <button
+                                type="button"
+                                onClick={() => openDeleteTaskModal(task)}
+                                disabled={isDeletingTask}
+                                className="inc-danger-btn inc-action-btn"
+                              >
+                                {isDeletingTask ? "Eliminando..." : "Eliminar"}
+                              </button>
+                            ) : null}
                           </div>
                         ) : null}
 
@@ -1133,6 +1231,16 @@ export default function Incidents() {
         }}
       />
 
+      <IncidentModal
+        open={editModalOpen}
+        incident={editingIncident}
+        onClose={closeEditIncidentModal}
+        onSaved={() => {
+          closeEditIncidentModal();
+          loadAll();
+        }}
+      />
+
       <AssignIncidentModal
         open={assignOpen}
         incident={selectedIncident}
@@ -1152,6 +1260,20 @@ export default function Incidents() {
         }}
       />
 
+      <CreateWorkshopTaskModal
+        open={editTaskModalOpen}
+        task={editingTask}
+        onClose={closeEditTaskModal}
+        onCreated={() => {
+          closeEditTaskModal();
+          loadAll();
+        }}
+        onSaved={() => {
+          closeEditTaskModal();
+          loadAll();
+        }}
+      />
+
       <ConfirmModal
         open={confirmDeleteOpen}
         onClose={closeDeleteModal}
@@ -1161,6 +1283,17 @@ export default function Incidents() {
         title={confirmDeleteTitle}
         description={confirmDeleteDescription}
         confirmText="Sí, eliminar"
+        cancelText="Cancelar"
+      />
+
+      <ConfirmModal
+        open={confirmCloseOpen}
+        onClose={closeCloseIncidentModal}
+        onConfirm={confirmCloseIncident}
+        loading={!!closingId}
+        title="Marcar incidente como resuelto"
+        description={confirmCloseDescription}
+        confirmText="Sí, marcar como resuelto"
         cancelText="Cancelar"
       />
 

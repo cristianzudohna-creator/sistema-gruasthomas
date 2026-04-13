@@ -1,13 +1,23 @@
 // ✅ Archivo: src/pages/CreateWorkshopTaskModal.jsx
 // ✅ Crear tarea de taller independiente del incidente
+// ✅ Editar tarea de taller independiente
 // ✅ Permite asignar responsable y apoyos
 // ✅ Permite seleccionar vehículo
 // ✅ Guarda con POST /workshop/tasks
+// ✅ Edita con PATCH /workshop/tasks/:id
 // ✅ Envía empresa, createdById y helperIds
 // ✅ Ajustado al backend actual
 // ✅ FIX: ahora también incluye JEFE_TALLER
 // ✅ FIX NUEVO: ahora también incluye SUPERVISOR
 // ✅ NUEVO: buscador de vehículo por patente / marca-modelo
+// ✅ FIX NUEVO:
+// - la lista de vehículos solo aparece cuando escriben algo
+// - al abrir el modal no muestra vehículos automáticamente
+// - si ya se seleccionó un vehículo, oculta la lista
+// ✅ NUEVO AHORA:
+// - soporta prop task para editar
+// - carga descripción, vehículo, responsable y apoyos
+// - cambia título y botón según modo crear/editar
 
 import { useEffect, useMemo, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -83,13 +93,42 @@ function pickEmpresa(value) {
   return "";
 }
 
+function getTaskResponsibleId(task) {
+  if (!task) return "";
+
+  const assignments = Array.isArray(task?.assignments) ? task.assignments : [];
+
+  const responsible = assignments.find(
+    (a) => norm(a?.role) === "RESPONSABLE" && a?.user?.id
+  );
+
+  if (responsible?.user?.id) return String(responsible.user.id);
+  if (task?.assignedTo?.id) return String(task.assignedTo.id);
+  if (task?.assignedToId) return String(task.assignedToId);
+
+  return "";
+}
+
+function getTaskHelperIds(task) {
+  if (!task) return [];
+
+  const assignments = Array.isArray(task?.assignments) ? task.assignments : [];
+
+  return assignments
+    .filter((a) => norm(a?.role) === "APOYO" && a?.user?.id)
+    .map((a) => String(a.user.id));
+}
+
 export default function CreateWorkshopTaskModal({
   open,
   onClose,
   onCreated,
+  onSaved,
+  task = null,
 }) {
   const token = useMemo(() => getToken(), []);
   const currentUser = useMemo(() => getUserFromStorage(), []);
+  const isEditMode = Boolean(task?.id);
 
   const [saving, setSaving] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(false);
@@ -152,9 +191,7 @@ export default function CreateWorkshopTaskModal({
   const filteredVehicles = useMemo(() => {
     const q = String(vehicleQuery || "").trim().toLowerCase();
 
-    if (!q) {
-      return availableVehicles.slice(0, 12);
-    }
+    if (!q) return [];
 
     return availableVehicles
       .filter((vehicle) => {
@@ -230,16 +267,37 @@ export default function CreateWorkshopTaskModal({
 
   useEffect(() => {
     if (!open) return;
-    resetForm();
     loadOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   useEffect(() => {
-    if (selectedVehicle) {
+    if (!open) return;
+
+    if (isEditMode && task) {
+      const taskVehicle =
+        task?.vehicle && task?.vehicle?.id
+          ? task.vehicle
+          : availableVehicles.find((v) => String(v?.id) === String(task?.vehicleId));
+
+      setDescripcion(String(task?.descripcion || "").trim());
+      setVehicleId(String(taskVehicle?.id || task?.vehicleId || ""));
+      setVehicleQuery(taskVehicle ? fmtVehicle(taskVehicle) : "");
+      setResponsableId(getTaskResponsibleId(task));
+      setHelperIds(getTaskHelperIds(task));
+      setError("");
+      return;
+    }
+
+    resetForm();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isEditMode, task, availableVehicles.length]);
+
+  useEffect(() => {
+    if (selectedVehicle && !String(vehicleQuery || "").trim()) {
       setVehicleQuery(fmtVehicle(selectedVehicle));
     }
-  }, [selectedVehicle]);
+  }, [selectedVehicle, vehicleQuery]);
 
   function toggleHelper(id) {
     setHelperIds((prev) => {
@@ -260,9 +318,11 @@ export default function CreateWorkshopTaskModal({
     e.preventDefault();
 
     const cleanDescripcion = String(descripcion || "").trim();
-    const createdById = currentUser?.id ? String(currentUser.id) : "";
+    const createdById =
+      currentUser?.id ? String(currentUser.id) : String(task?.createdById || "");
     const empresa =
       pickEmpresa(selectedVehicle?.empresa) ||
+      pickEmpresa(task?.empresa) ||
       pickEmpresa(currentUser?.empresa);
 
     if (!cleanDescripcion) {
@@ -301,7 +361,7 @@ export default function CreateWorkshopTaskModal({
       const body = {
         titulo: "",
         descripcion: cleanDescripcion,
-        status: "PENDIENTE",
+        status: task?.status || "PENDIENTE",
         vehicleId: String(vehicleId),
         assignedToId: String(responsableId),
         helperIds: filteredHelpers,
@@ -309,8 +369,14 @@ export default function CreateWorkshopTaskModal({
         createdById,
       };
 
-      const res = await fetch(`${API_URL}/workshop/tasks`, {
-        method: "POST",
+      const url = isEditMode
+        ? `${API_URL}/workshop/tasks/${task.id}`
+        : `${API_URL}/workshop/tasks`;
+
+      const method = isEditMode ? "PATCH" : "POST";
+
+      const res = await fetch(url, {
+        method,
         headers: authHeaders({
           "Content-Type": "application/json",
         }),
@@ -320,14 +386,27 @@ export default function CreateWorkshopTaskModal({
 
       if (!res.ok) {
         const text = await res.text().catch(() => "");
-        throw new Error(text || "No se pudo crear la tarea");
+        throw new Error(
+          text || (isEditMode ? "No se pudo actualizar la tarea" : "No se pudo crear la tarea")
+        );
       }
 
+      const saved = await res.json().catch(() => null);
+
       resetForm();
-      if (onCreated) onCreated();
+
+      if (isEditMode) {
+        if (onSaved) onSaved(saved);
+      } else {
+        if (onCreated) onCreated(saved);
+      }
+
       if (onClose) onClose();
     } catch (err) {
-      setError(err?.message || "No se pudo crear la tarea");
+      setError(
+        err?.message ||
+          (isEditMode ? "No se pudo actualizar la tarea" : "No se pudo crear la tarea")
+      );
     } finally {
       setSaving(false);
     }
@@ -337,14 +416,17 @@ export default function CreateWorkshopTaskModal({
     (w) => String(w?.id) !== String(responsableId)
   );
 
+  const trimmedVehicleQuery = String(vehicleQuery || "").trim();
+
   const showVehicleResults =
-    !selectedVehicle || vehicleQuery !== fmtVehicle(selectedVehicle);
+    trimmedVehicleQuery.length > 0 &&
+    (!selectedVehicle || vehicleQuery !== fmtVehicle(selectedVehicle));
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title="Crear tarea de taller"
+      title={isEditMode ? "Editar tarea de taller" : "Crear tarea de taller"}
       size="lg"
     >
       <form onSubmit={handleSubmit} style={{ display: "grid", gap: 16 }}>
@@ -571,7 +653,13 @@ export default function CreateWorkshopTaskModal({
             className="btn-primary"
             disabled={saving || loadingOptions}
           >
-            {saving ? "Guardando..." : "Crear tarea"}
+            {saving
+              ? isEditMode
+                ? "Guardando..."
+                : "Creando..."
+              : isEditMode
+              ? "Guardar cambios"
+              : "Crear tarea"}
           </button>
         </div>
       </form>

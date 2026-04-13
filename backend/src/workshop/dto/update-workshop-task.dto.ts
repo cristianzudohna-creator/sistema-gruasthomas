@@ -2,6 +2,7 @@
 
 import { Type } from "class-transformer";
 import {
+  IsArray,
   IsEnum,
   IsNumber,
   IsOptional,
@@ -36,6 +37,12 @@ export class UpdateWorkshopTaskDto {
   @IsOptional()
   @IsUUID()
   assignedToId?: string;
+
+  // ✅ NUEVO 🔥 SOPORTE APOYOS
+  @IsOptional()
+  @IsArray()
+  @IsUUID("all", { each: true })
+  helperIds?: string[];
 
   @IsOptional()
   @IsUUID()

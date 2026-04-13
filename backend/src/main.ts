@@ -36,7 +36,6 @@ async function bootstrap() {
 
   app.enableCors({
     origin: (origin, callback) => {
-      // permite tools sin Origin (curl/postman)
       if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
       return callback(new Error(`CORS blocked for origin: ${origin}`), false);
@@ -61,6 +60,8 @@ async function bootstrap() {
     "branding",
     "workshop-parts",
     "workshop-evidence",
+    "workshop-supplies",
+    "incidents",
   ];
 
   for (const folder of folders) {
@@ -82,6 +83,5 @@ async function bootstrap() {
 }
 
 bootstrap();
-
 
 

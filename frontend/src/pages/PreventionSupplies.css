@@ -1,0 +1,327 @@
+/* =========================
+   CONTENEDOR GENERAL
+========================= */
+.ps-page {
+  padding: 16px;
+  display: grid;
+  gap: 16px;
+}
+
+/* =========================
+   HEADER
+========================= */
+.ps-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #fff;
+  border-radius: 20px;
+  padding: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.ps-title {
+  margin: 0;
+  font-size: clamp(20px, 4vw, 28px);
+  font-weight: 900;
+}
+
+.ps-subtitle {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: #64748b;
+}
+
+.ps-refresh-btn {
+  align-self: flex-start;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: none;
+  background: #0f172a;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* =========================
+   CARD PRINCIPAL
+========================= */
+.ps-card {
+  background: #fff;
+  border-radius: 20px;
+  padding: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  display: grid;
+  gap: 16px;
+}
+
+/* =========================
+   TOOLBAR
+========================= */
+.ps-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ps-section-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.ps-section-subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.ps-filter-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ps-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.ps-select {
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid #d8dee9;
+  padding: 0 10px;
+  font-size: 14px;
+}
+
+/* =========================
+   LISTA
+========================= */
+.ps-list {
+  display: grid;
+  gap: 14px;
+}
+
+/* =========================
+   CARD ITEM
+========================= */
+.ps-item {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 18px;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+/* HEADER ITEM */
+.ps-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.ps-item-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+/* =========================
+   BADGES
+========================= */
+.ps-badge {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ps-badge.is-pending {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.ps-badge.is-bought {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.ps-badge.is-cancelled {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+/* =========================
+   META INFO
+========================= */
+.ps-meta-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.ps-meta-grid--two {
+  grid-template-columns: 1fr;
+}
+
+.ps-meta-block {
+  background: #f8fafc;
+  border-radius: 14px;
+  padding: 10px;
+}
+
+.ps-meta-label {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.ps-meta-value {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ps-meta-help {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+/* =========================
+   OBSERVACIÓN
+========================= */
+.ps-observation-box {
+  background: #f1f5f9;
+  border-radius: 14px;
+  padding: 10px;
+}
+
+.ps-observation-text {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+
+/* =========================
+   BOTONES
+========================= */
+.ps-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ps-action-btn {
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid #d8dee9;
+  background: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ps-action-btn.is-primary {
+  background: #0f172a;
+  color: #fff;
+  border: none;
+}
+
+.ps-action-btn.is-danger {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: none;
+}
+
+.ps-action-btn.is-muted {
+  background: #e2e8f0;
+  color: #64748b;
+}
+
+/* =========================
+   MODAL FOTO
+========================= */
+.ps-photo-modal {
+  display: flex;
+  justify-content: center;
+}
+
+.ps-photo-preview {
+  max-width: 100%;
+  border-radius: 12px;
+}
+
+/* =========================
+   EMPTY / ERROR
+========================= */
+.ps-empty {
+  text-align: center;
+  padding: 20px;
+  color: #64748b;
+}
+
+.ps-error {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+/* =========================
+   DESKTOP
+========================= */
+@media (min-width: 768px) {
+  .ps-toolbar {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .ps-filter-wrap {
+    width: 220px;
+  }
+
+  .ps-meta-grid--two {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .ps-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .ps-action-btn {
+    flex: 1;
+  }
+}
+.ps-topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ps-top-btn {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 14px;
+  border: 1px solid #d8dee9;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.ps-top-btn--danger {
+  background: #fff1f2;
+  border-color: #fecdd3;
+  color: #be123c;
+}
+
+@media (max-width: 768px) {
+  .ps-topbar {
+    flex-direction: column;
+  }
+
+  .ps-top-btn {
+    width: 100%;
+  }
+}

@@ -9,6 +9,7 @@ import {
   IsUUID,
   MaxLength,
   Min,
+  IsIn,
 } from "class-validator";
 
 export class CreateWorkshopTaskPartDto {
@@ -53,4 +54,19 @@ export class CreateWorkshopTaskPartDto {
   @IsString()
   @MaxLength(255)
   fotoNombre?: string;
+
+  // 🔥 NUEVO: estado del insumo
+  @IsOptional()
+  @IsIn(["PENDIENTE_COMPRA", "COMPRADO"])
+  estado?: string;
+
+  // 🔥 NUEVO: quien solicita (JEFE_TALLER / SUPERADMIN)
+  @IsOptional()
+  @IsUUID()
+  solicitadoPorId?: string;
+
+  // 🔥 NUEVO: quien compra (PREVENCION)
+  @IsOptional()
+  @IsUUID()
+  compradoPorId?: string;
 }

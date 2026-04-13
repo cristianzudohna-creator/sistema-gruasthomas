@@ -1,4 +1,9 @@
-// ✅ Archivo: src/workshop/workshop-access.guard.ts (COMPLETO + FIX PREVENCION)
+// ✅ Archivo: src/workshop/workshop-access.guard.ts
+// ✅ COMPLETO + FIX PREVENCION + INSUMOS LIBRES
+// ✅ NUEVO:
+// - SUPERVISOR_TERRENO puede CREAR y VER incidentes
+// - SUPERVISOR_TERRENO NO es supervisor de taller
+// - SUPERVISOR_TERRENO NO puede gestionar tareas, horas extras ni solicitudes de insumos
 
 import {
   CanActivate,
@@ -79,6 +84,7 @@ export class WorkshopAccessGuard implements CanActivate {
     const isIncidentsRoute = originalUrl.includes('/workshop/incidents');
     const isTasksRoute = originalUrl.includes('/workshop/tasks');
     const isPartsRoute = originalUrl.includes('/workshop/parts');
+    const isSuppliesRoute = originalUrl.includes('/workshop/supplies');
 
     const isExtraHoursRoute = originalUrl.includes('/workshop/extra-hours');
     const isExtraHoursMineRoute =
@@ -123,6 +129,23 @@ export class WorkshopAccessGuard implements CanActivate {
       method === 'PATCH' &&
       /\/workshop\/tasks\/[^/]+(?:\?.*)?$/.test(originalUrl);
 
+    // ✅ INSUMOS LIBRES
+    const isSupplyRequestRoute =
+      method === 'POST' &&
+      /\/workshop\/supplies\/request(?:\?.*)?$/.test(originalUrl);
+
+    const isSupplyListRoute =
+      method === 'GET' &&
+      /\/workshop\/supplies(?:\?.*)?$/.test(originalUrl);
+
+    const isSupplyPurchaseRoute =
+      method === 'PATCH' &&
+      /\/workshop\/supplies\/[^/]+\/purchase(?:\?.*)?$/.test(originalUrl);
+
+    const isSupplyCancelRoute =
+      method === 'PATCH' &&
+      /\/workshop\/supplies\/[^/]+\/cancel(?:\?.*)?$/.test(originalUrl);
+
     const isAdquisiciones =
       role === 'TRABAJADOR' && workerType === 'ADQUISICIONES';
 
@@ -133,9 +156,11 @@ export class WorkshopAccessGuard implements CanActivate {
     const isControlFlota = role === 'CONTROL_FLOTA';
     const isAdministradora = role === 'ADMINISTRADORA';
 
-    // ✅ NUEVO: PREVENCIÓN
     const isPrevencion =
       role === 'TRABAJADOR' && workerType === 'PREVENCION';
+
+    const isSupervisorTerreno =
+      role === 'TRABAJADOR' && workerType === 'SUPERVISOR_TERRENO';
 
     const adquisicionesAllowedStatuses = [
       'EN_COMPRA',
@@ -147,8 +172,6 @@ export class WorkshopAccessGuard implements CanActivate {
     // HORAS EXTRAS
     // ============================
 
-    // GET /workshop/extra-hours/mine
-    // MECANICO + AYUDANTE_DE_MECANICO + JEFE_TALLER + SUPERVISOR
     if (isExtraHoursMineRoute) {
       if (role === 'TRABAJADOR' && isExtraHoursWorker(workerType)) {
         return true;
@@ -163,8 +186,6 @@ export class WorkshopAccessGuard implements CanActivate {
       );
     }
 
-    // GET /workshop/extra-hours/jefe
-    // JEFE_TALLER + SUPERVISOR + CONTROL_FLOTA
     if (isExtraHoursJefeRoute) {
       if (isJefeTaller || isControlFlota) {
         return true;
@@ -175,8 +196,6 @@ export class WorkshopAccessGuard implements CanActivate {
       );
     }
 
-    // GET /workshop/extra-hours/administracion
-    // ADMINISTRADORA
     if (isExtraHoursAdminRoute) {
       if (isAdministradora) {
         return true;
@@ -187,8 +206,6 @@ export class WorkshopAccessGuard implements CanActivate {
       );
     }
 
-    // GET /workshop/extra-hours/pdf/:workerId
-    // ADMINISTRADORA
     if (isExtraHoursPdfRoute) {
       if (isAdministradora) {
         return true;
@@ -199,9 +216,6 @@ export class WorkshopAccessGuard implements CanActivate {
       );
     }
 
-    // Resto de /workshop/extra-hours
-    // GET / POST / PATCH / DELETE
-    // JEFE_TALLER + SUPERVISOR + CONTROL_FLOTA + trabajadores de taller
     if (isExtraHoursRoute) {
       if (isControlFlota) return true;
 
@@ -217,10 +231,9 @@ export class WorkshopAccessGuard implements CanActivate {
     }
 
     // ============================
-    // CREAR INCIDENTE
-    // POST /workshop/incidents
-    // CONTROL_FLOTA + OPERADOR/RIGGER/PREVENCION + JEFE_TALLER + SUPERVISOR
+    // INCIDENTES
     // ============================
+
     if (method === 'POST' && isIncidentsRoute) {
       if (role === 'CONTROL_FLOTA') return true;
 
@@ -231,7 +244,8 @@ export class WorkshopAccessGuard implements CanActivate {
         (
           workerType === 'OPERADOR' ||
           workerType === 'RIGGER' ||
-          workerType === 'PREVENCION'
+          workerType === 'PREVENCION' ||
+          workerType === 'SUPERVISOR_TERRENO'
         )
       ) {
         return true;
@@ -242,11 +256,6 @@ export class WorkshopAccessGuard implements CanActivate {
       );
     }
 
-    // ============================
-    // VER INCIDENTES
-    // GET /workshop/incidents*
-    // CONTROL_FLOTA + trabajadores de taller + PREVENCION
-    // ============================
     if (method === 'GET' && isIncidentsRoute) {
       if (role === 'CONTROL_FLOTA') return true;
 
@@ -254,8 +263,11 @@ export class WorkshopAccessGuard implements CanActivate {
         return true;
       }
 
-      // ✅ NUEVO: PREVENCIÓN sí puede ver incidentes
       if (isPrevencion) {
+        return true;
+      }
+
+      if (isSupervisorTerreno) {
         return true;
       }
 
@@ -264,11 +276,6 @@ export class WorkshopAccessGuard implements CanActivate {
       );
     }
 
-    // ============================
-    // ACTUALIZAR / CERRAR INCIDENTE
-    // PATCH /workshop/incidents*
-    // CONTROL_FLOTA + JEFE_TALLER + SUPERVISOR
-    // ============================
     if (method === 'PATCH' && isIncidentsRoute) {
       if (role === 'CONTROL_FLOTA') return true;
 
@@ -281,11 +288,6 @@ export class WorkshopAccessGuard implements CanActivate {
       );
     }
 
-    // ============================
-    // ELIMINAR INCIDENTE
-    // DELETE /workshop/incidents/:id
-    // CONTROL_FLOTA + JEFE_TALLER + SUPERVISOR
-    // ============================
     if (method === 'DELETE' && isIncidentsRoute) {
       if (role === 'CONTROL_FLOTA') return true;
 
@@ -299,10 +301,9 @@ export class WorkshopAccessGuard implements CanActivate {
     }
 
     // ============================
-    // VER SOLICITUDES DE REPUESTO
-    // GET /workshop/tasks/requested-parts
-    // ADQUISICIONES
+    // REPUESTOS / ADQUISICIONES
     // ============================
+
     if (method === 'GET' && isRequestedPartsRoute) {
       if (isAdquisiciones) return true;
 
@@ -312,10 +313,9 @@ export class WorkshopAccessGuard implements CanActivate {
     }
 
     // ============================
-    // CREAR TAREA DE TALLER
-    // POST /workshop/tasks
-    // JEFE_TALLER + SUPERVISOR
+    // TAREAS
     // ============================
+
     if (isBaseTasksPostRoute) {
       if (isJefeTaller) {
         return true;
@@ -326,16 +326,6 @@ export class WorkshopAccessGuard implements CanActivate {
       );
     }
 
-    // ============================
-    // ACCIONES DE TRABAJADOR SOBRE TAREA
-    // PATCH /workshop/tasks/:id/start
-    // PATCH /workshop/tasks/:id/finish
-    // POST  /workshop/tasks/request-part
-    //
-    // Trabajadores de taller
-    // La validación fina de RESPONSABLE vs APOYO
-    // se hace en el service.
-    // ============================
     if (isTaskStartRoute || isTaskFinishRoute || isTaskRequestPartRoute) {
       if (role === 'TRABAJADOR' && isWorkshopWorker(workerType)) {
         return true;
@@ -350,11 +340,6 @@ export class WorkshopAccessGuard implements CanActivate {
       );
     }
 
-    // ============================
-    // VER TAREAS
-    // GET /workshop/tasks*
-    // CONTROL_FLOTA + trabajadores de taller
-    // ============================
     if (method === 'GET' && isTasksRoute) {
       if (role === 'CONTROL_FLOTA') return true;
 
@@ -367,12 +352,6 @@ export class WorkshopAccessGuard implements CanActivate {
       );
     }
 
-    // ============================
-    // ACTUALIZAR TAREA BASE
-    // PATCH /workshop/tasks/:id
-    // CONTROL_FLOTA + JEFE_TALLER + SUPERVISOR
-    // ADQUISICIONES solo para estados de compra
-    // ============================
     if (isBaseTasksPatchRoute) {
       if (role === 'CONTROL_FLOTA') return true;
 
@@ -395,11 +374,6 @@ export class WorkshopAccessGuard implements CanActivate {
       );
     }
 
-    // ============================
-    // CERRAR TAREA POR RUTA ADMIN
-    // PATCH /workshop/tasks/:id/close
-    // CONTROL_FLOTA + JEFE_TALLER + SUPERVISOR
-    // ============================
     if (isTaskCloseRoute) {
       if (role === 'CONTROL_FLOTA') return true;
 
@@ -412,11 +386,6 @@ export class WorkshopAccessGuard implements CanActivate {
       );
     }
 
-    // ============================
-    // ELIMINAR TAREAS
-    // DELETE /workshop/tasks/:id
-    // CONTROL_FLOTA + JEFE_TALLER + SUPERVISOR
-    // ============================
     if (method === 'DELETE' && isTasksRoute) {
       if (role === 'CONTROL_FLOTA') return true;
 
@@ -430,10 +399,58 @@ export class WorkshopAccessGuard implements CanActivate {
     }
 
     // ============================
-    // AGREGAR REPUESTOS POR RUTA ADMIN
-    // POST /workshop/parts
-    // CONTROL_FLOTA + JEFE_TALLER + SUPERVISOR
+    // INSUMOS -> PREVENCION
     // ============================
+
+    // POST /workshop/supplies/request
+    // JEFE_TALLER + SUPERVISOR
+    if (isSupplyRequestRoute) {
+      if (isJefeTaller) {
+        return true;
+      }
+
+      throw new ForbiddenException(
+        'No tienes permisos para solicitar insumos',
+      );
+    }
+
+    // GET /workshop/supplies
+    // PREVENCION + JEFE_TALLER + SUPERVISOR + CONTROL_FLOTA
+    if (isSupplyListRoute) {
+      if (isPrevencion) return true;
+      if (isJefeTaller) return true;
+      if (isControlFlota) return true;
+
+      throw new ForbiddenException(
+        'No tienes permisos para visualizar solicitudes de insumos',
+      );
+    }
+
+    // PATCH /workshop/supplies/:id/purchase
+    // PREVENCION
+    if (isSupplyPurchaseRoute) {
+      if (isPrevencion) return true;
+
+      throw new ForbiddenException(
+        'No tienes permisos para marcar insumos como comprados',
+      );
+    }
+
+    // PATCH /workshop/supplies/:id/cancel
+    // JEFE_TALLER + SUPERVISOR + CONTROL_FLOTA
+    if (isSupplyCancelRoute) {
+      if (isJefeTaller) return true;
+      if (isControlFlota) return true;
+
+      throw new ForbiddenException(
+        'No tienes permisos para cancelar solicitudes de insumos',
+      );
+    }
+
+    // ============================
+    // REPUESTOS ADMIN
+    // ============================
+
     if (method === 'POST' && isPartsRoute) {
       if (role === 'CONTROL_FLOTA') return true;
 
@@ -446,11 +463,6 @@ export class WorkshopAccessGuard implements CanActivate {
       );
     }
 
-    // ============================
-    // ELIMINAR REPUESTOS
-    // DELETE /workshop/parts/:id
-    // JEFE_TALLER + SUPERVISOR
-    // ============================
     if (method === 'DELETE' && isPartsRoute) {
       if (isJefeTaller) {
         return true;

@@ -1336,9 +1336,18 @@ export class WorkOrdersService {
       }
 
       const wt = String((conductorUser as any).workerType || "").toUpperCase();
-      if (wt && wt !== "OPERADOR") {
-        throw new BadRequestException("El usuario seleccionado no es tipo OPERADOR.");
-      }
+
+const allowedOperatorTypes = [
+  "OPERADOR",
+  "SUPERVISOR",
+  "SUPERVISOR_TERRENO",
+];
+
+if (!allowedOperatorTypes.includes(wt)) {
+  throw new BadRequestException(
+    "El usuario seleccionado no es un tipo válido para Operador."
+  );
+}
     }
 
     const isGlobal = this.isGlobalRole(createdBy);

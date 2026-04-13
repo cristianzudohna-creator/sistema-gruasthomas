@@ -21,6 +21,15 @@
 // - UserFcmToken para múltiples dispositivos por usuario
 // - User.fcmTokens relación inversa
 // - se elimina el uso de fcmToken único en User
+//
+// ✅ NUEVO AHORA:
+// - WorkshopSupplyRequestStatus
+// - WorkshopSupplyRequest
+// - flujo de solicitud LIBRE de insumos para PREVENCION
+// - solicitadoPor / compradoPor
+// - sin relación con WorkshopTask
+// - sin cantidad
+// - con foto
 
 datasource db {
   provider = "postgresql"
@@ -118,6 +127,7 @@ enum WorkerType {
   PREVENCION
   SOLDADOR
   SUPERVISOR
+  SUPERVISOR_TERRENO
 
   OTRO
 }
@@ -171,10 +181,16 @@ enum WorkshopTaskPriority {
   CRITICA
 }
 
-// ✅ NUEVO: múltiples personas por tarea
 enum WorkshopTaskAssignmentRole {
   RESPONSABLE
   APOYO
+}
+
+// ✅ NUEVO: solicitudes de insumos libres
+enum WorkshopSupplyRequestStatus {
+  PENDIENTE
+  COMPRADO
+  CANCELADO
 }
 
 // =========================
@@ -225,6 +241,10 @@ model User {
   workshopTasksAssigned   WorkshopTask[]            @relation("WorkshopTaskAssignedTo")
   workshopTasksClosed     WorkshopTask[]            @relation("WorkshopTaskClosedBy")
   workshopTaskAssignments WorkshopTaskAssignment[]
+
+  // ✅ NUEVO: solicitudes de insumos libres
+  supplyRequestsCreated WorkshopSupplyRequest[] @relation("WorkshopSupplyRequestedBy")
+  supplyRequestsBought  WorkshopSupplyRequest[] @relation("WorkshopSupplyBoughtBy")
 
   extraHourReports       WorkshopExtraHourReport[] @relation("WorkshopExtraHourTrabajador")
   signedExtraHourReports WorkshopExtraHourReport[] @relation("WorkshopExtraHourSignedBy")
@@ -742,7 +762,6 @@ model WorkshopTask {
   trabajoRealizado String?
   observaciones    String?
 
-  // ✅ NUEVO: problema libre de repuesto (Adquisiciones)
   problemaRepuesto String?
 
   startedAt DateTime?
@@ -809,6 +828,46 @@ model WorkshopTaskPart {
   observacion String?
 
   @@index([workshopTaskId])
+  @@index([nombre])
+}
+
+// =========================
+// SOLICITUDES LIBRES DE INSUMOS TALLER -> PREVENCION
+// =========================
+
+model WorkshopSupplyRequest {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  empresa Empresa
+
+  nombre      String
+  observacion String?
+
+  fotoUrl      String?
+  filePath     String?
+  originalName String?
+  mimeType     String?
+  sizeBytes    Int?
+
+  estado WorkshopSupplyRequestStatus @default(PENDIENTE)
+
+  solicitadoPorId String
+  solicitadoPor   User @relation("WorkshopSupplyRequestedBy", fields: [solicitadoPorId], references: [id], onDelete: Restrict)
+
+  compradoPorId String?
+  compradoPor   User? @relation("WorkshopSupplyBoughtBy", fields: [compradoPorId], references: [id], onDelete: SetNull)
+
+  solicitadoAt DateTime @default(now())
+  compradoAt   DateTime?
+
+  @@index([empresa])
+  @@index([estado])
+  @@index([solicitadoPorId])
+  @@index([compradoPorId])
+  @@index([solicitadoAt])
+  @@index([compradoAt])
   @@index([nombre])
 }
 

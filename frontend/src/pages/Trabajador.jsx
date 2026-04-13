@@ -5,6 +5,7 @@
 // ✅ NUEVO:
 // - Filtro por ROL (ALL/TRABAJADOR/CONTROL_FLOTA/ADMINISTRADORA/SUPERADMIN)
 // - Cards por tipo (Operadores/Riggers) cuentan sobre el set global SOLO cuando aplica
+// - Agregado SUPERVISOR_TERRENO
 // ✅ ESTÁNDAR:
 // - API_URL dinámico
 // - credentials: "include" en TODOS los fetch
@@ -68,8 +69,10 @@ function workerTypeLabel(v) {
     RIGGER: "Rigger",
     OPERADOR: "Operador",
     MECANICO: "Mecánico",
+    JEFE_TALLER: "Jefe de taller",
 
     ADMINISTRACION: "Administración",
+    ADQUISICIONES: "Adquisiciones",
     ASEO: "Aseo",
     AYUDANTE_DE_MECANICO: "Ayudante de mecánico",
     CASA_PARTICULAR: "Casa particular",
@@ -78,7 +81,8 @@ function workerTypeLabel(v) {
     NOCHERO: "Nochero",
     PREVENCION: "Prevención",
     SOLDADOR: "Soldador",
-    SUPERVISOR: "Supervisor",
+    SUPERVISOR: "Supervisor taller mecánico",
+    SUPERVISOR_TERRENO: "Supervisor de terreno",
 
     OTRO: "Otro",
   };
@@ -667,7 +671,9 @@ export default function Trabajador() {
             <option value="CONDUCTOR">Conductor</option>
             <option value="MECANICO">Mecánico</option>
 
+            <option value="JEFE_TALLER">Jefe de taller</option>
             <option value="ADMINISTRACION">Administración</option>
+            <option value="ADQUISICIONES">Adquisiciones</option>
             <option value="ASEO">Aseo</option>
             <option value="AYUDANTE_DE_MECANICO">Ayudante de mecánico</option>
             <option value="CASA_PARTICULAR">Casa particular</option>
@@ -676,7 +682,8 @@ export default function Trabajador() {
             <option value="NOCHERO">Nochero</option>
             <option value="PREVENCION">Prevención</option>
             <option value="SOLDADOR">Soldador</option>
-            <option value="SUPERVISOR">Supervisor</option>
+            <option value="SUPERVISOR">Supervisor taller mecánico</option>
+            <option value="SUPERVISOR_TERRENO">Supervisor de terreno</option>
 
             <option value="OTRO">Otro</option>
             <option value="NONE">Sin tipo</option>

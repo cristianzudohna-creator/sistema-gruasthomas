@@ -32,6 +32,10 @@
 //
 // ✅ CAMBIO NUEVO:
 // - "Detalle del servicio" YA NO es obligatorio
+//
+// ✅ NUEVO:
+// - En "Operador" ahora aparecen usuarios con workerType:
+//   OPERADOR, SUPERVISOR y SUPERVISOR_TERRENO
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -146,6 +150,10 @@ async function apiUploadWorkOrderPhotos(workOrderId, files) {
 ========================= */
 function normalizeText(s) {
   return String(s || "").trim();
+}
+
+function normalizeEnum(s) {
+  return String(s || "").trim().toUpperCase();
 }
 
 function addIf(obj, key, value) {
@@ -801,6 +809,7 @@ function WorkerAutocomplete({
   error,
   empresa,
   workerType,
+  workerTypes = [],
   allowSuperadminBoth = false,
 }) {
   const inputRef = useRef(null);
@@ -813,6 +822,20 @@ function WorkerAutocomplete({
   const debounceRef = useRef(null);
 
   const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
+
+  const allowedWorkerTypes = useMemo(() => {
+    const arr = [];
+
+    if (workerType) arr.push(normalizeEnum(workerType));
+    if (Array.isArray(workerTypes)) {
+      for (const wt of workerTypes) {
+        const up = normalizeEnum(wt);
+        if (up) arr.push(up);
+      }
+    }
+
+    return Array.from(new Set(arr.filter(Boolean)));
+  }, [workerType, workerTypes]);
 
   function updatePos() {
     const el = inputRef.current;
@@ -859,8 +882,12 @@ function WorkerAutocomplete({
       qs.set("activo", "true");
       qs.set("role", "TRABAJADOR");
       qs.set("q", query);
-      qs.set("limit", "12");
-      if (workerType) qs.set("workerType", workerType);
+      qs.set("limit", "20");
+
+      // ✅ solo usamos query backend si viene un solo tipo
+      if (allowedWorkerTypes.length === 1) {
+        qs.set("workerType", allowedWorkerTypes[0]);
+      }
 
       const data = await apiGet(`/users?${qs.toString()}`);
       let list = data?.items || [];
@@ -873,6 +900,13 @@ function WorkerAutocomplete({
       } else if (empresa) {
         const empUp = String(empresa).toUpperCase();
         list = list.filter((u) => String(u?.empresa || "").toUpperCase() === empUp);
+      }
+
+      // ✅ filtro local para múltiples tipos
+      if (allowedWorkerTypes.length > 0) {
+        list = list.filter((u) =>
+          allowedWorkerTypes.includes(normalizeEnum(u?.workerType))
+        );
       }
 
       setItems(list);
@@ -954,7 +988,7 @@ function WorkerAutocomplete({
       setTip("Escribe para buscar (nombre / apellido / rut).");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, empresa, allowSuperadminBoth]);
+  }, [open, empresa, allowSuperadminBoth, JSON.stringify(allowedWorkerTypes)]);
 
   return (
     <div style={{ position: "relative" }}>
@@ -1029,7 +1063,9 @@ function WorkerAutocomplete({
                     }}
                   >
                     <div style={{ fontWeight: 900 }}>{name || u.email}</div>
-                    <div style={{ fontSize: 12, opacity: 0.7 }}>{[rut, emp].filter(Boolean).join(" • ")}</div>
+                    <div style={{ fontSize: 12, opacity: 0.7 }}>
+                      {[rut, emp].filter(Boolean).join(" • ")}
+                    </div>
                   </button>
                 );
               })
@@ -1685,93 +1721,92 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
           </div>
 
           {/* ===== EQUIPO ===== */}
-          {/* ===== EQUIPO ===== */}
-<div className="ot-box">
-  <div className="ot-box-title">Equipo</div>
+          <div className="ot-box">
+            <div className="ot-box-title">Equipo</div>
 
-  {/* fila 1 */}
-  <div className="ot-grid-2">
-    <VehicleAutocomplete
-      label="Patente"
-      placeholder="Escribe para buscar (ej: AB)"
-      value={f.camion}
-      empresa={f.empresa}
-      onChangeValue={(v) => setField("camion", v)}
-      onPickVehicle={(veh) => {
-        const vEmp = String(veh?.empresa || "").toUpperCase();
-        if (vEmp) setField("empresa", vEmp);
-      }}
-      disabled={saving}
-      error={errors.camion}
-    />
+            {/* fila 1 */}
+            <div className="ot-grid-2">
+              <VehicleAutocomplete
+                label="Patente"
+                placeholder="Escribe para buscar (ej: AB)"
+                value={f.camion}
+                empresa={f.empresa}
+                onChangeValue={(v) => setField("camion", v)}
+                onPickVehicle={(veh) => {
+                  const vEmp = String(veh?.empresa || "").toUpperCase();
+                  if (vEmp) setField("empresa", vEmp);
+                }}
+                disabled={saving}
+                error={errors.camion}
+              />
 
-    <WorkerAutocomplete
-      label="Operador"
-      placeholder="Haz click para ver la lista o escribe..."
-      value={f.conductor}
-      onChangeValue={(v) => {
-        setField("conductor", v);
-        setField("conductorId", "");
-      }}
-      onPickUser={(u) => {
-        const name = `${u?.nombre || ""}${u?.apellido ? " " + u.apellido : ""}`.trim();
-        const uEmp = String(u?.empresa || "").toUpperCase();
+              <WorkerAutocomplete
+                label="Operador"
+                placeholder="Haz click para ver la lista o escribe..."
+                value={f.conductor}
+                onChangeValue={(v) => {
+                  setField("conductor", v);
+                  setField("conductorId", "");
+                }}
+                onPickUser={(u) => {
+                  const name = `${u?.nombre || ""}${u?.apellido ? " " + u.apellido : ""}`.trim();
+                  const uEmp = String(u?.empresa || "").toUpperCase();
 
-        if (!isSuperadmin && uEmp && uEmp !== String(f.empresa || "").toUpperCase()) {
-          setField("empresa", uEmp);
-          setField("rigger", "");
-        }
+                  if (!isSuperadmin && uEmp && uEmp !== String(f.empresa || "").toUpperCase()) {
+                    setField("empresa", uEmp);
+                    setField("rigger", "");
+                  }
 
-        setField("conductor", name);
-        setField("conductorId", u?.id || "");
-      }}
-      disabled={saving}
-      error={errors.conductor}
-      workerType="OPERADOR"
-      empresa={f.empresa}
-      allowSuperadminBoth={isSuperadmin}
-    />
-  </div>
+                  setField("conductor", name);
+                  setField("conductorId", u?.id || "");
+                }}
+                disabled={saving}
+                error={errors.conductor}
+                workerTypes={["OPERADOR", "SUPERVISOR", "SUPERVISOR_TERRENO"]}
+                empresa={f.empresa}
+                allowSuperadminBoth={isSuperadmin}
+              />
+            </div>
 
-  {/* fila 2 */}
-  <div className="ot-grid-2" style={{ marginTop: 12 }}>
-    <WorkerAutocomplete
-      label="Rigger (opcional)"
-      placeholder="Escribe para buscar (ej: Aug)"
-      value={f.rigger}
-      onChangeValue={(v) => setField("rigger", v)}
-      onPickUser={(u) => {
-        const name = `${u?.nombre || ""}${u?.apellido ? " " + u.apellido : ""}`.trim();
-        const uEmp = String(u?.empresa || "").toUpperCase();
+            {/* fila 2 */}
+            <div className="ot-grid-2" style={{ marginTop: 12 }}>
+              <WorkerAutocomplete
+                label="Rigger (opcional)"
+                placeholder="Escribe para buscar (ej: Aug)"
+                value={f.rigger}
+                onChangeValue={(v) => setField("rigger", v)}
+                onPickUser={(u) => {
+                  const name = `${u?.nombre || ""}${u?.apellido ? " " + u.apellido : ""}`.trim();
+                  const uEmp = String(u?.empresa || "").toUpperCase();
 
-        if (!isSuperadmin && uEmp && uEmp !== String(f.empresa || "").toUpperCase()) {
-          setField("empresa", uEmp);
-          setField("conductor", "");
-          setField("conductorId", "");
-        }
+                  if (!isSuperadmin && uEmp && uEmp !== String(f.empresa || "").toUpperCase()) {
+                    setField("empresa", uEmp);
+                    setField("conductor", "");
+                    setField("conductorId", "");
+                  }
 
-        setField("rigger", name || "");
-      }}
-      disabled={saving}
-      error={errors.rigger}
-      workerType="RIGGER"
-      empresa={f.empresa}
-      allowSuperadminBoth={isSuperadmin}
-    />
+                  setField("rigger", name || "");
+                }}
+                disabled={saving}
+                error={errors.rigger}
+                workerType="RIGGER"
+                empresa={f.empresa}
+                allowSuperadminBoth={isSuperadmin}
+              />
 
-    <div />
-  </div>
+              <div />
+            </div>
 
-  {/* calendario abajo, igual que editar */}
-  <div style={{ marginTop: 14 }}>
-    <MiniCalendarMulti
-      valueISO={f.diasProgramados}
-      onChangeISO={(arr) => setField("diasProgramados", arr)}
-      disabled={saving}
-      error={errors.diasProgramados}
-    />
-  </div>
-</div>
+            {/* calendario abajo, igual que editar */}
+            <div style={{ marginTop: 14 }}>
+              <MiniCalendarMulti
+                valueISO={f.diasProgramados}
+                onChangeISO={(arr) => setField("diasProgramados", arr)}
+                disabled={saving}
+                error={errors.diasProgramados}
+              />
+            </div>
+          </div>
 
           {/* ✅ FOTOS */}
           <div className="ot-box">

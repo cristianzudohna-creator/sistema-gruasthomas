@@ -86,10 +86,7 @@ export default function TrabajadorModal({
       { value: "MECANICO", label: "Mecánico" },
       { value: "JEFE_TALLER", label: "Jefe de taller" },
       { value: "ADMINISTRACION", label: "Administración" },
-
-      /* 🔧 NUEVO TIPO */
       { value: "ADQUISICIONES", label: "Adquisiciones" },
-
       { value: "ASEO", label: "Aseo" },
       { value: "AYUDANTE_DE_MECANICO", label: "Ayudante de mecánico" },
       { value: "CASA_PARTICULAR", label: "Casa particular" },
@@ -98,7 +95,8 @@ export default function TrabajadorModal({
       { value: "NOCHERO", label: "Nochero" },
       { value: "PREVENCION", label: "Prevención" },
       { value: "SOLDADOR", label: "Soldador" },
-      { value: "SUPERVISOR", label: "Supervisor" },
+      { value: "SUPERVISOR", label: "Supervisor taller mecánico" },
+      { value: "SUPERVISOR_TERRENO", label: "Supervisor de terreno" },
       { value: "OTRO", label: "Otro" },
     ],
     []

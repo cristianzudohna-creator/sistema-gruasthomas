@@ -1,17 +1,11 @@
 // ✅ Archivo: src/pages/IncidentModal.jsx
-// ✅ Modal para crear incidentes
-// ✅ Corregido para usar el componente Modal real
-// ✅ Simplificado: sin tipo, título, severidad, kilometraje ni horómetro
-// ✅ NUEVO: permite tomar/subir foto desde celular o PC
-// ✅ NUEVO: preview y eliminar foto
-// ✅ NUEVO: envía foto en base64 al backend
-// ✅ NUEVO: buscador de vehículo por patente / marca-modelo
-// ✅ FOTO: estilo igual al modal de finalizar tarea
-// ✅ NUEVO: la lista de vehículos solo aparece cuando escriben
-// ✅ FIX AHORA:
-// - usa getToken real desde auth.js
-// - evita inconsistencias de token
-// - mantiene submit controlado por React
+// ✅ Modal para crear y editar incidentes
+// ✅ FIX REAL:
+// - sin título
+// - la foto actual se toma DIRECTO desde incident.fotoUrl
+// - no depende de existingPhotoUrl en state
+// - la foto nueva reemplaza visualmente a la actual
+// - si la actual existe, se ve igual que en la vista principal
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -55,7 +49,73 @@ function fmtVehicle(vehicle) {
   return marcaModelo ? `${patente} · ${marcaModelo}` : patente;
 }
 
-export default function IncidentModal({ open, onClose, onCreated }) {
+function getBackendOrigin() {
+  const api = String(API_URL || "").trim();
+
+  if (api === "/api") {
+    const host = window.location.hostname;
+
+    if (host === "localhost" || host === "127.0.0.1") {
+      return `${window.location.protocol}//${host}:3000`;
+    }
+
+    return window.location.origin;
+  }
+
+  if (api.startsWith("http://") || api.startsWith("https://")) {
+    return api.replace(/\/api\/?$/, "");
+  }
+
+  return window.location.origin;
+}
+
+function buildUploadUrl(imagePath) {
+  const raw = String(imagePath || "").trim();
+  if (!raw) return "";
+
+  if (raw.startsWith("data:image/")) {
+    return raw;
+  }
+
+  if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    return raw;
+  }
+
+  const backendOrigin = getBackendOrigin();
+
+  if (raw.startsWith("/")) {
+    return `${backendOrigin}${raw}`;
+  }
+
+  return `${backendOrigin}/${raw}`;
+}
+
+function prettifyIncidentStatus(value) {
+  const v = norm(value);
+  if (v === "ABIERTO") return "Abierto";
+  if (v === "EN_REVISION") return "En revisión";
+  if (v === "EN_PROCESO") return "En proceso";
+  if (v === "RESUELTO") return "Resuelto";
+  if (v === "CERRADO") return "Cerrado";
+  if (v === "CANCELADO") return "Cancelado";
+  return value || "—";
+}
+
+const INCIDENT_STATUS_OPTIONS = [
+  "ABIERTO",
+  "EN_REVISION",
+  "RESUELTO",
+  "CERRADO",
+  "CANCELADO",
+];
+
+export default function IncidentModal({
+  open,
+  onClose,
+  onCreated,
+  onSaved,
+  incident = null,
+}) {
   const currentUser = useMemo(() => getUserFromStorage(), []);
 
   const takePhotoInputRef = useRef(null);
@@ -66,29 +126,42 @@ export default function IncidentModal({ open, onClose, onCreated }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const isEditMode = Boolean(incident?.id);
+
   const [form, setForm] = useState({
     vehicleId: "",
     descripcion: "",
     ubicacionTexto: "",
+    status: "ABIERTO",
   });
 
   const [vehicleQuery, setVehicleQuery] = useState("");
   const [photoBase64, setPhotoBase64] = useState("");
   const [photoPreview, setPhotoPreview] = useState("");
+  const [removeCurrentPhoto, setRemoveCurrentPhoto] = useState(false);
+  const [currentPhotoFailed, setCurrentPhotoFailed] = useState(false);
+  const [newPhotoFailed, setNewPhotoFailed] = useState(false);
+
+  function resetInputs() {
+    if (takePhotoInputRef.current) takePhotoInputRef.current.value = "";
+    if (galleryInputRef.current) galleryInputRef.current.value = "";
+  }
 
   function resetForm() {
     setForm({
       vehicleId: "",
       descripcion: "",
       ubicacionTexto: "",
+      status: "ABIERTO",
     });
     setVehicleQuery("");
     setPhotoBase64("");
     setPhotoPreview("");
+    setRemoveCurrentPhoto(false);
+    setCurrentPhotoFailed(false);
+    setNewPhotoFailed(false);
     setError("");
-
-    if (takePhotoInputRef.current) takePhotoInputRef.current.value = "";
-    if (galleryInputRef.current) galleryInputRef.current.value = "";
+    resetInputs();
   }
 
   const availableVehicles = useMemo(() => {
@@ -124,18 +197,53 @@ export default function IncidentModal({ open, onClose, onCreated }) {
       .slice(0, 20);
   }, [availableVehicles, vehicleQuery]);
 
+  const currentIncidentPhotoUrl = useMemo(() => {
+    return buildUploadUrl(incident?.fotoUrl);
+  }, [incident?.fotoUrl]);
+
   useEffect(() => {
     if (!open) return;
-    resetForm();
     loadVehicles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   useEffect(() => {
-    if (selectedVehicle) {
-      setVehicleQuery(fmtVehicle(selectedVehicle));
+    if (!open) return;
+
+    if (isEditMode) {
+      const incidentVehicle =
+        incident?.vehicle && incident?.vehicle?.id ? incident.vehicle : null;
+
+      setForm({
+        vehicleId: String(incidentVehicle?.id || ""),
+        descripcion: String(incident?.descripcion || "").trim(),
+        ubicacionTexto: String(incident?.ubicacionTexto || "").trim(),
+        status: String(incident?.status || "ABIERTO").trim() || "ABIERTO",
+      });
+
+      setVehicleQuery(incidentVehicle ? fmtVehicle(incidentVehicle) : "");
+      setPhotoBase64("");
+      setPhotoPreview("");
+      setRemoveCurrentPhoto(false);
+      setCurrentPhotoFailed(false);
+      setNewPhotoFailed(false);
+      setError("");
+      resetInputs();
+      return;
     }
-  }, [selectedVehicle]);
+
+    resetForm();
+  }, [open, isEditMode, incident]);
+
+  useEffect(() => {
+    if (!selectedVehicle) return;
+
+    const formatted = fmtVehicle(selectedVehicle);
+
+    if (!vehicleQuery || String(form.vehicleId || "").trim()) {
+      setVehicleQuery(formatted);
+    }
+  }, [selectedVehicle]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadVehicles() {
     try {
@@ -195,6 +303,9 @@ export default function IncidentModal({ open, onClose, onCreated }) {
       const result = String(reader.result || "");
       setPhotoBase64(result);
       setPhotoPreview(result);
+      setRemoveCurrentPhoto(false);
+      setNewPhotoFailed(false);
+      setCurrentPhotoFailed(false);
     };
 
     reader.onerror = () => {
@@ -207,18 +318,33 @@ export default function IncidentModal({ open, onClose, onCreated }) {
   function removePhoto() {
     setPhotoBase64("");
     setPhotoPreview("");
+    setRemoveCurrentPhoto(true);
+    setCurrentPhotoFailed(false);
+    setNewPhotoFailed(false);
+    resetInputs();
+  }
 
-    if (takePhotoInputRef.current) takePhotoInputRef.current.value = "";
-    if (galleryInputRef.current) galleryInputRef.current.value = "";
+  function clearNewPhotoOnly() {
+    setPhotoBase64("");
+    setPhotoPreview("");
+    setNewPhotoFailed(false);
+    setRemoveCurrentPhoto(false);
+    setCurrentPhotoFailed(false);
+    resetInputs();
   }
 
   async function submit(e) {
     if (e?.preventDefault) e.preventDefault();
     if (e?.stopPropagation) e.stopPropagation();
 
-    const reportedById = currentUser?.id ? String(currentUser.id) : "";
+    const reportedById =
+      currentUser?.id || incident?.reportedBy?.id
+        ? String(currentUser?.id || incident?.reportedBy?.id)
+        : "";
+
     const empresa =
       pickEmpresa(selectedVehicle?.empresa) ||
+      pickEmpresa(incident?.empresa) ||
       pickEmpresa(currentUser?.empresa) ||
       "GRUAS_THOMAS";
 
@@ -232,7 +358,7 @@ export default function IncidentModal({ open, onClose, onCreated }) {
       return;
     }
 
-    if (!reportedById) {
+    if (!reportedById && !isEditMode) {
       setError("No se pudo identificar el usuario que reporta.");
       return;
     }
@@ -243,13 +369,62 @@ export default function IncidentModal({ open, onClose, onCreated }) {
     try {
       const token = getToken();
 
-      const payload = {
+      let payload;
+
+      if (isEditMode) {
+        payload = {
+          vehicleId: String(form.vehicleId || "").trim(),
+          reportedById: incident?.reportedBy?.id
+            ? String(incident.reportedBy.id)
+            : undefined,
+          empresa,
+          descripcion: String(form.descripcion || "").trim(),
+          ubicacionTexto: String(form.ubicacionTexto || "").trim() || null,
+          status: String(form.status || "ABIERTO").trim() || "ABIERTO",
+        };
+
+        if (photoBase64) {
+          payload.foto = photoBase64;
+          payload.fotoNombre = "incidente_editado.jpg";
+        } else if (removeCurrentPhoto) {
+          payload.foto = "";
+          payload.fotoNombre = "";
+        }
+
+        const res = await fetch(
+          `${API_URL}/workshop/incidents/${incident.id}`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            credentials: "include",
+            body: JSON.stringify(payload),
+          }
+        );
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new Error(text || "No se pudo actualizar el incidente");
+        }
+
+        const updated = await res.json().catch(() => null);
+
+        resetForm();
+        if (onSaved) onSaved(updated);
+        if (onClose) onClose();
+        return;
+      }
+
+      payload = {
         patente: selectedVehicle?.patente || "",
         reportedById,
         empresa,
         descripcion: String(form.descripcion || "").trim(),
         ubicacionTexto: String(form.ubicacionTexto || "").trim() || null,
         foto: photoBase64 || null,
+        fotoNombre: photoBase64 ? "incidente.jpg" : null,
       };
 
       const res = await fetch(`${API_URL}/workshop/incidents`, {
@@ -267,11 +442,13 @@ export default function IncidentModal({ open, onClose, onCreated }) {
         throw new Error(text || "No se pudo crear el incidente");
       }
 
+      const created = await res.json().catch(() => null);
+
       resetForm();
-      if (onCreated) onCreated();
+      if (onCreated) onCreated(created);
       if (onClose) onClose();
     } catch (err) {
-      setError(err?.message || "Error creando incidente");
+      setError(err?.message || "Error guardando incidente");
     } finally {
       setSaving(false);
     }
@@ -293,8 +470,20 @@ export default function IncidentModal({ open, onClose, onCreated }) {
     color: "#1f2937",
   };
 
+  const hasNewPhoto = Boolean(photoPreview);
+  const hasCurrentPhoto =
+    isEditMode &&
+    !removeCurrentPhoto &&
+    !hasNewPhoto &&
+    Boolean(currentIncidentPhotoUrl);
+
   return (
-    <Modal open={open} onClose={onClose} title="Reportar incidente" width={640}>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={isEditMode ? "Editar incidente" : "Reportar incidente"}
+      width={640}
+    >
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -326,6 +515,25 @@ export default function IncidentModal({ open, onClose, onCreated }) {
           </div>
         ) : (
           <>
+            {isEditMode ? (
+              <div className="modal-form">
+                <div>
+                  <label htmlFor="incidentStatus">Estado</label>
+                  <select
+                    id="incidentStatus"
+                    value={form.status}
+                    onChange={(e) => updateField("status", e.target.value)}
+                  >
+                    {INCIDENT_STATUS_OPTIONS.map((status) => (
+                      <option key={status} value={status}>
+                        {prettifyIncidentStatus(status)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            ) : null}
+
             <div className="modal-form">
               <div style={{ position: "relative" }}>
                 <label htmlFor="incidentVehicleSearch">Vehículo</label>
@@ -487,32 +695,109 @@ export default function IncidentModal({ open, onClose, onCreated }) {
                     imagen guardada.
                   </div>
 
-                  {photoPreview ? (
-                    <div
-                      style={{
-                        marginTop: 4,
-                        border: "1px solid rgba(0,0,0,.08)",
-                        borderRadius: 14,
-                        padding: 12,
-                        background: "#fff",
-                      }}
-                    >
-                      <img
-                        src={photoPreview}
-                        alt="Vista previa"
+                  <div
+                    style={{
+                      marginTop: 4,
+                      border: "1px solid rgba(0,0,0,.08)",
+                      borderRadius: 14,
+                      padding: 12,
+                      background: "#fff",
+                    }}
+                  >
+                    {hasNewPhoto ? (
+                      !newPhotoFailed ? (
+                        <img
+                          src={photoPreview}
+                          alt="Vista previa nueva"
+                          onError={() => setNewPhotoFailed(true)}
+                          style={{
+                            width: "100%",
+                            maxHeight: 260,
+                            objectFit: "contain",
+                            borderRadius: 12,
+                            display: "block",
+                            background: "#f8fafc",
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            minHeight: 180,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            borderRadius: 12,
+                            background: "#f8fafc",
+                            color: "#64748b",
+                            fontSize: 14,
+                            textAlign: "center",
+                            padding: 16,
+                          }}
+                        >
+                          No se pudo mostrar la nueva foto seleccionada.
+                        </div>
+                      )
+                    ) : hasCurrentPhoto ? (
+                      !currentPhotoFailed ? (
+                        <img
+                          src={currentIncidentPhotoUrl}
+                          alt="Foto actual del incidente"
+                          onError={() => setCurrentPhotoFailed(true)}
+                          style={{
+                            width: "100%",
+                            maxHeight: 260,
+                            objectFit: "contain",
+                            borderRadius: 12,
+                            display: "block",
+                            background: "#f8fafc",
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            minHeight: 180,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            borderRadius: 12,
+                            background: "#f8fafc",
+                            color: "#64748b",
+                            fontSize: 14,
+                            textAlign: "center",
+                            padding: 16,
+                          }}
+                        >
+                          No se pudo mostrar la foto actual.
+                        </div>
+                      )
+                    ) : (
+                      <div
                         style={{
-                          width: "100%",
-                          maxHeight: 240,
-                          objectFit: "cover",
+                          minHeight: 180,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
                           borderRadius: 12,
-                          display: "block",
+                          background: "#f8fafc",
+                          color: "#64748b",
+                          fontSize: 14,
+                          textAlign: "center",
+                          padding: 16,
                         }}
-                      />
+                      >
+                        {removeCurrentPhoto
+                          ? "La foto fue quitada."
+                          : "No hay foto seleccionada."}
+                      </div>
+                    )}
 
+                    {(hasCurrentPhoto || hasNewPhoto || removeCurrentPhoto) && (
                       <div
                         style={{
                           marginTop: 10,
                           display: "flex",
+                          flexWrap: "wrap",
+                          gap: 10,
                           justifyContent: "flex-start",
                         }}
                       >
@@ -524,9 +809,20 @@ export default function IncidentModal({ open, onClose, onCreated }) {
                         >
                           Quitar foto
                         </button>
+
+                        {hasNewPhoto && isEditMode && incident?.fotoUrl ? (
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={clearNewPhotoOnly}
+                            disabled={saving}
+                          >
+                            Volver a foto actual
+                          </button>
+                        ) : null}
                       </div>
-                    </div>
-                  ) : null}
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -549,7 +845,13 @@ export default function IncidentModal({ open, onClose, onCreated }) {
             disabled={saving || loadingVehicles}
             onClick={submit}
           >
-            {saving ? "Creando..." : "Crear incidente"}
+            {saving
+              ? isEditMode
+                ? "Guardando..."
+                : "Creando..."
+              : isEditMode
+              ? "Guardar cambios"
+              : "Crear incidente"}
           </button>
         </div>
       </form>

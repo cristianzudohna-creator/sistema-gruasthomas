@@ -1,6 +1,7 @@
 // ✅ Archivo: src/auth/dto/create-user.dto.ts
 // ✅ Cambio: rut ahora es OBLIGATORIO
 // ✅ Motivo: todos ingresan con RUT
+// ✅ FIX: mensaje de workerType actualizado para incluir supervisor taller mecánico y supervisor de terreno
 
 import {
   IsBoolean,
@@ -57,7 +58,7 @@ export class CreateUserDto {
   @IsOptional()
   @IsEnum(WorkerType, {
     message:
-      "workerType debe ser CONDUCTOR, RIGGER, OPERADOR, MECANICO u OTRO",
+      "workerType debe ser un valor válido del sistema, por ejemplo: CONDUCTOR, RIGGER, OPERADOR, MECANICO, JEFE_TALLER, SUPERVISOR, SUPERVISOR_TERRENO u OTRO",
   })
   workerType?: WorkerType;
 
@@ -70,7 +71,6 @@ export class CreateUserDto {
   @IsString()
   cargo?: string;
 }
-
 
 
 

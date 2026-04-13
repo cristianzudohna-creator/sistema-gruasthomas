@@ -39,6 +39,12 @@ import ExtraHours from "./pages/ExtraHours";
 // ✅ NUEVO: ADMINISTRADORA
 import AdminExtraHours from "./pages/AdminExtraHours";
 
+// ✅ NUEVO: Solicitud de insumos
+import WorkshopSuppliesRequest from "./pages/WorkshopSuppliesRequest";
+
+// ✅ NUEVO: PREVENCIÓN compras de insumos
+import PreventionSupplies from "./pages/PreventionSupplies";
+
 // ✅ Firebase foreground notifications
 import { onMessage } from "firebase/messaging";
 import { getMessagingInstance } from "./firebase";
@@ -57,16 +63,10 @@ function NotificationListener() {
         unsubscribe = onMessage(messaging, (payload) => {
           console.log("🔥 Notificación recibida en foreground:", payload);
 
-          // ✅ FIX:
-          // Solo navegar si la notificación trae una URL/link real.
-          const rawUrl =
-            payload?.data?.url ||
-            payload?.fcmOptions?.link ||
-            "";
+          const rawUrl = payload?.data?.url || payload?.fcmOptions?.link || "";
 
           const finalUrl = String(rawUrl || "").trim();
 
-          // ✅ Si no viene ruta, no navegar
           if (!finalUrl) {
             console.log("ℹ️ La notificación no trae URL. No se navega.");
             return;
@@ -80,15 +80,14 @@ function NotificationListener() {
 
             const sameOrigin = urlObj.origin === window.location.origin;
 
-            // ✅ Si no es mismo origen, no navegar por seguridad
             if (!sameOrigin) {
               console.log("ℹ️ URL externa detectada. No se navega:", finalUrl);
               return;
             }
 
-            const pathToNavigate = `${urlObj.pathname}${urlObj.search}${urlObj.hash}`.trim();
+            const pathToNavigate =
+              `${urlObj.pathname}${urlObj.search}${urlObj.hash}`.trim();
 
-            // ✅ Evitar navegar vacío o a rutas inválidas
             if (!pathToNavigate) {
               console.log("ℹ️ Ruta vacía. No se navega.");
               return;
@@ -142,11 +141,7 @@ export default function App() {
           path="/admin"
           element={
             <ProtectedRoute
-              role={[
-                "CONTROL_FLOTA",
-                "ADMINISTRADORA",
-                "SUPERADMIN",
-              ]}
+              role={["CONTROL_FLOTA", "ADMINISTRADORA", "SUPERADMIN"]}
             >
               <Admin />
             </ProtectedRoute>
@@ -210,6 +205,26 @@ export default function App() {
             }
           />
 
+          {/* ✅ Solicitud de insumos */}
+          <Route
+            path="solicitud-insumos"
+            element={
+              <ProtectedRoute role={["SUPERADMIN", "TRABAJADOR"]}>
+                <WorkshopSuppliesRequest />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ✅ NUEVO: Compras de insumos para SUPERADMIN */}
+          <Route
+            path="prevencion-insumos"
+            element={
+              <ProtectedRoute role={["SUPERADMIN"]}>
+                <PreventionSupplies />
+              </ProtectedRoute>
+            }
+          />
+
           <Route
             path="clientes"
             element={
@@ -255,7 +270,6 @@ export default function App() {
 
           {/* ================= HORAS EXTRAS ================= */}
 
-          {/* ✅ Crear / Firmar */}
           <Route
             path="horas-extras"
             element={
@@ -267,7 +281,6 @@ export default function App() {
             }
           />
 
-          {/* ✅ ADMINISTRADORA */}
           <Route
             path="horas-extras-admin"
             element={
@@ -336,6 +349,16 @@ export default function App() {
           element={
             <ProtectedRoute role={["TRABAJADOR"]}>
               <ExtraHours />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ✅ PREVENCIÓN - compras de insumos */}
+        <Route
+          path="/trabajador/prevencion-insumos"
+          element={
+            <ProtectedRoute role={["TRABAJADOR"]}>
+              <PreventionSupplies />
             </ProtectedRoute>
           }
         />
