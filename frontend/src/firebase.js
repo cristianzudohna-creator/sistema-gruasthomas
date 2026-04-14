@@ -10,12 +10,10 @@ const firebaseConfig = {
   appId: "1:1078797549969:web:29805ab231872b47d3da30",
 };
 
-// Inicializar Firebase
 const app = initializeApp(firebaseConfig);
 
 let messagingInstance = null;
 
-// 🔥 Validar si el navegador soporta FCM
 export async function getMessagingInstance() {
   try {
     console.log("🔥 Verificando soporte Firebase Messaging...");
@@ -40,7 +38,6 @@ export async function getMessagingInstance() {
   }
 }
 
-// 🔥 Guardar token FCM en backend
 async function saveFCMTokenToBackend(fcmToken) {
   try {
     const authToken = localStorage.getItem("access_token");
@@ -58,6 +55,7 @@ async function saveFCMTokenToBackend(fcmToken) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${authToken}`,
       },
+      credentials: "include",
       body: JSON.stringify({
         token: fcmToken,
       }),
@@ -73,7 +71,7 @@ async function saveFCMTokenToBackend(fcmToken) {
       return false;
     }
 
-    console.log("✅ Token FCM guardado correctamente");
+    console.log("✅ Token FCM guardado correctamente en backend");
     return true;
   } catch (error) {
     console.error("❌ Error enviando token FCM al backend:", error);
@@ -81,16 +79,53 @@ async function saveFCMTokenToBackend(fcmToken) {
   }
 }
 
-// 🔥 Obtener token FCM
+async function ensureNotificationPermission() {
+  try {
+    if (typeof window === "undefined" || typeof Notification === "undefined") {
+      console.warn("⚠️ Notification API no disponible en este entorno");
+      return false;
+    }
+
+    console.log("🔔 Notification.permission actual:", Notification.permission);
+
+    if (Notification.permission === "granted") {
+      return true;
+    }
+
+    if (Notification.permission === "denied") {
+      console.warn("❌ El usuario bloqueó las notificaciones");
+      return false;
+    }
+
+    const permission = await Notification.requestPermission();
+    console.log("🔔 Resultado requestPermission():", permission);
+
+    return permission === "granted";
+  } catch (error) {
+    console.error("❌ Error pidiendo permiso de notificaciones:", error);
+    return false;
+  }
+}
+
 export async function getFCMToken() {
   try {
     console.log("🔥 getFCMToken() iniciado");
     console.log("🔥 location.protocol:", location.protocol);
     console.log("🔥 location.hostname:", location.hostname);
 
-    // ⚠️ FCM solo funciona en HTTPS o localhost
     if (location.protocol !== "https:" && location.hostname !== "localhost") {
       console.warn("⚠️ FCM requiere HTTPS o localhost");
+      return null;
+    }
+
+    if (!("serviceWorker" in navigator)) {
+      console.warn("⚠️ Este navegador no soporta service workers");
+      return null;
+    }
+
+    const permissionOk = await ensureNotificationPermission();
+    if (!permissionOk) {
+      console.warn("⚠️ No hay permiso para notificaciones");
       return null;
     }
 
@@ -120,8 +155,10 @@ export async function getFCMToken() {
 
     console.log("🔥 Token FCM obtenido:", token);
 
-    // ✅ GUARDAR EN BACKEND
-    await saveFCMTokenToBackend(token);
+    const saved = await saveFCMTokenToBackend(token);
+    if (!saved) {
+      console.warn("⚠️ Se obtuvo token FCM pero no se pudo guardar en backend");
+    }
 
     return token;
   } catch (error) {

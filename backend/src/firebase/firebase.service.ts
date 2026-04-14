@@ -4,6 +4,14 @@ import * as path from "path";
 import * as fs from "fs";
 import { PrismaService } from "../prisma/prisma.service";
 
+type NotificationResult = {
+  ok: boolean;
+  foundTokens: number;
+  sentCount: number;
+  failedCount: number;
+  message: string;
+};
+
 @Injectable()
 export class FirebaseService {
   constructor(private readonly prisma: PrismaService) {
@@ -29,10 +37,7 @@ export class FirebaseService {
   }
 
   private getBaseUrl(): string {
-    return (
-      process.env.FRONTEND_URL?.trim() ||
-      "https://sistemagruasthomas.cl"
-    );
+    return process.env.FRONTEND_URL?.trim() || "https://sistemagruasthomas.cl";
   }
 
   private buildFinalUrl(url = "/trabajador"): string {
@@ -45,7 +50,9 @@ export class FirebaseService {
       return cleanUrl;
     }
 
-    return `${this.getBaseUrl()}${cleanUrl.startsWith("/") ? cleanUrl : `/${cleanUrl}`}`;
+    return `${this.getBaseUrl()}${
+      cleanUrl.startsWith("/") ? cleanUrl : `/${cleanUrl}`
+    }`;
   }
 
   private buildPayload(
@@ -120,29 +127,49 @@ export class FirebaseService {
     title: string,
     body: string,
     url = "/trabajador"
-  ) {
+  ): Promise<NotificationResult> {
     if (!token) {
       console.log("⚠️ Token FCM vacío");
-      return;
+      return {
+        ok: false,
+        foundTokens: 0,
+        sentCount: 0,
+        failedCount: 1,
+        message: "Token FCM vacío",
+      };
     }
 
     const payload = this.buildPayload(token, title, body, url);
 
     try {
       console.log("📤 Enviando notificación a token directo...");
-      console.log("📤 Token:", token);
       console.log("📤 URL final:", this.buildFinalUrl(url));
-      console.log("📤 Payload:", payload);
 
       const result = await admin.messaging().send(payload);
 
       console.log("✅ Notificación enviada:", result);
+
+      return {
+        ok: true,
+        foundTokens: 1,
+        sentCount: 1,
+        failedCount: 0,
+        message: "Notificación enviada correctamente",
+      };
     } catch (error: any) {
       console.error("❌ Error enviando notificación:", error);
 
       if (this.isInvalidTokenError(error)) {
         await this.deleteInvalidTokenByValue(token);
       }
+
+      return {
+        ok: false,
+        foundTokens: 1,
+        sentCount: 0,
+        failedCount: 1,
+        message: error?.message || "Error enviando notificación",
+      };
     }
   }
 
@@ -151,10 +178,16 @@ export class FirebaseService {
     title: string,
     body: string,
     url = "/trabajador"
-  ) {
+  ): Promise<NotificationResult> {
     if (!userId) {
       console.log("⚠️ userId vacío al enviar notificación");
-      return;
+      return {
+        ok: false,
+        foundTokens: 0,
+        sentCount: 0,
+        failedCount: 0,
+        message: "userId vacío",
+      };
     }
 
     try {
@@ -168,12 +201,21 @@ export class FirebaseService {
 
       if (!userTokens.length) {
         console.log(`⚠️ El usuario ${userId} no tiene tokens FCM registrados`);
-        return;
+        return {
+          ok: false,
+          foundTokens: 0,
+          sentCount: 0,
+          failedCount: 0,
+          message: "Usuario sin tokens FCM registrados",
+        };
       }
 
       console.log(
         `📲 Enviando notificación a ${userTokens.length} dispositivo(s) del usuario ${userId}`
       );
+
+      let sentCount = 0;
+      let failedCount = 0;
 
       for (const item of userTokens) {
         const payload = this.buildPayload(item.token, title, body, url);
@@ -181,12 +223,13 @@ export class FirebaseService {
         try {
           console.log(`📤 Enviando a token ${item.id}...`);
           console.log("📤 URL final:", this.buildFinalUrl(url));
-          console.log("📤 Payload:", payload);
 
           const result = await admin.messaging().send(payload);
 
           console.log(`✅ Notificación enviada a token ${item.id}:`, result);
+          sentCount += 1;
         } catch (error: any) {
+          failedCount += 1;
           console.error(`❌ Error enviando a token ${item.id}:`, error);
 
           if (this.isInvalidTokenError(error)) {
@@ -194,8 +237,27 @@ export class FirebaseService {
           }
         }
       }
-    } catch (error) {
+
+      return {
+        ok: sentCount > 0,
+        foundTokens: userTokens.length,
+        sentCount,
+        failedCount,
+        message:
+          sentCount > 0
+            ? `Se enviaron ${sentCount} notificación(es)`
+            : "No se pudo enviar a ningún token",
+      };
+    } catch (error: any) {
       console.error("❌ Error enviando notificaciones al usuario:", error);
+
+      return {
+        ok: false,
+        foundTokens: 0,
+        sentCount: 0,
+        failedCount: 0,
+        message: error?.message || "Error enviando notificaciones al usuario",
+      };
     }
   }
 }
