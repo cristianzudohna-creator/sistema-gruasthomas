@@ -66,6 +66,8 @@
 // ✅ NUEVO (NOTIFICACIONES):
 // - Al completar la OT se notifica a usuarios SUPERADMIN y ADMINISTRADORA
 // - Se mantiene la notificación al operador al crear la OT
+// - ✅ NUEVO: también notifica al RIGGER cuando queda asignado en una OT
+// - ✅ NUEVO: al editar OT, si cambia operador/rigger/camión/obra, vuelve a notificar
 //
 // ✅ FIX EXCEL FECHA:
 // - FECHA usa diasProgramados[0] si existe
@@ -425,6 +427,10 @@ export class WorkOrdersService {
     return String(actor?.role || "").toUpperCase();
   }
 
+  private workerTypeUpper(actor: any) {
+    return String(actor?.workerType || "").toUpperCase();
+  }
+
   private isGlobalRole(actor: any) {
     const r = this.roleUpper(actor);
     return r === "SUPERADMIN" || r === "CONTROL_FLOTA";
@@ -435,11 +441,36 @@ export class WorkOrdersService {
     return r === "SUPERADMIN" || r === "CONTROL_FLOTA" || r === "ADMINISTRADORA";
   }
 
+  private normalizePersonName(value: any): string {
+    return String(value ?? "")
+      .trim()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, " ")
+      .toUpperCase();
+  }
+
+  private buildFullName(user: any): string {
+    return [cleanStr(user?.nombre), cleanStr(user?.apellido)]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+  }
+
   private async getActorOrThrowById(userId?: string) {
     if (!userId) throw new BadRequestException("No se detectó el usuario logueado.");
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, role: true, empresa: true },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        empresa: true,
+        workerType: true,
+        nombre: true,
+        apellido: true,
+        activo: true,
+      },
     });
     if (!user) throw new BadRequestException("Usuario logueado no existe.");
     return user;
@@ -643,26 +674,26 @@ export class WorkOrdersService {
   }
 
   private parseExcelDateOnly(value: any): Date | null {
-  if (!value) return null;
+    if (!value) return null;
 
-  if (typeof value === "string") {
-    const s = value.trim();
+    if (typeof value === "string") {
+      const s = value.trim();
 
-    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (m) {
-      const year = Number(m[1]);
-      const month = Number(m[2]);
-      const day = Number(m[3]);
+      const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (m) {
+        const year = Number(m[1]);
+        const month = Number(m[2]);
+        const day = Number(m[3]);
 
-      return new Date(year, month - 1, day, 0, 0, 0, 0);
+        return new Date(year, month - 1, day, 0, 0, 0, 0);
+      }
     }
+
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
   }
-
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return null;
-
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
-}
 
   private parseColacionHours(value: any): number {
     const raw = cleanStr(value);
@@ -769,7 +800,6 @@ export class WorkOrdersService {
     const wr = safeParseWorkerReport(item.workerReport);
     const detalleHoras = wr?.detalleHoras || {};
 
-    // ✅ FIX: usar diasProgramados[0] si existe; si no, usar createdAt
     const fechaProgramada =
       Array.isArray(item.diasProgramados) && item.diasProgramados.length > 0
         ? item.diasProgramados[0]
@@ -862,6 +892,111 @@ export class WorkOrdersService {
     };
 
     this.styleExcelBodyRow(row);
+  }
+
+  private async findRiggerUserByName(
+    empresa: Empresa,
+    riggerNameRaw?: string | null
+  ) {
+    const riggerName = cleanStr(riggerNameRaw);
+    if (!riggerName) return null;
+
+    const normalizedTarget = this.normalizePersonName(riggerName);
+
+    const candidates = await this.prisma.user.findMany({
+      where: {
+        activo: true,
+        empresa,
+        role: "TRABAJADOR",
+        workerType: "RIGGER" as any,
+      },
+      select: {
+        id: true,
+        nombre: true,
+        apellido: true,
+        email: true,
+      },
+    });
+
+    for (const user of candidates) {
+      const fullName = this.buildFullName(user);
+      if (this.normalizePersonName(fullName) === normalizedTarget) {
+        return user;
+      }
+    }
+
+    return null;
+  }
+
+  private buildAssignedOtNotificationBody(workOrder: any) {
+    const otCode = `OT-${String(workOrder?.id || "").slice(0, 6).toUpperCase()}`;
+    const operador =
+      cleanStr(workOrder?.operador) || cleanStr(workOrder?.conductor) || "Sin operador";
+    const camion = cleanStr(workOrder?.camion) || "Sin camión";
+    const obra =
+      cleanStr(workOrder?.direccionFaena) || cleanStr(workOrder?.lugar) || "Sin obra";
+
+    return `${otCode} asignada. Operador: ${operador}. Camión: ${camion}. Obra/Tramo: ${obra}.`;
+  }
+
+  private async notifyAssignedOtToOperatorAndRigger(workOrder: any) {
+    try {
+      const body = this.buildAssignedOtNotificationBody(workOrder);
+
+      if (workOrder?.assignedToId) {
+        try {
+          await this.firebaseService.sendNotificationToUser(
+            workOrder.assignedToId,
+            "Nueva Orden de Trabajo",
+            body,
+            "/trabajador"
+          );
+
+          console.log(
+            `✅ Notificación enviada al operador asignado: ${workOrder.assignedToId}`
+          );
+        } catch (error) {
+          console.error(
+            "❌ Error enviando notificación de OT al operador:",
+            error
+          );
+        }
+      }
+
+      const riggerName = cleanStr(workOrder?.rigger);
+      if (riggerName && workOrder?.empresa) {
+        const riggerUser = await this.findRiggerUserByName(
+          workOrder.empresa,
+          riggerName
+        );
+
+        if (riggerUser?.id) {
+          try {
+            await this.firebaseService.sendNotificationToUser(
+              riggerUser.id,
+              "Nueva OT asignada",
+              body,
+              "/trabajador"
+            );
+
+            console.log(
+              `✅ Notificación enviada al rigger asignado: ${riggerUser.id}`
+            );
+          } catch (error) {
+            console.error(
+              "❌ Error enviando notificación de OT al rigger:",
+              error
+            );
+          }
+        } else {
+          console.warn(
+            `⚠️ No se encontró usuario RIGGER activo para notificar con nombre: ${riggerName}`
+          );
+        }
+      }
+    } catch (error) {
+      console.error("❌ Error general notificando asignación OT:", error);
+    }
   }
 
   private async notifyOtCompletedAdmins(workOrder: any, completedByUserId?: string) {
@@ -1074,147 +1209,144 @@ export class WorkOrdersService {
   }
 
   async exportApprovedExcel(
-  filters: {
-    from?: string;
-    to?: string;
-  },
-  actor?: any
-): Promise<{ buffer: Buffer; filename: string; total: number }> {
-  if (!this.isOtAdminRole(actor)) {
-    throw new ForbiddenException("No autorizado.");
-  }
-
-  const from = cleanStr(filters?.from);
-  const to = cleanStr(filters?.to);
-
-  // ✅ ahora validamos como fechas ISO "YYYY-MM-DD"
-  const fromIso = from ? this.parseISODateOnly(from) : null;
-  const toIso = to ? this.parseISODateOnly(to) : null;
-
-  if (from && !fromIso) {
-    throw new BadRequestException("Fecha desde inválida. Usa YYYY-MM-DD.");
-  }
-  if (to && !toIso) {
-    throw new BadRequestException("Fecha hasta inválida. Usa YYYY-MM-DD.");
-  }
-
-  // ✅ si viene solo una fecha, usamos esa misma como inicio/fin
-  const rangeFrom = fromIso || toIso;
-  const rangeTo = toIso || fromIso;
-
-  if (rangeFrom && rangeTo && rangeFrom > rangeTo) {
-    throw new BadRequestException("El rango de fechas es inválido.");
-  }
-
-  const whereEmpresa = await this.empresaWhereByActor(actor);
-
-  const andWhere: any[] = [
-    whereEmpresa,
-    this.whereActivosOnly(),
-    { status: WorkOrderStatus.APROBADA },
-  ];
-
-  // ✅ filtro por diasProgramados en vez de createdAt
-  if (rangeFrom && rangeTo) {
-    const days = this.listIsoDaysBetween(rangeFrom, rangeTo);
-    andWhere.push({
-      diasProgramados: { hasSome: days },
-    });
-  }
-
-  const items = await this.prisma.workOrder.findMany({
-    where: {
-      AND: andWhere,
+    filters: {
+      from?: string;
+      to?: string;
     },
-    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    select: {
-      id: true,
-      createdAt: true,
-      status: true,
-      cliente: true,
-      direccionFaena: true,
-      lugar: true,
-      operador: true,
-      conductor: true,
-      rigger: true,
-      workerReport: true,
-      diasProgramados: true,
-    },
-  });
-
-  if (!items.length) {
-    throw new NotFoundException("No se encontraron OTs APROBADAS con esos filtros.");
-  }
-
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = "Sistema Grúas Thomas";
-  workbook.lastModifiedBy = "Sistema Grúas Thomas";
-  workbook.created = new Date();
-  workbook.modified = new Date();
-
-  const operadoresSheet = this.addExcelTemplateSheet(
-    workbook,
-    "OPERADORES",
-    "OPERADOR"
-  );
-  const riggersSheet = this.addExcelTemplateSheet(
-    workbook,
-    "RIGGER",
-    "RIGGER"
-  );
-
-  let operadoresCount = 0;
-  let riggersCount = 0;
-
-  for (const item of items) {
-    const operador =
-      cleanStr(item.operador) || cleanStr(item.conductor) || "";
-    const rigger = cleanStr(item.rigger) || "";
-
-    if (operador) {
-      this.addExcelDataRow({
-        sheet: operadoresSheet,
-        item,
-        personName: operador,
-        personType: "OPERADOR",
-      });
-      operadoresCount += 1;
+    actor?: any
+  ): Promise<{ buffer: Buffer; filename: string; total: number }> {
+    if (!this.isOtAdminRole(actor)) {
+      throw new ForbiddenException("No autorizado.");
     }
 
-    if (rigger) {
-      this.addExcelDataRow({
-        sheet: riggersSheet,
-        item,
-        personName: rigger,
-        personType: "RIGGER",
-      });
-      riggersCount += 1;
+    const from = cleanStr(filters?.from);
+    const to = cleanStr(filters?.to);
+
+    const fromIso = from ? this.parseISODateOnly(from) : null;
+    const toIso = to ? this.parseISODateOnly(to) : null;
+
+    if (from && !fromIso) {
+      throw new BadRequestException("Fecha desde inválida. Usa YYYY-MM-DD.");
     }
-  }
+    if (to && !toIso) {
+      throw new BadRequestException("Fecha hasta inválida. Usa YYYY-MM-DD.");
+    }
 
-  if (operadoresCount === 0) {
-    const row = operadoresSheet.addRow({
-      observaciones: "Sin registros para el período seleccionado",
+    const rangeFrom = fromIso || toIso;
+    const rangeTo = toIso || fromIso;
+
+    if (rangeFrom && rangeTo && rangeFrom > rangeTo) {
+      throw new BadRequestException("El rango de fechas es inválido.");
+    }
+
+    const whereEmpresa = await this.empresaWhereByActor(actor);
+
+    const andWhere: any[] = [
+      whereEmpresa,
+      this.whereActivosOnly(),
+      { status: WorkOrderStatus.APROBADA },
+    ];
+
+    if (rangeFrom && rangeTo) {
+      const days = this.listIsoDaysBetween(rangeFrom, rangeTo);
+      andWhere.push({
+        diasProgramados: { hasSome: days },
+      });
+    }
+
+    const items = await this.prisma.workOrder.findMany({
+      where: {
+        AND: andWhere,
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        createdAt: true,
+        status: true,
+        cliente: true,
+        direccionFaena: true,
+        lugar: true,
+        operador: true,
+        conductor: true,
+        rigger: true,
+        workerReport: true,
+        diasProgramados: true,
+      },
     });
-    this.styleExcelBodyRow(row);
+
+    if (!items.length) {
+      throw new NotFoundException("No se encontraron OTs APROBADAS con esos filtros.");
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "Sistema Grúas Thomas";
+    workbook.lastModifiedBy = "Sistema Grúas Thomas";
+    workbook.created = new Date();
+    workbook.modified = new Date();
+
+    const operadoresSheet = this.addExcelTemplateSheet(
+      workbook,
+      "OPERADORES",
+      "OPERADOR"
+    );
+    const riggersSheet = this.addExcelTemplateSheet(
+      workbook,
+      "RIGGER",
+      "RIGGER"
+    );
+
+    let operadoresCount = 0;
+    let riggersCount = 0;
+
+    for (const item of items) {
+      const operador =
+        cleanStr(item.operador) || cleanStr(item.conductor) || "";
+      const rigger = cleanStr(item.rigger) || "";
+
+      if (operador) {
+        this.addExcelDataRow({
+          sheet: operadoresSheet,
+          item,
+          personName: operador,
+          personType: "OPERADOR",
+        });
+        operadoresCount += 1;
+      }
+
+      if (rigger) {
+        this.addExcelDataRow({
+          sheet: riggersSheet,
+          item,
+          personName: rigger,
+          personType: "RIGGER",
+        });
+        riggersCount += 1;
+      }
+    }
+
+    if (operadoresCount === 0) {
+      const row = operadoresSheet.addRow({
+        observaciones: "Sin registros para el período seleccionado",
+      });
+      this.styleExcelBodyRow(row);
+    }
+
+    if (riggersCount === 0) {
+      const row = riggersSheet.addRow({
+        observaciones: "Sin registros para el período seleccionado",
+      });
+      this.styleExcelBodyRow(row);
+    }
+
+    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+    const filename = this.buildExcelFileName({ from, to });
+
+    return {
+      buffer,
+      filename,
+      total: items.length,
+    };
   }
-
-  if (riggersCount === 0) {
-    const row = riggersSheet.addRow({
-      observaciones: "Sin registros para el período seleccionado",
-    });
-    this.styleExcelBodyRow(row);
-  }
-
-  const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
-  const filename = this.buildExcelFileName({ from, to });
-
-  return {
-    buffer,
-    filename,
-    total: items.length,
-  };
-}
 
   async searchClients(search: string, actor?: any) {
     const q = cleanStr(search);
@@ -1302,7 +1434,9 @@ export class WorkOrdersService {
     const cliente = cleanStr((dto as any).cliente);
     const lugar = cleanStr((dto as any).lugar);
 
-    if (!cliente && !lugar) throw new BadRequestException("Completa al menos Cliente o Lugar.");
+    if (!cliente && !lugar) {
+      throw new BadRequestException("Completa al menos Cliente o Lugar.");
+    }
 
     const createdBy = await this.getActorOrThrowById(createdById);
 
@@ -1329,25 +1463,29 @@ export class WorkOrdersService {
         },
       });
 
-      if (!conductorUser) throw new BadRequestException("Operador seleccionado no existe.");
-      if (!conductorUser.activo) throw new BadRequestException("Operador seleccionado está inactivo.");
+      if (!conductorUser) {
+        throw new BadRequestException("Operador seleccionado no existe.");
+      }
+      if (!conductorUser.activo) {
+        throw new BadRequestException("Operador seleccionado está inactivo.");
+      }
       if (String(conductorUser.role || "").toUpperCase() !== "TRABAJADOR") {
         throw new BadRequestException("Operador seleccionado no tiene rol TRABAJADOR.");
       }
 
       const wt = String((conductorUser as any).workerType || "").toUpperCase();
 
-const allowedOperatorTypes = [
-  "OPERADOR",
-  "SUPERVISOR",
-  "SUPERVISOR_TERRENO",
-];
+      const allowedOperatorTypes = [
+        "OPERADOR",
+        "SUPERVISOR",
+        "SUPERVISOR_TERRENO",
+      ];
 
-if (!allowedOperatorTypes.includes(wt)) {
-  throw new BadRequestException(
-    "El usuario seleccionado no es un tipo válido para Operador."
-  );
-}
+      if (!allowedOperatorTypes.includes(wt)) {
+        throw new BadRequestException(
+          "El usuario seleccionado no es un tipo válido para Operador."
+        );
+      }
     }
 
     const isGlobal = this.isGlobalRole(createdBy);
@@ -1395,7 +1533,9 @@ if (!allowedOperatorTypes.includes(wt)) {
       operadorDto ||
       conductorNombre ||
       (conductorUser
-        ? `${conductorUser.nombre || ""}${conductorUser.apellido ? " " + conductorUser.apellido : ""}`.trim()
+        ? `${conductorUser.nombre || ""}${
+            conductorUser.apellido ? " " + conductorUser.apellido : ""
+          }`.trim()
         : null);
 
     const data: any = {
@@ -1456,25 +1596,7 @@ if (!allowedOperatorTypes.includes(wt)) {
       },
     });
 
-    if (created.assignedToId) {
-      try {
-        await this.firebaseService.sendNotificationToUser(
-          created.assignedToId,
-          "Nueva Orden de Trabajo",
-          `Se te ha asignado una OT: ${created.titulo || "Sin título"}`,
-          "/trabajador"
-        );
-
-        console.log(
-          `✅ Notificación enviada al operador asignado: ${created.assignedToId}`
-        );
-      } catch (error) {
-        console.error(
-          "❌ Error enviando notificación de OT al operador:",
-          error
-        );
-      }
-    }
+    await this.notifyAssignedOtToOperatorAndRigger(created);
 
     return created;
   }
@@ -1544,16 +1666,75 @@ if (!allowedOperatorTypes.includes(wt)) {
 
     const cliente = cleanStr((dto as any).cliente);
     const lugar = cleanStr((dto as any).lugar);
-    if (!cliente && !lugar) throw new BadRequestException("Completa al menos Cliente o Lugar.");
+    if (!cliente && !lugar) {
+      throw new BadRequestException("Completa al menos Cliente o Lugar.");
+    }
 
-    if (exists.status === WorkOrderStatus.APROBADA || exists.status === WorkOrderStatus.CERRADA) {
+    if (
+      exists.status === WorkOrderStatus.APROBADA ||
+      exists.status === WorkOrderStatus.CERRADA
+    ) {
       throw new BadRequestException("No se puede editar una OT aprobada/cerrada.");
     }
 
     const rutNorm = normalizeRut((dto as any).rut);
     const clientId = await this.resolveClientIdOrNull(dto, exists.empresa as any);
 
-    const conductorNombre = cleanStr((dto as any).conductor);
+    const conductorId = cleanStr((dto as any).conductorId);
+    let conductorUser: any = null;
+
+    if (conductorId) {
+      conductorUser = await this.prisma.user.findUnique({
+        where: { id: conductorId },
+        select: {
+          id: true,
+          activo: true,
+          role: true,
+          empresa: true,
+          workerType: true,
+          nombre: true,
+          apellido: true,
+        },
+      });
+
+      if (!conductorUser) {
+        throw new BadRequestException("Operador seleccionado no existe.");
+      }
+      if (!conductorUser.activo) {
+        throw new BadRequestException("Operador seleccionado está inactivo.");
+      }
+      if (String(conductorUser.role || "").toUpperCase() !== "TRABAJADOR") {
+        throw new BadRequestException("Operador seleccionado no tiene rol TRABAJADOR.");
+      }
+
+      const wt = String((conductorUser as any).workerType || "").toUpperCase();
+      const allowedOperatorTypes = [
+        "OPERADOR",
+        "SUPERVISOR",
+        "SUPERVISOR_TERRENO",
+      ];
+
+      if (!allowedOperatorTypes.includes(wt)) {
+        throw new BadRequestException(
+          "El usuario seleccionado no es un tipo válido para Operador."
+        );
+      }
+
+      if (conductorUser.empresa && conductorUser.empresa !== exists.empresa) {
+        throw new BadRequestException(
+          "El operador seleccionado pertenece a otra empresa."
+        );
+      }
+    }
+
+    const conductorNombre =
+      cleanStr((dto as any).conductor) ||
+      (conductorUser
+        ? `${conductorUser.nombre || ""}${
+            conductorUser.apellido ? " " + conductorUser.apellido : ""
+          }`.trim()
+        : null);
+
     const operadorDto = cleanStr((dto as any).operador);
 
     const before = this.snapshotWorkOrder(exists);
@@ -1584,13 +1765,18 @@ if (!allowedOperatorTypes.includes(wt)) {
 
       camion: cleanStr((dto as any).camion),
       conductor: conductorNombre,
-      operador: operadorDto || conductorNombre || cleanStr((exists as any).operador),
+      operador:
+        operadorDto || conductorNombre || cleanStr((exists as any).operador),
       rigger: cleanStr((dto as any).rigger),
       sinJib: !!(dto as any).sinJib,
 
       diasTrabajo: cleanDiasTrabajo((dto as any).diasTrabajo),
       nota: cleanStr((dto as any).nota),
     };
+
+    if (conductorId) {
+      data.assignedToId = conductorId;
+    }
 
     if ("diasProgramados" in (dto as any)) {
       data.diasProgramados = cleanDiasProgramados((dto as any).diasProgramados);
@@ -1610,6 +1796,29 @@ if (!allowedOperatorTypes.includes(wt)) {
         after: this.snapshotWorkOrder(after),
       },
     });
+
+    const operatorChanged =
+      cleanStr(before?.assignedToId) !== cleanStr(after?.assignedToId) ||
+      this.normalizePersonName(before?.operador) !==
+        this.normalizePersonName(after?.operador) ||
+      this.normalizePersonName(before?.conductor) !==
+        this.normalizePersonName(after?.conductor);
+
+    const riggerChanged =
+      this.normalizePersonName(before?.rigger) !==
+      this.normalizePersonName(after?.rigger);
+
+    const camionChanged =
+      this.normalizePersonName(before?.camion) !==
+      this.normalizePersonName(after?.camion);
+
+    const obraChanged =
+      this.normalizePersonName(before?.direccionFaena || before?.lugar) !==
+      this.normalizePersonName(after?.direccionFaena || after?.lugar);
+
+    if (operatorChanged || riggerChanged || camionChanged || obraChanged) {
+      await this.notifyAssignedOtToOperatorAndRigger(after);
+    }
 
     return after;
   }
@@ -1735,7 +1944,8 @@ if (!allowedOperatorTypes.includes(wt)) {
   async listForWorker(user: any, includeFinalizadas?: any) {
     if (!user?.id) throw new BadRequestException("No se detectó el usuario logueado.");
 
-    const empresa = await this.getEmpresaForActorOrThrow(user);
+    const fullUser = await this.getActorOrThrowById(user.id);
+    const empresa = await this.getEmpresaForActorOrThrow(fullUser);
     const include = this.parseIncludeFinalizadas(includeFinalizadas);
 
     const statusIn: WorkOrderStatus[] = [
@@ -1748,12 +1958,26 @@ if (!allowedOperatorTypes.includes(wt)) {
 
     if (include) statusIn.push(WorkOrderStatus.CERRADA);
 
+    const fullName = this.buildFullName(fullUser);
+    const isRigger = this.workerTypeUpper(fullUser) === "RIGGER";
+
+    const whereOr: any[] = [{ assignedToId: fullUser.id }];
+
+    if (isRigger && fullName) {
+      whereOr.push({
+        rigger: {
+          equals: fullName,
+          mode: "insensitive",
+        },
+      });
+    }
+
     return this.prisma.workOrder.findMany({
       where: {
         empresa,
         ...this.whereActivosOnly(),
-        assignedToId: user.id,
         status: { in: statusIn },
+        OR: whereOr,
       },
       orderBy: { createdAt: "desc" },
       select: {
@@ -1798,11 +2022,23 @@ if (!allowedOperatorTypes.includes(wt)) {
     if (!exists) throw new NotFoundException("OT no encontrada");
     if (exists.activo === false) throw new NotFoundException("OT no encontrada");
 
-    if (exists.assignedToId && exists.assignedToId !== userId) {
+    const actor = await this.getActorOrThrowById(userId);
+    const actorFullName = this.buildFullName(actor);
+    const isActorRigger = this.workerTypeUpper(actor) === "RIGGER";
+    const isAssignedOperator = exists.assignedToId && exists.assignedToId === userId;
+    const isAssignedRigger =
+      isActorRigger &&
+      actorFullName &&
+      this.normalizePersonName(exists.rigger) === this.normalizePersonName(actorFullName);
+
+    if (!isAssignedOperator && !isAssignedRigger) {
       throw new ForbiddenException("No tienes asignada esta OT.");
     }
 
-    if (exists.status === WorkOrderStatus.APROBADA || exists.status === WorkOrderStatus.CERRADA) {
+    if (
+      exists.status === WorkOrderStatus.APROBADA ||
+      exists.status === WorkOrderStatus.CERRADA
+    ) {
       throw new BadRequestException("Esta OT ya fue aprobada/cerrada.");
     }
 
@@ -1834,8 +2070,6 @@ if (!allowedOperatorTypes.includes(wt)) {
       data,
     });
 
-    const actor = await this.getActorOrThrowById(userId);
-
     await this.audit.log({
       entity: AuditEntity.WORK_ORDER,
       entityId: id,
@@ -1861,11 +2095,23 @@ if (!allowedOperatorTypes.includes(wt)) {
     if (!exists) throw new NotFoundException("OT no encontrada");
     if (exists.activo === false) throw new NotFoundException("OT no encontrada");
 
-    if (exists.assignedToId && exists.assignedToId !== userId) {
+    const actor = await this.getActorOrThrowById(userId);
+    const actorFullName = this.buildFullName(actor);
+    const isActorRigger = this.workerTypeUpper(actor) === "RIGGER";
+    const isAssignedOperator = exists.assignedToId && exists.assignedToId === userId;
+    const isAssignedRigger =
+      isActorRigger &&
+      actorFullName &&
+      this.normalizePersonName(exists.rigger) === this.normalizePersonName(actorFullName);
+
+    if (!isAssignedOperator && !isAssignedRigger) {
       throw new ForbiddenException("No tienes asignada esta OT.");
     }
 
-    if (exists.status === WorkOrderStatus.APROBADA || exists.status === WorkOrderStatus.CERRADA) {
+    if (
+      exists.status === WorkOrderStatus.APROBADA ||
+      exists.status === WorkOrderStatus.CERRADA
+    ) {
       throw new BadRequestException("Esta OT ya fue aprobada/cerrada.");
     }
 
@@ -1885,13 +2131,17 @@ if (!allowedOperatorTypes.includes(wt)) {
       throw new BadRequestException("Falta Hora inicio servicio en obra.");
     }
     if (!isHHMM(iniObra)) {
-      throw new BadRequestException("Hora inicio servicio en obra inválida. Formato requerido: HH:MM");
+      throw new BadRequestException(
+        "Hora inicio servicio en obra inválida. Formato requerido: HH:MM"
+      );
     }
     if (!finObra) {
       throw new BadRequestException("Falta Hora término servicio en obra.");
     }
     if (!isHHMM(finObra)) {
-      throw new BadRequestException("Hora término servicio en obra inválida. Formato requerido: HH:MM");
+      throw new BadRequestException(
+        "Hora término servicio en obra inválida. Formato requerido: HH:MM"
+      );
     }
 
     const data: any = {
@@ -1913,8 +2163,6 @@ if (!allowedOperatorTypes.includes(wt)) {
 
     const before = this.snapshotWorkOrder(exists);
     const after = await this.prisma.workOrder.update({ where: { id }, data });
-
-    const actor = await this.getActorOrThrowById(userId);
 
     await this.audit.log({
       entity: AuditEntity.WORK_ORDER,
@@ -1949,7 +2197,10 @@ if (!allowedOperatorTypes.includes(wt)) {
     if (!exists) throw new NotFoundException("OT no encontrada");
     if (exists.activo === false) throw new NotFoundException("OT no encontrada");
 
-    if (exists.status === WorkOrderStatus.APROBADA || exists.status === WorkOrderStatus.CERRADA) {
+    if (
+      exists.status === WorkOrderStatus.APROBADA ||
+      exists.status === WorkOrderStatus.CERRADA
+    ) {
       throw new BadRequestException("No se puede corregir una OT aprobada/cerrada.");
     }
 
@@ -2003,10 +2254,14 @@ if (!allowedOperatorTypes.includes(wt)) {
     if (exists.activo === false) throw new NotFoundException("OT no encontrada");
 
     if (exists.status !== WorkOrderStatus.COMPLETADA) {
-      throw new BadRequestException("Solo se puede aprobar una OT que esté COMPLETADA.");
+      throw new BadRequestException(
+        "Solo se puede aprobar una OT que esté COMPLETADA."
+      );
     }
     if (!exists.workerReport) {
-      throw new BadRequestException("No se puede aprobar: falta el reporte del trabajador.");
+      throw new BadRequestException(
+        "No se puede aprobar: falta el reporte del trabajador."
+      );
     }
 
     const before = this.snapshotWorkOrder(exists);
@@ -2048,10 +2303,14 @@ if (!allowedOperatorTypes.includes(wt)) {
     if (exists.activo === false) throw new NotFoundException("OT no encontrada");
 
     if (exists.status !== WorkOrderStatus.COMPLETADA) {
-      throw new BadRequestException("Solo se puede rechazar una OT que esté COMPLETADA.");
+      throw new BadRequestException(
+        "Solo se puede rechazar una OT que esté COMPLETADA."
+      );
     }
     if (!exists.workerReport) {
-      throw new BadRequestException("No se puede rechazar: falta el reporte del trabajador.");
+      throw new BadRequestException(
+        "No se puede rechazar: falta el reporte del trabajador."
+      );
     }
 
     const motivo = cleanStr(reason);

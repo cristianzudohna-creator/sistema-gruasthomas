@@ -1,4 +1,5 @@
-// ✅ Archivo: src/pages/WorkOrderCompleteModal.jsx (COMPLETO + BORRADOR + FIRMA BLOQUEABLE)
+// ✅ Archivo: src/pages/WorkOrderCompleteModal.jsx
+// ✅ COMPLETO + CSS PROPIO + BORRADOR + FIRMA BLOQUEABLE
 // ✅ FIX NUEVO:
 // - En modo admin ahora SÍ muestra "Recibí Conforme (cliente)" en solo lectura.
 // - Se visualiza nombre y rut guardados por el trabajador.
@@ -11,12 +12,16 @@
 // ✅ CAMBIO NUEVO:
 // - La firma se recorta y centra automáticamente al guardarse,
 //   para que en el PDF salga centrada aunque el cliente firme en cualquier parte.
+// ✅ NUEVO:
+// - CSS propio en WorkOrderCompleteModal.css
+// - Responsive mobile sin perder el diseño
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import { getApiUrl } from "../api/apiUrl";
 import { fixText } from "../utils/fixText";
+import "./WorkOrderCompleteModal.css";
 
 const API_URL = getApiUrl();
 
@@ -24,7 +29,6 @@ function getToken() {
   return localStorage.getItem("access_token") || "";
 }
 
-// ✅ lee error como JSON o texto y lo convierte a mensaje útil
 async function readError(res) {
   const contentType = res.headers.get("content-type") || "";
 
@@ -75,7 +79,7 @@ function normalizeText(s) {
 function isValidHora(h) {
   const v = normalizeText(h);
   if (!v) return false;
-  return /^([01]\d|2[0-3]):[0-5]\d$/.test(v); // HH:MM
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
 }
 
 function safeParseWorkerReport(v) {
@@ -129,25 +133,16 @@ function FieldRO({ label, value }) {
     (typeof cleanValue === "string" && !String(cleanValue || "").trim());
 
   return (
-    <div
-      style={{
-        padding: "10px 12px",
-        borderRadius: 12,
-        border: "1px solid rgba(0,0,0,0.08)",
-        background: "#fff",
-      }}
-    >
-      <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 900 }}>{cleanLabel}</div>
-      <div style={{ marginTop: 6, fontWeight: 900, wordBreak: "break-word" }}>
-        {isEmpty ? "—" : cleanValue}
-      </div>
+    <div className="wocm-field-ro">
+      <div className="wocm-field-ro__label">{cleanLabel}</div>
+      <div className="wocm-field-ro__value">{isEmpty ? "—" : cleanValue}</div>
     </div>
   );
 }
 
 function Box({ title, children }) {
   return (
-    <div className="ot-box">
+    <div className="ot-box wocm-box">
       <div className="ot-box-title">{fixText(String(title ?? ""))}</div>
       {children}
     </div>
@@ -160,26 +155,47 @@ function Resumen({ f, firmaOk, mode, recibi }) {
   const recRut = normalizeText(recibi?.rut) || "—";
 
   return (
-    <div style={{ paddingTop: 6 }}>
-      <div style={{ fontWeight: 900, marginBottom: 8 }}>
+    <div className="wocm-resumen">
+      <div className="wocm-resumen__title">
         {isAdmin ? "Resumen de corrección" : "Resumen"}
       </div>
 
-      <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 14, padding: 12 }}>
+      <div className="wocm-resumen__box">
         <Row label="Hora salida planta" value={normalizeText(f.salidaPlanta) || "—"} />
         <Row label="Hora llegada faena" value={normalizeText(f.llegadaFaena) || "—"} />
-        <Row label="Hora inicio servicio en obra" value={normalizeText(f.inicioServicioObra) || "—"} />
-        <Row label="Hora término servicio en obra" value={normalizeText(f.terminoServicioObra) || "—"} />
+        <Row
+          label="Hora inicio servicio en obra"
+          value={normalizeText(f.inicioServicioObra) || "—"}
+        />
+        <Row
+          label="Hora término servicio en obra"
+          value={normalizeText(f.terminoServicioObra) || "—"}
+        />
         <Row label="Hora salida faena" value={normalizeText(f.salidaFaena) || "—"} />
         <Row label="Hora llegada planta" value={normalizeText(f.llegadaPlanta) || "—"} />
         <Row label="Horas colación (opcional)" value={normalizeText(f.colacion) || "—"} />
 
-        <Row label="Km salida planta (opcional)" value={normalizeText(f.kmSalidaPlanta) || "—"} />
-        <Row label="Km llegada faena (opcional)" value={normalizeText(f.kmLlegadaFaena) || "—"} />
-        <Row label="Km salida faena (opcional)" value={normalizeText(f.kmSalidaFaena) || "—"} />
-        <Row label="Km llegada planta (opcional)" value={normalizeText(f.kmLlegadaPlanta) || "—"} />
+        <Row
+          label="Km salida planta (opcional)"
+          value={normalizeText(f.kmSalidaPlanta) || "—"}
+        />
+        <Row
+          label="Km llegada faena (opcional)"
+          value={normalizeText(f.kmLlegadaFaena) || "—"}
+        />
+        <Row
+          label="Km salida faena (opcional)"
+          value={normalizeText(f.kmSalidaFaena) || "—"}
+        />
+        <Row
+          label="Km llegada planta (opcional)"
+          value={normalizeText(f.kmLlegadaPlanta) || "—"}
+        />
 
-        <Row label="Movimientos / ¿Qué se hizo?" value={normalizeText(f.movimientos) || "—"} />
+        <Row
+          label="Movimientos / ¿Qué se hizo?"
+          value={normalizeText(f.movimientos) || "—"}
+        />
 
         {!isAdmin ? (
           <>
@@ -195,25 +211,33 @@ function Resumen({ f, firmaOk, mode, recibi }) {
 
 function Row({ label, value }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 10, padding: "6px 0" }}>
-      <div style={{ fontWeight: 900, opacity: 0.7 }}>{fixText(String(label ?? ""))}</div>
-      <div style={{ fontWeight: 900, wordBreak: "break-word" }}>
+    <div className="wocm-row">
+      <div className="wocm-row__label">{fixText(String(label ?? ""))}</div>
+      <div className="wocm-row__value">
         {typeof value === "string" ? fixText(value) : value || "—"}
       </div>
     </div>
   );
 }
 
-function LabeledInput({ label, placeholder, value, onChange, disabled, error, className = "" }) {
+function LabeledInput({
+  label,
+  placeholder,
+  value,
+  onChange,
+  disabled,
+  error,
+  className = "",
+}) {
   const errStyle = error
     ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220,38,38,.15)" }
     : undefined;
 
   return (
     <div className={className}>
-      <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.75, marginBottom: 6 }}>
+      <div className="wocm-label">
         {fixText(String(label ?? ""))}
-        {error ? <span style={{ color: "#dc2626" }}> • {fixText(String(error))}</span> : null}
+        {error ? <span className="wocm-label__error"> • {fixText(String(error))}</span> : null}
       </div>
       <input
         className="gt-input"
@@ -227,16 +251,24 @@ function LabeledInput({ label, placeholder, value, onChange, disabled, error, cl
   );
 }
 
-function LabeledTextarea({ label, placeholder, value, onChange, disabled, error, className = "" }) {
+function LabeledTextarea({
+  label,
+  placeholder,
+  value,
+  onChange,
+  disabled,
+  error,
+  className = "",
+}) {
   const errStyle = error
     ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220,38,38,.15)" }
     : undefined;
 
   return (
     <div className={className}>
-      <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.75, marginBottom: 6 }}>
+      <div className="wocm-label">
         {fixText(String(label ?? ""))}
-        {error ? <span style={{ color: "#dc2626" }}> • {fixText(String(error))}</span> : null}
+        {error ? <span className="wocm-label__error"> • {fixText(String(error))}</span> : null}
       </div>
       <textarea
         className="gt-input ot-textarea"
@@ -251,7 +283,7 @@ function LabeledTextarea({ label, placeholder, value, onChange, disabled, error,
 }
 
 /* =========================
-   ✅ Firma en Canvas (BLOQUEABLE)
+   Firma en Canvas
 ========================= */
 function SignaturePad({
   value,
@@ -351,17 +383,7 @@ function SignaturePad({
     octx.imageSmoothingEnabled = true;
     octx.imageSmoothingQuality = "high";
 
-    octx.drawImage(
-      src,
-      minX,
-      minY,
-      cropW,
-      cropH,
-      dx,
-      dy,
-      drawW,
-      drawH
-    );
+    octx.drawImage(src, minX, minY, cropW, cropH, dx, dy, drawW, drawH);
 
     return out.toDataURL("image/png");
   }
@@ -483,16 +505,21 @@ function SignaturePad({
   }
 
   return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <div style={{ fontWeight: 900, opacity: 0.85 }}>
-          Firma del cliente <span style={{ opacity: 0.65, fontWeight: 800 }}>(en tu celular)</span>
-          <div style={{ marginTop: 4, fontSize: 12, fontWeight: 900, opacity: 0.7 }}>
-            {enabled ? "✅ Firma habilitada" : "🔒 Firma bloqueada (habilita antes de firmar)"}
+    <div className="wocm-signature">
+      <div className="wocm-signature__head">
+        <div className="wocm-signature__title-wrap">
+          <div className="wocm-signature__title">
+            Firma del cliente{" "}
+            <span className="wocm-signature__subtitle">(en tu celular)</span>
+          </div>
+          <div className="wocm-signature__status">
+            {enabled
+              ? "✅ Firma habilitada"
+              : "🔒 Firma bloqueada (habilita antes de firmar)"}
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div className="wocm-signature__actions">
           <button
             className="gt-btn gt-btn-primary"
             type="button"
@@ -503,42 +530,29 @@ function SignaturePad({
             {enabled ? "Bloquear firma" : "✍️ Habilitar firma"}
           </button>
 
-          <button className="gt-btn ghost" type="button" onClick={clear} disabled={disabled || !value}>
+          <button
+            className="gt-btn ghost"
+            type="button"
+            onClick={clear}
+            disabled={disabled || !value}
+          >
             Limpiar
           </button>
         </div>
       </div>
 
-      <div style={{ height: 10 }} />
+      <div className="wocm-signature__spacer" />
 
-      <div
-        style={{
-          border: "1px solid rgba(0,0,0,0.12)",
-          borderRadius: 14,
-          overflow: "hidden",
-          background: "#fff",
-          position: "relative",
-        }}
-      >
+      <div className="wocm-signature__canvas-wrap">
         {!enabled ? (
           <div
             onClick={() => !disabled && onEnableChange?.(true)}
             role="button"
-            style={{
-              position: "absolute",
-              inset: 0,
-              zIndex: 5,
-              background: "rgba(255,255,255,0.72)",
-              display: "grid",
-              placeItems: "center",
-              padding: 12,
-              textAlign: "center",
-              cursor: disabled ? "not-allowed" : "pointer",
-            }}
+            className="wocm-signature__overlay"
           >
-            <div style={{ fontWeight: 1000 }}>
+            <div className="wocm-signature__overlay-text">
               🔒 Firma deshabilitada
-              <div style={{ marginTop: 6, fontWeight: 900, fontSize: 12, opacity: 0.75 }}>
+              <div className="wocm-signature__overlay-sub">
                 Toca aquí para habilitar y que el cliente firme
               </div>
             </div>
@@ -547,12 +561,7 @@ function SignaturePad({
 
         <canvas
           ref={canvasRef}
-          style={{
-            width: "100%",
-            height: 180,
-            display: "block",
-            touchAction: "none",
-          }}
+          className="wocm-signature__canvas"
           onMouseDown={start}
           onMouseMove={move}
           onMouseUp={end}
@@ -563,7 +572,7 @@ function SignaturePad({
         />
       </div>
 
-      <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75, fontWeight: 800 }}>
+      <div className="wocm-signature__help">
         {helperText ||
           "Habilita la firma, pídele al cliente que firme dentro del recuadro. Luego presiona “Enviar a administración”."}
       </div>
@@ -744,7 +753,8 @@ export default function WorkOrderCompleteModal({
       if (!normalizeText(recibi.nombre)) e.recibiNombre = "Obligatorio";
       if (!normalizeText(recibi.rut)) e.recibiRut = "Obligatorio";
 
-      const firmaOkLocal = !!normalizeText(signature) && String(signature).startsWith("data:image/");
+      const firmaOkLocal =
+        !!normalizeText(signature) && String(signature).startsWith("data:image/");
       if (!firmaOkLocal) e.signature = "Falta firma";
     }
 
@@ -822,7 +832,12 @@ export default function WorkOrderCompleteModal({
       setConfirmOpen(false);
       await Promise.resolve(onSaved?.());
     } catch (e) {
-      setFormErr(fixText(e?.message || (isAdmin ? "Error guardando corrección" : "Error enviando reporte")));
+      setFormErr(
+        fixText(
+          e?.message ||
+            (isAdmin ? "Error guardando corrección" : "Error enviando reporte")
+        )
+      );
       setConfirmOpen(false);
     } finally {
       setSaving(false);
@@ -831,13 +846,27 @@ export default function WorkOrderCompleteModal({
 
   const title = useMemo(() => {
     const cliente = normalizeText(workOrder?.cliente);
-    const lugar = normalizeText(workOrder?.direccionFaena || workOrder?.lugar || workOrder?.direccion);
+    const lugar = normalizeText(
+      workOrder?.direccionFaena || workOrder?.lugar || workOrder?.direccion
+    );
 
     if (isAdmin) {
-      return fixText(cliente ? `Corregir reporte • ${cliente}` : lugar ? `Corregir reporte • ${lugar}` : "Corregir reporte");
+      return fixText(
+        cliente
+          ? `Corregir reporte • ${cliente}`
+          : lugar
+          ? `Corregir reporte • ${lugar}`
+          : "Corregir reporte"
+      );
     }
 
-    return fixText(cliente ? `Completar OT • ${cliente}` : lugar ? `Completar OT • ${lugar}` : "Completar OT");
+    return fixText(
+      cliente
+        ? `Completar OT • ${cliente}`
+        : lugar
+        ? `Completar OT • ${lugar}`
+        : "Completar OT"
+    );
   }, [workOrder, isAdmin]);
 
   const subtitle = isAdmin
@@ -850,11 +879,15 @@ export default function WorkOrderCompleteModal({
       cliente: normalizeText(pick(d?.cliente, d?.clienteNombre, d?.razonSocial)),
       rut: normalizeText(pick(d?.rut, d?.clienteRut)),
       giro: normalizeText(pick(d?.giro)),
-
       solicitadoPor: normalizeText(
-        pick(d?.solicitadoPor, d?.requestedBy, d?.requestedByName, d?.contactoSolicitante, d?.nombreSolicitante)
+        pick(
+          d?.solicitadoPor,
+          d?.requestedBy,
+          d?.requestedByName,
+          d?.contactoSolicitante,
+          d?.nombreSolicitante
+        )
       ),
-
       direccionFaena: normalizeText(pick(d?.direccionFaena, d?.lugar, d?.ubicacion)),
       direccionCliente: normalizeText(pick(d?.direccion)),
       comuna: normalizeText(pick(d?.comuna)),
@@ -879,7 +912,8 @@ export default function WorkOrderCompleteModal({
     };
   }, [workOrder]);
 
-  const firmaOk = !!normalizeText(signature) && String(signature).startsWith("data:image/");
+  const firmaOk =
+    !!normalizeText(signature) && String(signature).startsWith("data:image/");
   const recibiNombre = normalizeText(recibi.nombre);
   const recibiRut = normalizeText(recibi.rut);
 
@@ -931,41 +965,30 @@ export default function WorkOrderCompleteModal({
         }
       >
         {loading ? (
-          <div style={{ padding: 14, fontWeight: 900, opacity: 0.8 }}>Cargando OT...</div>
+          <div className="wocm-loading">Cargando OT...</div>
         ) : error ? (
-          <div style={{ padding: 14, color: "#b00020", fontWeight: 900 }}>{fixText(String(error))}</div>
+          <div className="wocm-error">{fixText(String(error))}</div>
         ) : !workOrder ? (
-          <div style={{ padding: 14, opacity: 0.75 }}>Sin datos.</div>
+          <div className="wocm-empty">Sin datos.</div>
         ) : (
           <form id="ot-complete-form" onSubmit={handleSubmit} className="gt-form-grid">
             {formErr ? <div className="gt-error">{fixText(formErr)}</div> : null}
 
             {draftMsg ? (
-              <div
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  background: "rgba(16,185,129,.12)",
-                  border: "1px solid rgba(16,185,129,.25)",
-                  fontWeight: 900,
-                }}
-              >
-                {fixText(draftMsg)}
-              </div>
+              <div className="wocm-success">{fixText(draftMsg)}</div>
             ) : null}
 
             <Box title="Detalle OT (solo lectura)">
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
+              <div className="wocm-grid wocm-grid--3">
                 <FieldRO label="Cliente" value={ro.cliente} />
                 <FieldRO label="RUT" value={ro.rut} />
                 <FieldRO label="Giro" value={ro.giro} />
 
                 <FieldRO label="Solicitado por" value={ro.solicitadoPor} />
-
                 <FieldRO label="Días de trabajo" value={ro.diasTrabajo} />
                 <FieldRO label="Horario llegada" value={ro.horario} />
 
-                <div style={{ gridColumn: "1 / -1" }}>
+                <div className="wocm-grid-full">
                   <FieldRO label="Obra/Tramo" value={ro.direccionFaena} />
                 </div>
 
@@ -977,27 +1000,11 @@ export default function WorkOrderCompleteModal({
                 <FieldRO label="Conductor" value={ro.conductor} />
                 <FieldRO label="Rigger" value={ro.rigger} />
 
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <div
-                    style={{
-                      padding: "10px 12px",
-                      borderRadius: 12,
-                      border: "1px solid rgba(0,0,0,0.08)",
-                      background: "#fff",
-                    }}
-                  >
-                    <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 900 }}>Link Maps</div>
-                    <div style={{ marginTop: 6, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                      <div
-                        style={{
-                          minWidth: 0,
-                          fontWeight: 900,
-                          opacity: 0.85,
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
+                <div className="wocm-grid-full">
+                  <div className="wocm-field-ro">
+                    <div className="wocm-field-ro__label">Link Maps</div>
+                    <div className="wocm-maps">
+                      <div className="wocm-maps__label">
                         {ro.mapsLink ? "Google Maps" : "—"}
                       </div>
                       {ro.mapsLink ? (
@@ -1005,18 +1012,7 @@ export default function WorkOrderCompleteModal({
                           href={ro.mapsLink}
                           target="_blank"
                           rel="noreferrer"
-                          className="gt-btn ghost"
-                          style={{
-                            height: 34,
-                            padding: "0 10px",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 8,
-                            borderRadius: 10,
-                            fontWeight: 900,
-                            whiteSpace: "nowrap",
-                            textDecoration: "none",
-                          }}
+                          className="gt-btn ghost wocm-maps__btn"
                         >
                           🗺️ Abrir Maps
                         </a>
@@ -1084,9 +1080,7 @@ export default function WorkOrderCompleteModal({
                 />
 
                 <div>
-                  <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.75, marginBottom: 6 }}>
-                    Horas de colación (opcional)
-                  </div>
+                  <div className="wocm-label">Horas de colación (opcional)</div>
 
                   <input
                     type="number"
@@ -1097,26 +1091,19 @@ export default function WorkOrderCompleteModal({
                     placeholder="Ej: 1"
                     value={f.colacion ?? ""}
                     onChange={(e) =>
-                      setField(
-                        "colacion",
-                        e.target.value === "" ? "" : Number(e.target.value)
-                      )
+                      setField("colacion", e.target.value === "" ? "" : Number(e.target.value))
                     }
                     disabled={saving || savingDraft}
                   />
 
-                  <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4 }}>
-                    Cantidad de horas (ej: 1, 2, 3)
-                  </div>
+                  <div className="wocm-help">Cantidad de horas (ej: 1, 2, 3)</div>
 
                   {errors.colacion && (
-                    <div style={{ color: "#dc2626", fontSize: 12, marginTop: 4 }}>
-                      {errors.colacion}
-                    </div>
+                    <div className="wocm-inline-error">{errors.colacion}</div>
                   )}
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div className="wocm-km-grid">
                   <LabeledInput
                     label="Km salida planta (opcional)"
                     placeholder="Ej: 123456"
@@ -1133,7 +1120,7 @@ export default function WorkOrderCompleteModal({
                   />
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div className="wocm-km-grid">
                   <LabeledInput
                     label="Km salida faena (opcional)"
                     placeholder="Ej: 124100"
@@ -1165,7 +1152,7 @@ export default function WorkOrderCompleteModal({
 
             <Box title="Recibí Conforme (cliente)">
               {isAdmin ? (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div className="ot-grid-2">
                   <FieldRO label="Nombre quien recibe conforme" value={recibiNombre || "—"} />
                   <FieldRO label="RUT quien recibe conforme" value={recibiRut || "—"} />
                 </div>
@@ -1195,7 +1182,7 @@ export default function WorkOrderCompleteModal({
               {!isAdmin ? (
                 <>
                   {errors.signature ? (
-                    <div className="gt-error" style={{ marginBottom: 10 }}>
+                    <div className="gt-error wocm-signature-error">
                       Debes pedir la firma del cliente antes de enviar.
                     </div>
                   ) : null}
@@ -1213,50 +1200,32 @@ export default function WorkOrderCompleteModal({
                     helperText='Habilita la firma, pide al cliente que firme dentro del recuadro. Luego presiona “Guardar borrador” o “Enviar a administración”.'
                   />
 
-                  <div style={{ marginTop: 10, fontSize: 12, fontWeight: 900, opacity: 0.75 }}>
+                  <div className="wocm-signature-state">
                     Estado firma: {firmaOk ? "✅ Firmada" : "❌ Falta firma"}
                   </div>
                 </>
               ) : (
                 <>
                   {firmaOk ? (
-                    <div
-                      style={{
-                        border: "1px solid rgba(0,0,0,0.12)",
-                        borderRadius: 14,
-                        background: "#fff",
-                        padding: 12,
-                      }}
-                    >
-                      <div style={{ fontWeight: 900, opacity: 0.85, marginBottom: 10 }}>
+                    <div className="wocm-admin-signature">
+                      <div className="wocm-admin-signature__title">
                         Firma registrada (solo lectura)
                       </div>
 
-                      <div
-                        style={{
-                          width: "100%",
-                          height: 180,
-                          borderRadius: 14,
-                          border: "1px solid rgba(0,0,0,0.10)",
-                          overflow: "hidden",
-                          display: "grid",
-                          placeItems: "center",
-                          background: "#fff",
-                        }}
-                      >
+                      <div className="wocm-admin-signature__preview">
                         <img
                           src={signature}
                           alt="Firma cliente"
-                          style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+                          className="wocm-admin-signature__img"
                         />
                       </div>
 
-                      <div style={{ marginTop: 10, fontSize: 12, fontWeight: 900, opacity: 0.7 }}>
+                      <div className="wocm-admin-signature__state">
                         Estado firma: ✅ Firmada
                       </div>
                     </div>
                   ) : (
-                    <div style={{ fontWeight: 900, opacity: 0.75 }}>Sin firma registrada.</div>
+                    <div className="wocm-muted">Sin firma registrada.</div>
                   )}
                 </>
               )}
@@ -1267,7 +1236,11 @@ export default function WorkOrderCompleteModal({
 
       <ConfirmModal
         open={confirmOpen}
-        title={isAdmin ? "¿Guardar corrección del reporte?" : "¿Enviar reporte a administración?"}
+        title={
+          isAdmin
+            ? "¿Guardar corrección del reporte?"
+            : "¿Enviar reporte a administración?"
+        }
         confirmText={isAdmin ? "Sí, guardar" : "Sí, enviar"}
         cancelText="No"
         danger={false}

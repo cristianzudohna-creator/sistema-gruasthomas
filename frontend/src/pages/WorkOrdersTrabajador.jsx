@@ -4,9 +4,23 @@
 // - LUGAR clickeable a Google Maps
 // - se elimina columna GENERADA
 // - se elimina botón Descargar PDF
+// ✅ NUEVO RIGGER / OPERADOR:
+// - misma pantalla para ambos
+// - detecta workerType desde localStorage
+// - cambia textos según OPERADOR / RIGGER
+// - muestra columnas distintas para RIGGER
+// - RIGGER:
+//   - NO ve Cliente
+//   - NO ve Solicitado por
+//   - NO ve botón Completar
+//   - solo ve detalle e info útil de asignación
+// ✅ NUEVO RESPONSIVE:
+// - escritorio: tabla
+// - móvil: cards
 
 import { useEffect, useMemo, useState } from "react";
 import "./Admin.css";
+import "./WorkOrdersTrabajador.css";
 import WorkOrderDetailModal from "./WorkOrderDetailModal";
 import WorkOrderCompleteModal from "./WorkOrderCompleteModal";
 
@@ -16,7 +30,36 @@ function getToken() {
   return localStorage.getItem("access_token") || "";
 }
 
-// ✅ lee error como JSON o texto y lo convierte a mensaje útil
+function getUserFromStorage() {
+  try {
+    const raw =
+      localStorage.getItem("user") ||
+      localStorage.getItem("me") ||
+      localStorage.getItem("profile");
+
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function norm(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function pickWorkerType(user) {
+  return norm(
+    user?.workerType ||
+      user?.tipoTrabajador ||
+      user?.worker_type ||
+      user?.tipo_trabajador ||
+      user?.cargo ||
+      user?.type
+  );
+}
+
 async function readError(res) {
   const contentType = res.headers.get("content-type") || "";
 
@@ -68,41 +111,18 @@ function isNew(v) {
   return Date.now() - new Date(v).getTime() < 24 * 60 * 60 * 1000;
 }
 
-// ✅ Código OT igual que en el PDF (OT- + 6 chars del UUID)
 function otCode(id) {
   const short = String(id || "").slice(0, 6).toUpperCase();
   return `OT-${short || "------"}`;
 }
 
-function Badge({ children, tone = "neutral" }) {
-  const tones = {
-    neutral: { bg: "rgba(0,0,0,0.04)", bd: "rgba(0,0,0,0.10)", tx: "#111" },
-    warn: { bg: "rgba(245,179,1,.14)", bd: "rgba(245,179,1,.55)", tx: "#111" },
-    ok: { bg: "rgba(16,185,129,.14)", bd: "rgba(16,185,129,.40)", tx: "#111" },
-    bad: { bg: "rgba(220,38,38,.12)", bd: "rgba(220,38,38,.38)", tx: "#111" },
-    info: { bg: "rgba(59,130,246,.12)", bd: "rgba(59,130,246,.38)", tx: "#111" },
-  };
-  const t = tones[tone] || tones.neutral;
+function textOrDash(v) {
+  const s = String(v || "").trim();
+  return s || "—";
+}
 
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "4px 10px",
-        borderRadius: 999,
-        border: `1px solid ${t.bd}`,
-        background: t.bg,
-        color: t.tx,
-        fontWeight: 900,
-        fontSize: 12,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {children}
-    </span>
-  );
+function Badge({ children, tone = "neutral" }) {
+  return <span className={`wot-badge wot-badge--${tone}`}>{children}</span>;
 }
 
 function statusTone(s) {
@@ -127,18 +147,10 @@ function statusLabel(s) {
 
 function StatCard({ title, value, hint }) {
   return (
-    <div
-      style={{
-        background: "#fff",
-        border: "1px solid rgba(0,0,0,0.08)",
-        borderRadius: 14,
-        padding: 14,
-        boxShadow: "0 8px 20px rgba(0,0,0,0.04)",
-      }}
-    >
-      <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 900 }}>{title}</div>
-      <div style={{ fontSize: 26, fontWeight: 900, marginTop: 6 }}>{value}</div>
-      {hint ? <div style={{ fontSize: 12, opacity: 0.65, marginTop: 2 }}>{hint}</div> : null}
+    <div className="wot-stat-card">
+      <div className="wot-stat-card__title">{title}</div>
+      <div className="wot-stat-card__value">{value}</div>
+      {hint ? <div className="wot-stat-card__hint">{hint}</div> : null}
     </div>
   );
 }
@@ -163,18 +175,20 @@ function isFinalizada(status) {
 
 function isActiva(status) {
   const st = String(status || "").toUpperCase();
-  return st === "ABIERTA" || st === "EN_PROCESO" || st === "RECHAZADA" || st === "COMPLETADA";
+  return (
+    st === "ABIERTA" ||
+    st === "EN_PROCESO" ||
+    st === "RECHAZADA" ||
+    st === "COMPLETADA"
+  );
 }
 
-// ✅ NUEVO: construye link de maps
 function buildMapsUrl(rawLink, fallbackText) {
   const link = String(rawLink || "").trim();
   const text = String(fallbackText || "").trim();
 
-  // ✅ si ya viene un link real, usarlo
   if (/^https?:\/\//i.test(link)) return link;
 
-  // ✅ fallback: búsqueda por dirección/texto
   if (!text || text === "—") return "";
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(text)}`;
 }
@@ -195,6 +209,15 @@ export default function WorkOrdersTrabajador() {
   const [completeLoading, setCompleteLoading] = useState(false);
   const [completeErr, setCompleteErr] = useState("");
   const [completeRow, setCompleteRow] = useState(null);
+
+  const user = useMemo(() => getUserFromStorage(), []);
+  const workerType = useMemo(() => pickWorkerType(user), [user]);
+  const isRigger = workerType === "RIGGER";
+  const isOperador =
+    workerType === "OPERADOR" ||
+    workerType === "CONDUCTOR" ||
+    workerType === "SUPERVISOR" ||
+    workerType === "SUPERVISOR_TERRENO";
 
   async function load() {
     setLoading(true);
@@ -268,115 +291,92 @@ export default function WorkOrdersTrabajador() {
   const stats = useMemo(() => {
     const total = items.length;
     const nuevas = items.filter((x) => isNew(x.createdAt)).length;
-    const enProceso = items.filter((x) => String(x.status || "").toUpperCase() === "EN_PROCESO").length;
-    const enAprobacion = items.filter((x) => String(x.status || "").toUpperCase() === "COMPLETADA").length;
-    const aprobadas = items.filter((x) => String(x.status || "").toUpperCase() === "APROBADA").length;
+    const enProceso = items.filter(
+      (x) => String(x.status || "").toUpperCase() === "EN_PROCESO"
+    ).length;
+    const enAprobacion = items.filter(
+      (x) => String(x.status || "").toUpperCase() === "COMPLETADA"
+    ).length;
+    const aprobadas = items.filter(
+      (x) => String(x.status || "").toUpperCase() === "APROBADA"
+    ).length;
     return { total, nuevas, enProceso, enAprobacion, aprobadas };
   }, [items]);
 
-  return (
-    <div style={{ paddingBottom: 24 }}>
-      <style>
-        {`
-          td.col-cliente{
-            white-space: normal !important;
-          }
-          .cliente-2l{
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            line-height: 1.25;
-            max-height: calc(1.25em * 2);
-            word-break: break-word;
-          }
-          .maps-link{
-            color:#0f172a;
-            font-weight:700;
-            text-decoration:none;
-            border-bottom:1px dashed rgba(15,23,42,.25);
-          }
-          .maps-link:hover{
-            opacity:.8;
-          }
-        `}
-      </style>
+  const topSubtitle = isRigger
+    ? "Aquí ves las OT donde participas como rigger, junto con el operador, camión y obra/tramo."
+    : isOperador
+    ? "Aquí ves tus OT asignadas para revisar, completar o continuar."
+    : "Aquí ves tus órdenes asignadas.";
 
-      <div
-        style={{
-          padding: 18,
-          borderRadius: 18,
-          background: "linear-gradient(180deg, rgba(245, 184, 0, 0.16), rgba(0, 0, 0, 0))",
-          border: "1px solid rgba(0,0,0,0.06)",
-          marginBottom: 14,
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          gap: 14,
-          flexWrap: "wrap",
-        }}
-      >
-        <div>
-          <h1 style={{ margin: 0, fontSize: 30, letterSpacing: "-0.3px" }}>Órdenes de trabajo</h1>
-          <div style={{ marginTop: 6, opacity: 0.75, fontWeight: 800 }}>Tus órdenes asignadas</div>
+  const totalHint = isRigger ? "OT donde participas" : "Órdenes asignadas";
+  const emptyActiveText = isRigger
+    ? "No hay órdenes activas donde participes como rigger."
+    : "No hay órdenes activas.";
+  const emptyFinalText = isRigger
+    ? "No hay órdenes finalizadas donde participes como rigger."
+    : "No hay órdenes finalizadas (Aprobadas/Cerradas) para mostrar.";
+
+  return (
+    <div className="wot-page">
+      <div className="wot-hero">
+        <div className="wot-hero__text">
+          <h1 className="wot-title">Órdenes de trabajo</h1>
+          <div className="wot-subtitle">{topSubtitle}</div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button type="button" className="gt-btn" onClick={goPortal} style={{ height: 40, padding: "0 14px", borderRadius: 999 }}>
+        <div className="wot-hero__actions">
+          <button type="button" className="gt-btn wot-hero-btn" onClick={goPortal}>
             ← Volver al portal
           </button>
 
           <button
             type="button"
-            className="gt-btn"
+            className="gt-btn wot-hero-btn wot-hero-btn--dark"
             onClick={logout}
-            style={{ height: 40, padding: "0 14px", borderRadius: 999, background: "#111", borderColor: "#111", color: "#fff" }}
           >
             Cerrar sesión
           </button>
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12, marginBottom: 14 }}>
-        <StatCard title="Total" value={stats.total} hint="Órdenes asignadas" />
+      <div className="wot-stats-grid">
+        <StatCard title="Total" value={stats.total} hint={totalHint} />
         <StatCard title="Nuevas" value={stats.nuevas} hint="Últimas 24 horas" />
-        <StatCard title="En proceso" value={stats.enProceso} hint="Guardadas como borrador" />
-        <StatCard title="En aprobación" value={stats.enAprobacion} hint="Esperando visto bueno" />
+        <StatCard
+          title="En proceso"
+          value={stats.enProceso}
+          hint="Guardadas como borrador"
+        />
+        <StatCard
+          title="En aprobación"
+          value={stats.enAprobacion}
+          hint="Esperando visto bueno"
+        />
       </div>
 
       <div className="panel">
-        <div className="panel-head" style={{ alignItems: "flex-end", gap: 12, justifyContent: "space-between", flexWrap: "wrap" }}>
-          <div style={{ flex: "1 1 auto", minWidth: 260 }}>
-            <h2 style={{ marginBottom: 6 }}>Listado</h2>
+        <div className="panel-head wot-panel-head">
+          <div className="wot-panel-head__left">
+            <h2 className="wot-section-title">Listado</h2>
 
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <div className="wot-tabs">
               <button
                 type="button"
-                className="btn ghost"
+                className={`btn ghost wot-tab-btn ${
+                  tab === "activas" ? "wot-tab-btn--active" : ""
+                }`}
                 onClick={() => setTab("activas")}
-                style={{
-                  height: 36,
-                  borderRadius: 999,
-                  fontWeight: 900,
-                  opacity: tab === "activas" ? 1 : 0.7,
-                  borderColor: tab === "activas" ? "rgba(0,0,0,.18)" : "rgba(0,0,0,.10)",
-                }}
               >
                 Activas ({items.filter((x) => isActiva(x.status)).length})
               </button>
 
               <button
                 type="button"
-                className="btn ghost"
+                className={`btn ghost wot-tab-btn ${
+                  tab === "finalizadas" ? "wot-tab-btn--active" : ""
+                }`}
                 onClick={() => setTab("finalizadas")}
-                style={{
-                  height: 36,
-                  borderRadius: 999,
-                  fontWeight: 900,
-                  opacity: tab === "finalizadas" ? 1 : 0.7,
-                  borderColor: tab === "finalizadas" ? "rgba(0,0,0,.18)" : "rgba(0,0,0,.10)",
-                }}
                 title="APROBADA / CERRADA (solo lectura)"
               >
                 Finalizadas (solo lectura) ({items.filter((x) => isFinalizada(x.status)).length})
@@ -384,37 +384,50 @@ export default function WorkOrdersTrabajador() {
             </div>
 
             {stats.enAprobacion > 0 ? (
-              <div style={{ marginTop: 10 }}>
-                <Badge tone="warn">⏳ Tienes {stats.enAprobacion} OT(s) esperando aprobación</Badge>
+              <div className="wot-alert-row">
+                <Badge tone="warn">
+                  ⏳ Tienes {stats.enAprobacion} OT(s) esperando aprobación
+                </Badge>
               </div>
             ) : null}
 
             {stats.aprobadas > 0 ? (
-              <div style={{ marginTop: 8 }}>
-                <Badge tone="ok">✅ Tienes {stats.aprobadas} OT(s) aprobadas en Finalizadas</Badge>
+              <div className="wot-alert-row">
+                <Badge tone="ok">
+                  ✅ Tienes {stats.aprobadas} OT(s) aprobadas en Finalizadas
+                </Badge>
               </div>
             ) : null}
           </div>
 
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <button className="btn" type="button" onClick={load} disabled={loading} style={{ height: 40, width: 170, flex: "0 0 auto", borderRadius: 12 }}>
+          <div className="wot-panel-head__right">
+            <button
+              className="btn wot-refresh-btn"
+              type="button"
+              onClick={load}
+              disabled={loading}
+            >
               {loading ? "Cargando..." : "Refrescar"}
             </button>
           </div>
         </div>
 
-        {err ? <div style={{ padding: "12px 14px", color: "#b00020", fontWeight: 900 }}>{err}</div> : null}
+        {err ? <div className="wot-error">{err}</div> : null}
 
-        <div className="table-wrap">
-          <table className="table" style={{ minWidth: 1120 }}>
+        {/* ✅ TABLA DESKTOP */}
+        <div className="table-wrap wot-table-wrap">
+          <table className="table wot-table" style={{ minWidth: isRigger ? 1240 : 1500 }}>
             <thead>
               <tr>
                 <th>FECHA</th>
                 <th>ESTADO</th>
                 <th>OT</th>
-                <th>CLIENTE</th>
-                <th>SOLICITADO POR</th>
-                <th>LUGAR</th>
+                {!isRigger ? <th>CLIENTE</th> : null}
+                {!isRigger ? <th>SOLICITADO POR</th> : null}
+                <th>OPERADOR</th>
+                <th>RIGGER</th>
+                <th>CAMIÓN</th>
+                <th>OBRA / TRAMO</th>
                 <th style={{ textAlign: "right" }}>ACCIONES</th>
               </tr>
             </thead>
@@ -422,10 +435,11 @@ export default function WorkOrdersTrabajador() {
             <tbody>
               {!loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ padding: 14, opacity: 0.75 }}>
-                    {tab === "finalizadas"
-                      ? "No hay órdenes finalizadas (Aprobadas/Cerradas) para mostrar."
-                      : "No hay órdenes activas."}
+                  <td
+                    colSpan={isRigger ? 8 : 10}
+                    className="wot-empty-row"
+                  >
+                    {tab === "finalizadas" ? emptyFinalText : emptyActiveText}
                   </td>
                 </tr>
               ) : null}
@@ -444,61 +458,40 @@ export default function WorkOrdersTrabajador() {
 
                 const rejectReason = String(x.rejectReason || "").trim();
 
+                const operador = textOrDash(x.operador || x.conductor);
+                const rigger = textOrDash(x.rigger);
+                const camion = textOrDash(x.camion);
                 const lugar = x.direccionFaena || x.lugar || x.direccion || "—";
 
-// ✅ probar primero los campos donde podría venir el link real
-const rawMapsLink =
-  x.linkMaps ||
-  x.linkMapa ||
-  x.mapsLink ||
-  x.mapsUrl ||
-  x.googleMapsUrl ||
-  x.googleMapsLink ||
-  x.ubicacionUrl ||
-  x.urlMaps ||
-  "";
+                const rawMapsLink =
+                  x.linkMaps ||
+                  x.linkMapa ||
+                  x.mapsLink ||
+                  x.mapsUrl ||
+                  x.googleMapsUrl ||
+                  x.googleMapsLink ||
+                  x.ubicacionUrl ||
+                  x.urlMaps ||
+                  "";
 
-const mapsUrl = buildMapsUrl(rawMapsLink, lugar);
+                const mapsUrl = buildMapsUrl(rawMapsLink, lugar);
 
                 return (
-                  <tr key={x.id} style={nueva ? { background: "rgba(245,179,1,.06)" } : undefined}>
+                  <tr
+                    key={x.id}
+                    className={nueva ? "wot-row-new" : ""}
+                  >
                     <td>
-                      <div style={{ fontWeight: 900 }}>{fmtDate(x.createdAt)}</div>
-                      {nueva ? (
-                        <span
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 6,
-                            marginTop: 6,
-                            padding: "3px 10px",
-                            borderRadius: 999,
-                            border: "1px solid rgba(245,179,1,.65)",
-                            background: "rgba(245,179,1,.12)",
-                            fontWeight: 900,
-                            fontSize: 12,
-                          }}
-                        >
-                          🆕 Nueva
-                        </span>
-                      ) : null}
+                      <div className="wot-cell-strong">{fmtDate(x.createdAt)}</div>
+                      {nueva ? <span className="wot-new-chip">🆕 Nueva</span> : null}
                     </td>
 
-                    <td style={{ fontWeight: 900 }}>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-start" }}>
+                    <td className="wot-status-cell">
+                      <div className="wot-status-stack">
                         <Badge tone={statusTone(st)}>{statusLabel(st)}</Badge>
 
                         {st === "RECHAZADA" && rejectReason ? (
-                          <div
-                            style={{
-                              fontSize: 12,
-                              fontWeight: 900,
-                              color: "#b00020",
-                              maxWidth: 340,
-                              lineHeight: 1.2,
-                            }}
-                            title={rejectReason}
-                          >
+                          <div className="wot-reject-reason" title={rejectReason}>
                             Motivo: {rejectReason}
                           </div>
                         ) : null}
@@ -511,96 +504,115 @@ const mapsUrl = buildMapsUrl(rawMapsLink, lugar);
                       </div>
                     </td>
 
-                    <td style={{ fontWeight: 900, whiteSpace: "nowrap" }}>{otCode(x.id)}</td>
+                    <td className="wot-cell-strong wot-nowrap">{otCode(x.id)}</td>
 
-                    <td className="col-cliente" style={{ fontWeight: 900 }}>
-                      <div className="cliente-2l" title={x.cliente || ""}>
-                        {x.cliente || "—"}
+                    {!isRigger ? (
+                      <td className="col-cliente wot-cell-strong">
+                        <div className="cliente-2l" title={x.cliente || ""}>
+                          {x.cliente || "—"}
+                        </div>
+                      </td>
+                    ) : null}
+
+                    {!isRigger ? (
+                      <td className="wot-cell-strong">
+                        <div className="linea-2l" title={formatSolicitadoPor(x)}>
+                          {formatSolicitadoPor(x)}
+                        </div>
+                      </td>
+                    ) : null}
+
+                    <td className="wot-cell-strong">
+                      <div className="linea-2l" title={operador}>
+                        {operador}
                       </div>
                     </td>
 
-                    <td style={{ fontWeight: 900 }}>{formatSolicitadoPor(x)}</td>
+                    <td className="wot-cell-strong">
+                      <div className="linea-2l" title={rigger}>
+                        {rigger}
+                      </div>
+                    </td>
+
+                    <td className="wot-cell-strong">
+                      <div className="linea-2l" title={camion}>
+                        {camion}
+                      </div>
+                    </td>
 
                     <td>
-  {mapsUrl ? (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      
-      {/* BOTÓN BONITO */}
-      <a
-        href={mapsUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{
-          display: "inline-block",
-          padding: "6px 10px",
-          borderRadius: 8,
-          background: "#0f172a",
-          color: "#fff",
-          fontWeight: 800,
-          fontSize: 12,
-          textDecoration: "none",
-          width: "fit-content",
-        }}
-      >
-        📍 Ver ubicación
-      </a>
+                      {mapsUrl ? (
+                        <div className="wot-location-stack">
+                          <a
+                            href={mapsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="wot-map-btn"
+                          >
+                            📍 Ver ubicación
+                          </a>
 
-      {/* TEXTO CHICO OPCIONAL */}
-      <span style={{ fontSize: 12, opacity: 0.7 }}>
-        {lugar}
-      </span>
-    </div>
-  ) : (
-    "—"
-  )}
-</td>
+                          <span className="linea-2l wot-location-text" title={lugar}>
+                            {lugar}
+                          </span>
+                        </div>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
 
-                    <td style={{ textAlign: "right" }}>
-                      <div style={{ display: "inline-flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                        <button className="btn ghost" type="button" onClick={() => openDetailById(x.id)} style={{ height: 36, minWidth: 140 }}>
+                    <td className="wot-actions-cell">
+                      <div className="wot-actions-wrap">
+                        <button
+                          className="btn ghost wot-action-btn"
+                          type="button"
+                          onClick={() => openDetailById(x.id)}
+                        >
                           👁 Ver detalle
                         </button>
 
-                        <button
-                          className="btn"
-                          type="button"
-                          onClick={() => openCompleteById(x.id)}
-                          disabled={blockComplete}
-                          title={
-                            readOnlyTab
-                              ? "Finalizada: solo lectura."
+                        {!isRigger ? (
+                          <button
+                            className="btn wot-action-btn wot-action-btn--primary"
+                            type="button"
+                            onClick={() => openCompleteById(x.id)}
+                            disabled={blockComplete}
+                            title={
+                              readOnlyTab
+                                ? "Finalizada: solo lectura."
+                                : st === "COMPLETADA"
+                                ? "Esta OT ya fue enviada y está esperando aprobación."
+                                : st === "APROBADA"
+                                ? "Esta OT ya fue aprobada."
+                                : st === "CERRADA"
+                                ? "Esta OT está cerrada."
+                                : st === "RECHAZADA"
+                                ? "Corrige lo que falta y vuelve a enviar."
+                                : st === "EN_PROCESO"
+                                ? "Continuar llenando borrador."
+                                : "Completar OT"
+                            }
+                            style={
+                              blockComplete
+                                ? { opacity: 0.6, cursor: "not-allowed" }
+                                : undefined
+                            }
+                          >
+                            {readOnlyTab
+                              ? "👁 Solo lectura"
                               : st === "COMPLETADA"
-                              ? "Esta OT ya fue enviada y está esperando aprobación."
+                              ? "⏳ Esperando aprobación"
                               : st === "APROBADA"
-                              ? "Esta OT ya fue aprobada."
+                              ? "✅ Aprobada"
                               : st === "CERRADA"
-                              ? "Esta OT está cerrada."
+                              ? "📦 Cerrada"
                               : st === "RECHAZADA"
-                              ? "Corrige lo que falta y vuelve a enviar."
+                              ? "🛠️ Corregir y reenviar"
                               : st === "EN_PROCESO"
-                              ? "Continuar llenando borrador."
-                              : "Completar OT"
-                          }
-                          style={
-                            blockComplete
-                              ? { height: 36, minWidth: 190, opacity: 0.6, cursor: "not-allowed" }
-                              : { height: 36, minWidth: 190 }
-                          }
-                        >
-                          {readOnlyTab
-                            ? "👁 Solo lectura"
-                            : st === "COMPLETADA"
-                            ? "⏳ Esperando aprobación"
-                            : st === "APROBADA"
-                            ? "✅ Aprobada"
-                            : st === "CERRADA"
-                            ? "📦 Cerrada"
-                            : st === "RECHAZADA"
-                            ? "🛠️ Corregir y reenviar"
-                            : st === "EN_PROCESO"
-                            ? "✏️ Continuar borrador"
-                            : "✅ Completar"}
-                        </button>
+                              ? "✏️ Continuar borrador"
+                              : "✅ Completar"}
+                          </button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -608,6 +620,154 @@ const mapsUrl = buildMapsUrl(rawMapsLink, lugar);
               })}
             </tbody>
           </table>
+        </div>
+
+        {/* ✅ CARDS MÓVIL */}
+        <div className="wot-mobile-list">
+          {!loading && filtered.length === 0 ? (
+            <div className="wot-mobile-empty">
+              {tab === "finalizadas" ? emptyFinalText : emptyActiveText}
+            </div>
+          ) : null}
+
+          {filtered.map((x) => {
+            const nueva = isNew(x.createdAt);
+            const st = String(x.status || "").toUpperCase();
+            const readOnlyTab = tab === "finalizadas";
+
+            const blockComplete =
+              readOnlyTab ||
+              st === "COMPLETADA" ||
+              st === "APROBADA" ||
+              st === "CERRADA";
+
+            const rejectReason = String(x.rejectReason || "").trim();
+
+            const operador = textOrDash(x.operador || x.conductor);
+            const rigger = textOrDash(x.rigger);
+            const camion = textOrDash(x.camion);
+            const lugar = x.direccionFaena || x.lugar || x.direccion || "—";
+
+            const rawMapsLink =
+              x.linkMaps ||
+              x.linkMapa ||
+              x.mapsLink ||
+              x.mapsUrl ||
+              x.googleMapsUrl ||
+              x.googleMapsLink ||
+              x.ubicacionUrl ||
+              x.urlMaps ||
+              "";
+
+            const mapsUrl = buildMapsUrl(rawMapsLink, lugar);
+
+            return (
+              <div key={x.id} className={`wot-mobile-card ${nueva ? "wot-mobile-card--new" : ""}`}>
+                <div className="wot-mobile-card__head">
+                  <div>
+                    <div className="wot-mobile-card__ot">{otCode(x.id)}</div>
+                    <div className="wot-mobile-card__date">{fmtDate(x.createdAt)}</div>
+                  </div>
+
+                  <div className="wot-mobile-card__badges">
+                    <Badge tone={statusTone(st)}>{statusLabel(st)}</Badge>
+                    {nueva ? <span className="wot-new-chip">🆕 Nueva</span> : null}
+                  </div>
+                </div>
+
+                {st === "RECHAZADA" && rejectReason ? (
+                  <div className="wot-mobile-card__reason">
+                    Motivo: {rejectReason}
+                  </div>
+                ) : null}
+
+                <div className="wot-mobile-grid">
+                  {!isRigger ? (
+                    <div className="wot-mobile-item">
+                      <span className="wot-mobile-label">Cliente</span>
+                      <span className="wot-mobile-value">{textOrDash(x.cliente)}</span>
+                    </div>
+                  ) : null}
+
+                  {!isRigger ? (
+                    <div className="wot-mobile-item">
+                      <span className="wot-mobile-label">Solicitado por</span>
+                      <span className="wot-mobile-value">{formatSolicitadoPor(x)}</span>
+                    </div>
+                  ) : null}
+
+                  <div className="wot-mobile-item">
+                    <span className="wot-mobile-label">Operador</span>
+                    <span className="wot-mobile-value">{operador}</span>
+                  </div>
+
+                  <div className="wot-mobile-item">
+                    <span className="wot-mobile-label">Rigger</span>
+                    <span className="wot-mobile-value">{rigger}</span>
+                  </div>
+
+                  <div className="wot-mobile-item">
+                    <span className="wot-mobile-label">Camión</span>
+                    <span className="wot-mobile-value">{camion}</span>
+                  </div>
+
+                  <div className="wot-mobile-item">
+                    <span className="wot-mobile-label">Obra / Tramo</span>
+                    <span className="wot-mobile-value">{lugar}</span>
+                  </div>
+                </div>
+
+                <div className="wot-mobile-actions">
+                  {mapsUrl ? (
+                    <a
+                      href={mapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="wot-map-btn"
+                    >
+                      📍 Ver ubicación
+                    </a>
+                  ) : null}
+
+                  <button
+                    className="btn ghost wot-action-btn"
+                    type="button"
+                    onClick={() => openDetailById(x.id)}
+                  >
+                    👁 Ver detalle
+                  </button>
+
+                  {!isRigger ? (
+                    <button
+                      className="btn wot-action-btn wot-action-btn--primary"
+                      type="button"
+                      onClick={() => openCompleteById(x.id)}
+                      disabled={blockComplete}
+                      style={
+                        blockComplete
+                          ? { opacity: 0.6, cursor: "not-allowed" }
+                          : undefined
+                      }
+                    >
+                      {readOnlyTab
+                        ? "👁 Solo lectura"
+                        : st === "COMPLETADA"
+                        ? "⏳ Esperando aprobación"
+                        : st === "APROBADA"
+                        ? "✅ Aprobada"
+                        : st === "CERRADA"
+                        ? "📦 Cerrada"
+                        : st === "RECHAZADA"
+                        ? "🛠️ Corregir y reenviar"
+                        : st === "EN_PROCESO"
+                        ? "✏️ Continuar borrador"
+                        : "✅ Completar"}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         <div className="panel-foot">
@@ -624,30 +784,31 @@ const mapsUrl = buildMapsUrl(rawMapsLink, lugar);
         error={detailErr}
       />
 
-      <WorkOrderCompleteModal
-        open={completeOpen}
-        onClose={() => {
-          if (completeLoading) return;
-          setCompleteOpen(false);
-          setCompleteRow(null);
-          setCompleteErr("");
-          setCompleteLoading(false);
-        }}
-        workOrder={completeRow}
-        loading={completeLoading}
-        error={completeErr}
-        onSaved={async () => {
-          setCompleteOpen(false);
-          setCompleteRow(null);
-          setCompleteErr("");
-          setCompleteLoading(false);
-          await load();
-        }}
-      />
+      {!isRigger ? (
+        <WorkOrderCompleteModal
+          open={completeOpen}
+          onClose={() => {
+            if (completeLoading) return;
+            setCompleteOpen(false);
+            setCompleteRow(null);
+            setCompleteErr("");
+            setCompleteLoading(false);
+          }}
+          workOrder={completeRow}
+          loading={completeLoading}
+          error={completeErr}
+          onSaved={async () => {
+            setCompleteOpen(false);
+            setCompleteRow(null);
+            setCompleteErr("");
+            setCompleteLoading(false);
+            await load();
+          }}
+        />
+      ) : null}
     </div>
   );
 }
-
 
 
 

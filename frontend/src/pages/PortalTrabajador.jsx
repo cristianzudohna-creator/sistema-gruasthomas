@@ -7,6 +7,8 @@
 //   1) Órdenes de trabajo
 //   2) Reportar incidente
 // - Supervisor taller mecánico también puede ver Órdenes de trabajo
+// ✅ AJUSTE:
+// - texto de Órdenes de trabajo mejorado para RIGGER / OPERADOR
 
 import { useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
@@ -133,11 +135,9 @@ export default function PortalTrabajador() {
       !isPrevencion &&
       workerType !== "SUPERVISOR");
 
-  // ✅ Solicitud de insumos: JEFE_TALLER / SUPERVISOR
   const canRequestSupplies =
     role === "SUPERADMIN" || isJefeTaller;
 
-  // ✅ Compras de insumos: PREVENCIÓN
   const canManageSupplies =
     role === "TRABAJADOR" && workerType === "PREVENCION";
 
@@ -174,6 +174,8 @@ export default function PortalTrabajador() {
                 ? "Acceso rápido a incidentes, tareas, horas extras y órdenes de trabajo"
                 : isSupervisorTerreno
                 ? "Acceso rápido a órdenes de trabajo y reporte de incidentes"
+                : workerType === "RIGGER"
+                ? "Acceso rápido a órdenes de trabajo asignadas y reporte de incidentes"
                 : "Acceso rápido a formularios"}
             </p>
           </div>
@@ -200,7 +202,6 @@ export default function PortalTrabajador() {
         </section>
 
         <section className="ptw-grid">
-          {/* 🔥 JEFE TALLER / SUPERVISOR TALLER */}
           {isJefeTaller && (
             <button
               className="ptw-card ptw-card--admin"
@@ -221,7 +222,6 @@ export default function PortalTrabajador() {
             </button>
           )}
 
-          {/* ✅ SOLICITUD DE INSUMOS */}
           {canRequestSupplies && (
             <button
               className="ptw-card ptw-card--admin"
@@ -242,7 +242,6 @@ export default function PortalTrabajador() {
             </button>
           )}
 
-          {/* ✅ PREVENCIÓN - COMPRAS DE INSUMOS */}
           {canManageSupplies && (
             <button
               className="ptw-card"
@@ -263,7 +262,6 @@ export default function PortalTrabajador() {
             </button>
           )}
 
-          {/* OT */}
           {canUseWorkOrders && (
             <button
               className="ptw-card"
@@ -274,7 +272,7 @@ export default function PortalTrabajador() {
                 <div>
                   <div className="ptw-card__title">Órdenes de trabajo</div>
                   <div className="ptw-card__sub">
-                    Ver OT y completar horas
+                    Ver OT asignadas, operador, camión y obra
                   </div>
                 </div>
                 <div className="ptw-badge">Disponible</div>
@@ -284,7 +282,6 @@ export default function PortalTrabajador() {
             </button>
           )}
 
-          {/* TALLER */}
           {isWorkshopWorker && (
             <>
               <button
@@ -343,7 +340,6 @@ export default function PortalTrabajador() {
             </>
           )}
 
-          {/* REPORTAR */}
           {canReportIncident && (
             <button
               className="ptw-card"
