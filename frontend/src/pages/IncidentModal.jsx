@@ -18,6 +18,10 @@
 // - editar evidencia del incidente YA NO actualiza incident.fotoUrl
 // - ahora actualiza la última tarea del incidente
 // - así "Ver evidencia" cambia correctamente y "Ver foto" del incidente no se toca
+// ✅ FIX PRODUCCIÓN:
+// - si el incidente NO tiene tarea asociada, permite editar evidencia directo en el incidente
+// - en modo evidencia usa fallback a incident.descripcion + incident.fotoUrl
+// - así no bloquea incidentes antiguos o sin tarea
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -172,7 +176,7 @@ function getIncidentEvidenceData(incident) {
 
   const parsedObservation = parseObservationWithImage(observationRaw);
 
-  const fallbackTextCandidates = [
+  const fallbackTaskTextCandidates = [
     parsedObservation.cleanText,
     latestTask?.trabajoRealizado,
     latestTask?.evidencia,
@@ -182,10 +186,10 @@ function getIncidentEvidenceData(incident) {
     latestTask?.comentarioCierre,
   ];
 
-  const finalText =
-    fallbackTextCandidates.find((value) => String(value || "").trim()) || "";
+  const taskText =
+    fallbackTaskTextCandidates.find((value) => String(value || "").trim()) || "";
 
-  const imageCandidates = [
+  const taskImageCandidates = [
     parsedObservation.imageUrl,
     latestTask?.evidenciaFotoUrl,
     latestTask?.evidenciaImageUrl,
@@ -195,12 +199,20 @@ function getIncidentEvidenceData(incident) {
     latestTask?.imagenUrl,
   ];
 
-  const imagePath =
-    imageCandidates.find((value) => String(value || "").trim()) || "";
+  const taskImagePath =
+    taskImageCandidates.find((value) => String(value || "").trim()) || "";
+
+  // ✅ FIX PRODUCCIÓN:
+  // Si no hay tarea, usar la evidencia directa del incidente
+  const incidentText = String(incident?.descripcion || "").trim();
+  const incidentImagePath = String(incident?.fotoUrl || "").trim();
+
+  const finalText = taskText || incidentText || "";
+  const finalImagePath = taskImagePath || incidentImagePath || "";
 
   return {
-    text: String(finalText || "").trim(),
-    imageUrl: buildUploadUrl(imagePath),
+    text: finalText,
+    imageUrl: buildUploadUrl(finalImagePath),
   };
 }
 
@@ -490,13 +502,6 @@ export default function IncidentModal({
         return;
       }
 
-      if (!latestTask?.id) {
-        setError(
-          "Este incidente no tiene una tarea asociada para guardar la evidencia."
-        );
-        return;
-      }
-
       if (!String(form.descripcion || "").trim()) {
         setError("Debes ingresar la descripción de la evidencia.");
         return;
@@ -510,8 +515,62 @@ export default function IncidentModal({
       const token = getToken();
 
       if (isEditMode && isEvidenceMode) {
-        const evidencePayload = {
-          observaciones: String(form.descripcion || "").trim(),
+        // ✅ Si existe tarea, guardar en la tarea
+        if (latestTask?.id) {
+          const evidencePayload = {
+            observaciones: String(form.descripcion || "").trim(),
+            ...(photoBase64
+              ? {
+                  foto: photoBase64,
+                  fotoNombre: "incidente_evidencia.jpg",
+                }
+              : {}),
+            ...(removeCurrentPhoto
+              ? {
+                  foto: "",
+                  fotoNombre: "",
+                }
+              : {}),
+          };
+
+          const res = await fetch(`${API_URL}/workshop/tasks/${latestTask.id}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            credentials: "include",
+            body: JSON.stringify(evidencePayload),
+          });
+
+          if (!res.ok) {
+            const text = await res.text().catch(() => "");
+            throw new Error(
+              text || "No se pudo actualizar la evidencia del incidente"
+            );
+          }
+
+          const updated = await res.json().catch(() => null);
+
+          resetForm();
+          if (onSaved) onSaved(updated);
+          if (onClose) onClose();
+          return;
+        }
+
+        // ✅ FIX PRODUCCIÓN:
+        // Si NO existe tarea, guardar directo en el incidente
+        const incidentPayload = {
+          vehicleId: incident?.vehicle?.id
+            ? String(incident.vehicle.id)
+            : undefined,
+          reportedById: incident?.reportedBy?.id
+            ? String(incident.reportedBy.id)
+            : undefined,
+          empresa,
+          descripcion: String(form.descripcion || "").trim(),
+          ubicacionTexto: String(incident?.ubicacionTexto || "").trim() || null,
+          status: String(incident?.status || "ABIERTO").trim() || "ABIERTO",
           ...(photoBase64
             ? {
                 foto: photoBase64,
@@ -526,19 +585,21 @@ export default function IncidentModal({
             : {}),
         };
 
-        const res = await fetch(`${API_URL}/workshop/tasks/${latestTask.id}`, {
+        const res = await fetch(`${API_URL}/workshop/incidents/${incident.id}`, {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           credentials: "include",
-          body: JSON.stringify(evidencePayload),
+          body: JSON.stringify(incidentPayload),
         });
 
         if (!res.ok) {
           const text = await res.text().catch(() => "");
-          throw new Error(text || "No se pudo actualizar la evidencia del incidente");
+          throw new Error(
+            text || "No se pudo actualizar la evidencia del incidente"
+          );
         }
 
         const updated = await res.json().catch(() => null);
