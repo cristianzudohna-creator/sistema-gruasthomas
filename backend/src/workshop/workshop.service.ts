@@ -539,6 +539,55 @@ export class WorkshopService {
     }
   }
 
+    private extractWorkshopEvidenceImageFromObservaciones(
+    observaciones?: string | null,
+  ) {
+    const raw = String(observaciones || '').trim();
+    if (!raw) return '';
+
+    const match = raw.match(/(\/uploads\/workshop-evidence\/[^\s]+)/i);
+    return match?.[1] || '';
+  }
+
+  private removeWorkshopEvidenceImageFromObservaciones(
+    observaciones?: string | null,
+  ) {
+    let raw = String(observaciones || '').trim();
+    if (!raw) return '';
+
+    const imagePath = this.extractWorkshopEvidenceImageFromObservaciones(raw);
+
+    if (imagePath) {
+      raw = raw.replace(imagePath, '').trim();
+    }
+
+    raw = raw
+      .replace(/\n?\s*📸\s*Evidencia:\s*$/i, '')
+      .replace(/\n?\s*📸\s*Foto:\s*$/i, '')
+      .trim();
+
+    return raw;
+  }
+
+  private buildWorkshopObservacionesWithEvidenceImage(
+    baseObservaciones?: string | null,
+    imagePath?: string | null,
+  ) {
+    const cleanBase = this.removeWorkshopEvidenceImageFromObservaciones(
+      baseObservaciones,
+    );
+
+    const cleanImagePath = String(imagePath || '').trim();
+
+    if (!cleanImagePath) {
+      return cleanBase || null;
+    }
+
+    return cleanBase
+      ? `${cleanBase}\n📸 Evidencia: ${cleanImagePath}`
+      : `📸 Evidencia: ${cleanImagePath}`;
+  }
+
   private drawCellTextCentered(
     doc: any,
     text: string,
@@ -2716,79 +2765,61 @@ export class WorkshopService {
     // ✅ MANEJO DE EVIDENCIA EN OBSERVACIONES
     // =========================================================
     
-    const originalObservaciones = String(existingTask.observaciones || '').trim();
-
-const evidencePathMatch = originalObservaciones.match(
-  /(\/uploads\/workshop-evidence\/[^\s]+)/i,
-);
-const previousEvidencePath = evidencePathMatch?.[1] || '';
-
-let cleanObservaciones = originalObservaciones;
-
-if (previousEvidencePath) {
-  cleanObservaciones = cleanObservaciones.replace(previousEvidencePath, '').trim();
-}
-
-cleanObservaciones = cleanObservaciones
-  .replace(/\n?\s*📸\s*Evidencia:\s*$/i, '')
-  .replace(/\n?\s*📸\s*Foto:\s*$/i, '')
-  .trim();
-
-const normalizedObservaciones =
-  typeof dto.observaciones === 'string'
-    ? dto.observaciones.trim()
-    : undefined;
-
-let finalObservaciones =
-  normalizedObservaciones !== undefined
-    ? normalizedObservaciones
-    : cleanObservaciones;
-
-const fotoEvidenciaSource =
-  (dto as any).fotoEvidencia !== undefined
-    ? (dto as any).fotoEvidencia
-    : (dto as any).foto !== undefined
-      ? (dto as any).foto
-      : undefined;
-
-const fotoEvidenciaNombre =
-  (dto as any).fotoNombre !== undefined
-    ? String((dto as any).fotoNombre ?? '').trim()
-    : 'evidencia_tarea.jpg';
-
-const fotoEvidenciaRaw =
-  fotoEvidenciaSource !== undefined
-    ? String(fotoEvidenciaSource ?? '').trim()
-    : undefined;
-
-// fotoEvidencia / foto:
-// undefined => no tocar foto existente
-// ""        => quitar foto existente
-// base64    => reemplazar/agregar foto
-if (fotoEvidenciaRaw !== undefined) {
-  if (previousEvidencePath) {
-    this.deleteUploadedFile(previousEvidencePath);
-  }
-
-  if (fotoEvidenciaRaw) {
-    const savedEvidence = this.saveWorkshopEvidencePhoto(
-      fotoEvidenciaRaw,
-      fotoEvidenciaNombre || 'evidencia_tarea.jpg',
-    );
-
-    if (!savedEvidence.fotoUrl) {
-      throw new BadRequestException(
-        'No se pudo guardar la evidencia de la tarea',
+        const previousEvidencePath =
+      this.extractWorkshopEvidenceImageFromObservaciones(
+        existingTask.observaciones,
       );
+
+    const fotoEvidenciaSource =
+      (dto as any).fotoEvidencia !== undefined
+        ? (dto as any).fotoEvidencia
+        : (dto as any).foto !== undefined
+          ? (dto as any).foto
+          : undefined;
+
+    const fotoEvidenciaNombre =
+      (dto as any).fotoNombre !== undefined
+        ? String((dto as any).fotoNombre ?? '').trim()
+        : 'evidencia_tarea.jpg';
+
+    const fotoEvidenciaRaw =
+      fotoEvidenciaSource !== undefined
+        ? String(fotoEvidenciaSource ?? '').trim()
+        : undefined;
+
+    let finalEvidenceImagePath = previousEvidencePath || '';
+
+        if (fotoEvidenciaRaw !== undefined) {
+      if (fotoEvidenciaRaw) {
+        const savedEvidence = this.saveWorkshopEvidencePhoto(
+          fotoEvidenciaRaw,
+          fotoEvidenciaNombre || 'evidencia_tarea.jpg',
+        );
+
+        if (!savedEvidence.fotoUrl) {
+          throw new BadRequestException(
+            'No se pudo guardar la evidencia de la tarea',
+          );
+        }
+
+        if (previousEvidencePath) {
+          this.deleteUploadedFile(previousEvidencePath);
+        }
+
+        finalEvidenceImagePath = savedEvidence.fotoUrl;
+      } else {
+        if (previousEvidencePath) {
+          this.deleteUploadedFile(previousEvidencePath);
+        }
+
+        finalEvidenceImagePath = '';
+      }
     }
 
-    finalObservaciones = finalObservaciones
-      ? `${finalObservaciones}\n📸 Evidencia: ${savedEvidence.fotoUrl}`
-      : `📸 Evidencia: ${savedEvidence.fotoUrl}`;
-  } else {
-    finalObservaciones = finalObservaciones || '';
-  }
-}
+    const normalizedObservaciones =
+      typeof dto.observaciones === 'string'
+        ? dto.observaciones.trim()
+        : undefined;
 
     const problemaRepuestoRaw = (dto as any).problemaRepuesto;
     const problemaRepuesto =
@@ -2806,8 +2837,14 @@ if (fotoEvidenciaRaw !== undefined) {
       priority: dto.priority,
       status: dto.status,
       diagnostico: dto.diagnostico,
-      trabajoRealizado: dto.trabajoRealizado,
-      observaciones: finalObservaciones,
+            trabajoRealizado:
+        normalizedObservaciones !== undefined
+          ? normalizedObservaciones || null
+          : dto.trabajoRealizado,
+      observaciones: this.buildWorkshopObservacionesWithEvidenceImage(
+        existingTask.observaciones,
+        finalEvidenceImagePath,
+      ),
       estimatedCost: dto.estimatedCost,
       actualCost: dto.actualCost,
       problemaRepuesto:
@@ -2815,7 +2852,7 @@ if (fotoEvidenciaRaw !== undefined) {
           ? problemaRepuesto || null
           : undefined,
     };
-
+  
     if (nextStatus === WorkshopTaskStatus.EN_REPARACION) {
       data.startedAt = existingTask.startedAt ?? new Date();
       data.closedAt = null;
@@ -3283,33 +3320,20 @@ if (fotoEvidenciaRaw !== undefined) {
       throw new BadRequestException('La tarea ya está terminada');
     }
 
-    let imagePath: string | null = null;
+        let imagePath: string | null = null;
 
     if (dto?.fotoEvidencia) {
-      const buffer = this.parseImageDataUrl(dto.fotoEvidencia);
+      const savedEvidence = this.saveWorkshopEvidencePhoto(
+        dto.fotoEvidencia,
+        'evidencia_tarea.jpg',
+      );
 
-      if (buffer) {
-        const uploadDir = path.join(process.cwd(), 'uploads/workshop-evidence');
-
-        if (!fs.existsSync(uploadDir)) {
-          fs.mkdirSync(uploadDir, { recursive: true });
-        }
-
-        const fileName = `evidence_${Date.now()}_${Math.random()
-          .toString(36)
-          .substring(2, 8)}.jpg`;
-
-        const fullPath = path.join(uploadDir, fileName);
-
-        fs.writeFileSync(fullPath, buffer);
-
-        imagePath = `/uploads/workshop-evidence/${fileName}`;
-      }
+      imagePath = savedEvidence.fotoUrl;
     }
 
     const trabajoRealizado = String(dto?.trabajoRealizado || '').trim();
 
-    const updatedTask = await this.prisma.workshopTask.update({
+        const updatedTask = await this.prisma.workshopTask.update({
       where: { id: taskId },
       data: {
         status: WorkshopTaskStatus.TERMINADA,
@@ -3319,11 +3343,10 @@ if (fotoEvidenciaRaw !== undefined) {
           connect: { id: userId },
         },
         trabajoRealizado: trabajoRealizado || undefined,
-        observaciones: imagePath
-          ? task.observaciones?.trim()
-            ? `${task.observaciones}\n📸 Evidencia: ${imagePath}`
-            : `📸 Evidencia: ${imagePath}`
-          : task.observaciones,
+        observaciones: this.buildWorkshopObservacionesWithEvidenceImage(
+          task.observaciones,
+          imagePath,
+        ),
       },
       include: {
         vehicle: true,

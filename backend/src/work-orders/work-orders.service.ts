@@ -381,7 +381,6 @@ export class WorkOrdersService {
       clientId: (wo as any).clientId ?? null,
 
       rut: wo.rut ?? null,
-      giro: wo.giro ?? null,
       solicitadoPor: (wo as any).solicitadoPor ?? null,
 
       direccion: (wo as any).direccion ?? null,
@@ -1551,7 +1550,6 @@ export class WorkOrdersService {
 
       cliente,
       rut: rutNorm || cleanStr((dto as any).rut),
-      giro: cleanStr((dto as any).giro),
 
       solicitadoPor: cleanStr((dto as any).solicitadoPor),
 
@@ -1747,7 +1745,6 @@ export class WorkOrdersService {
 
       cliente,
       rut: rutNorm || cleanStr((dto as any).rut),
-      giro: cleanStr((dto as any).giro),
 
       solicitadoPor: cleanStr((dto as any).solicitadoPor),
 
@@ -1988,7 +1985,6 @@ export class WorkOrdersService {
         titulo: true,
         cliente: true,
         rut: true,
-        giro: true,
         solicitadoPor: true,
         direccion: true,
         comuna: true,
@@ -2122,27 +2118,6 @@ export class WorkOrdersService {
 
     const currentWorkerReport = safeParseWorkerReport(exists.workerReport) || {};
     const workerReport = this.deepMergeObjects(currentWorkerReport, incomingWorkerReport);
-
-    const dh = (workerReport as any)?.detalleHoras || {};
-    const iniObra = cleanStr((dh as any)?.inicioServicioObra);
-    const finObra = cleanStr((dh as any)?.terminoServicioObra);
-
-    if (!iniObra) {
-      throw new BadRequestException("Falta Hora inicio servicio en obra.");
-    }
-    if (!isHHMM(iniObra)) {
-      throw new BadRequestException(
-        "Hora inicio servicio en obra inválida. Formato requerido: HH:MM"
-      );
-    }
-    if (!finObra) {
-      throw new BadRequestException("Falta Hora término servicio en obra.");
-    }
-    if (!isHHMM(finObra)) {
-      throw new BadRequestException(
-        "Hora término servicio en obra inválida. Formato requerido: HH:MM"
-      );
-    }
 
     const data: any = {
       workerReport,
@@ -2542,7 +2517,6 @@ export class WorkOrdersService {
     const cliente = cleanStr(wo.cliente) || cleanStr((wo as any).lugar) || "—";
     const direccion = cleanStr((wo as any).direccion) || "—";
     const rut = cleanStr((wo as any).rut) || "—";
-    const giro = cleanStr((wo as any).giro) || "—";
     const comuna = cleanStr((wo as any).comuna) || "—";
     const ciudad = cleanStr((wo as any).ciudad) || "—";
 
@@ -2554,8 +2528,11 @@ export class WorkOrdersService {
       : cleanStr((wo as any).createdBy?.email) || null;
     const solicitadoPor = solicitadoPorManual || solicitadoPorAuto || "—";
 
-    const operador =
+        const operador =
       cleanStr((wo as any).operador) || cleanStr((wo as any).conductor) || "—";
+
+    const detalleServicio =
+      cleanStr((wo as any).nota) || cleanStr((wo as any).descripcion) || "—";
 
     const equipo = cleanStr((wo as any).camion) || "—";
     const obraTramo =
@@ -2661,18 +2638,6 @@ export class WorkOrdersService {
           showKm: true,
         },
         {
-          label: "Hora Inicio Servicio en Obra",
-          hora: fmtTimeIfHHMM((dh as any)?.inicioServicioObra) || "—",
-          km: "",
-          showKm: false,
-        },
-        {
-          label: "Hora Término Servicio en Obra",
-          hora: fmtTimeIfHHMM((dh as any)?.terminoServicioObra) || "—",
-          km: "",
-          showKm: false,
-        },
-        {
           label: "Hora Salida Faena",
           hora: fmtTimeIfHHMM((dh as any)?.salidaFaena) || "—",
           km: pickKm("salidaFaena") || "—",
@@ -2767,15 +2732,16 @@ export class WorkOrdersService {
 
     y = twoColRow(y, "Señores", cliente, "Comuna", comuna);
     y = twoColRow(y, "Dirección", direccion, "Ciudad", ciudad);
-    y = twoColRow(y, "R.U.T.", rut, "Giro", giro);
+    y = oneColFull(y, "R.U.T.", rut);
     y = oneColFull(y, "Solicitado por", solicitadoPor);
     y += 4;
 
     fullLine(y);
     y += 10;
 
-    y = twoColRow(y, "Operador", operador, "Patente", equipo);
+        y = twoColRow(y, "Operador", operador, "Patente", equipo);
     y = twoColRow(y, "Obra/Tramo", obraTramo, "Rigger Thomas", rigger);
+    y = oneColFull(y, "Detalle del servicio", detalleServicio);
     y += 4;
 
     fullLine(y);
@@ -2796,7 +2762,7 @@ export class WorkOrdersService {
     const movPadX = 10;
     const movPadTop = 10;
     doc.font("Helvetica").fontSize(9).fillColor("#111");
-    doc.text(movimientos || cleanStr((wo as any).nota) || "—", left + movPadX, y + movPadTop, {
+        doc.text(movimientos || "—", left + movPadX, y + movPadTop, {
       width: w - movPadX * 2,
       height: movH - movPadTop * 2,
       ellipsis: true,

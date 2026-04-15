@@ -56,10 +56,6 @@ export class CreateWorkOrderDto {
   @IsString()
   rut?: string;
 
-  @IsOptional()
-  @IsString()
-  giro?: string;
-
   // ✅ NUEVO: Solicitado por (Sr.)
   @IsOptional()
   @IsString()

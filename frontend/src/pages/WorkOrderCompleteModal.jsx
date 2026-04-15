@@ -163,14 +163,6 @@ function Resumen({ f, firmaOk, mode, recibi }) {
       <div className="wocm-resumen__box">
         <Row label="Hora salida planta" value={normalizeText(f.salidaPlanta) || "—"} />
         <Row label="Hora llegada faena" value={normalizeText(f.llegadaFaena) || "—"} />
-        <Row
-          label="Hora inicio servicio en obra"
-          value={normalizeText(f.inicioServicioObra) || "—"}
-        />
-        <Row
-          label="Hora término servicio en obra"
-          value={normalizeText(f.terminoServicioObra) || "—"}
-        />
         <Row label="Hora salida faena" value={normalizeText(f.salidaFaena) || "—"} />
         <Row label="Hora llegada planta" value={normalizeText(f.llegadaPlanta) || "—"} />
         <Row label="Horas colación (opcional)" value={normalizeText(f.colacion) || "—"} />
@@ -178,14 +170,6 @@ function Resumen({ f, firmaOk, mode, recibi }) {
         <Row
           label="Km salida planta (opcional)"
           value={normalizeText(f.kmSalidaPlanta) || "—"}
-        />
-        <Row
-          label="Km llegada faena (opcional)"
-          value={normalizeText(f.kmLlegadaFaena) || "—"}
-        />
-        <Row
-          label="Km salida faena (opcional)"
-          value={normalizeText(f.kmSalidaFaena) || "—"}
         />
         <Row
           label="Km llegada planta (opcional)"
@@ -609,14 +593,10 @@ export default function WorkOrderCompleteModal({
   const [f, setF] = useState({
     salidaPlanta: "",
     llegadaFaena: "",
-    inicioServicioObra: "",
-    terminoServicioObra: "",
     salidaFaena: "",
     llegadaPlanta: "",
     colacion: "",
     kmSalidaPlanta: "",
-    kmLlegadaFaena: "",
-    kmSalidaFaena: "",
     kmLlegadaPlanta: "",
     movimientos: "",
   });
@@ -654,14 +634,10 @@ export default function WorkOrderCompleteModal({
     setF({
       salidaPlanta: normalizeText(dh?.salidaPlanta),
       llegadaFaena: normalizeText(dh?.llegadaFaena),
-      inicioServicioObra: normalizeText(dh?.inicioServicioObra),
-      terminoServicioObra: normalizeText(dh?.terminoServicioObra),
       salidaFaena: normalizeText(dh?.salidaFaena),
       llegadaPlanta: normalizeText(dh?.llegadaPlanta),
       colacion: normalizeText(dh?.colacion),
       kmSalidaPlanta: normalizeText(dh?.kmSalidaPlanta) || legacyKmSalida,
-      kmLlegadaFaena: normalizeText(dh?.kmLlegadaFaena),
-      kmSalidaFaena: normalizeText(dh?.kmSalidaFaena),
       kmLlegadaPlanta: normalizeText(dh?.kmLlegadaPlanta) || legacyKmLlegada,
       movimientos: normalizeText(rep?.movimientos),
     });
@@ -685,15 +661,11 @@ export default function WorkOrderCompleteModal({
       detalleHoras: {
         salidaPlanta: normalizeText(f.salidaPlanta) || undefined,
         llegadaFaena: normalizeText(f.llegadaFaena) || undefined,
-        inicioServicioObra: normalizeText(f.inicioServicioObra) || undefined,
-        terminoServicioObra: normalizeText(f.terminoServicioObra) || undefined,
         salidaFaena: normalizeText(f.salidaFaena) || undefined,
         llegadaPlanta: normalizeText(f.llegadaPlanta) || undefined,
         colacion: normalizeText(f.colacion) || null,
 
         kmSalidaPlanta: normalizeText(f.kmSalidaPlanta) || null,
-        kmLlegadaFaena: normalizeText(f.kmLlegadaFaena) || null,
-        kmSalidaFaena: normalizeText(f.kmSalidaFaena) || null,
         kmLlegadaPlanta: normalizeText(f.kmLlegadaPlanta) || null,
       },
 
@@ -727,12 +699,6 @@ export default function WorkOrderCompleteModal({
 
     if (!normalizeText(f.llegadaFaena)) e.llegadaFaena = "Obligatorio";
     else if (!isValidHora(f.llegadaFaena)) e.llegadaFaena = "HH:MM";
-
-    if (!normalizeText(f.inicioServicioObra)) e.inicioServicioObra = "Obligatorio";
-    else if (!isValidHora(f.inicioServicioObra)) e.inicioServicioObra = "HH:MM";
-
-    if (!normalizeText(f.terminoServicioObra)) e.terminoServicioObra = "Obligatorio";
-    else if (!isValidHora(f.terminoServicioObra)) e.terminoServicioObra = "HH:MM";
 
     if (!normalizeText(f.salidaFaena)) e.salidaFaena = "Obligatorio";
     else if (!isValidHora(f.salidaFaena)) e.salidaFaena = "HH:MM";
@@ -878,7 +844,6 @@ export default function WorkOrderCompleteModal({
     return {
       cliente: normalizeText(pick(d?.cliente, d?.clienteNombre, d?.razonSocial)),
       rut: normalizeText(pick(d?.rut, d?.clienteRut)),
-      giro: normalizeText(pick(d?.giro)),
       solicitadoPor: normalizeText(
         pick(
           d?.solicitadoPor,
@@ -982,7 +947,6 @@ export default function WorkOrderCompleteModal({
               <div className="wocm-grid wocm-grid--3">
                 <FieldRO label="Cliente" value={ro.cliente} />
                 <FieldRO label="RUT" value={ro.rut} />
-                <FieldRO label="Giro" value={ro.giro} />
 
                 <FieldRO label="Solicitado por" value={ro.solicitadoPor} />
                 <FieldRO label="Días de trabajo" value={ro.diasTrabajo} />
@@ -1044,24 +1008,6 @@ export default function WorkOrderCompleteModal({
                 />
 
                 <LabeledInput
-                  label="Hora inicio servicio en obra"
-                  placeholder="Ej: 21:10"
-                  value={f.inicioServicioObra}
-                  onChange={(e) => setField("inicioServicioObra", e.target.value)}
-                  disabled={saving || savingDraft}
-                  error={errors.inicioServicioObra}
-                />
-
-                <LabeledInput
-                  label="Hora término servicio en obra"
-                  placeholder="Ej: 04:30"
-                  value={f.terminoServicioObra}
-                  onChange={(e) => setField("terminoServicioObra", e.target.value)}
-                  disabled={saving || savingDraft}
-                  error={errors.terminoServicioObra}
-                />
-
-                <LabeledInput
                   label="Hora salida faena"
                   placeholder="Ej: 05:00"
                   value={f.salidaFaena}
@@ -1111,23 +1057,9 @@ export default function WorkOrderCompleteModal({
                     onChange={(e) => setField("kmSalidaPlanta", e.target.value)}
                     disabled={saving || savingDraft}
                   />
-                  <LabeledInput
-                    label="Km llegada faena (opcional)"
-                    placeholder="Ej: 123999"
-                    value={f.kmLlegadaFaena}
-                    onChange={(e) => setField("kmLlegadaFaena", e.target.value)}
-                    disabled={saving || savingDraft}
-                  />
                 </div>
 
                 <div className="wocm-km-grid">
-                  <LabeledInput
-                    label="Km salida faena (opcional)"
-                    placeholder="Ej: 124100"
-                    value={f.kmSalidaFaena}
-                    onChange={(e) => setField("kmSalidaFaena", e.target.value)}
-                    disabled={saving || savingDraft}
-                  />
                   <LabeledInput
                     label="Km llegada planta (opcional)"
                     placeholder="Ej: 124500"

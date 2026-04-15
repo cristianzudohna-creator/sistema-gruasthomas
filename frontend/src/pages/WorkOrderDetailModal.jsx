@@ -3,13 +3,11 @@
 // ✅ FIX:
 // 1) Texto de banner COMPLETADA más correcto para admin/superadmin
 // 2) Quita “Empresa” del subtitle y chips
-// 3) Muestra KMs por tramo + compatibilidad legacy
+// 3) Muestra solo los KMs que quedaron vigentes
 // ✅ CAMBIO:
 // - “Creada por” -> “Solicitado por”
 // ✅ NUEVO (fechas):
 // - Si viene data.diasProgramados se muestra como fechas
-// ✅ NUEVO (OBRA):
-// - Muestra inicioServicioObra + terminoServicioObra
 // ✅ TEXT FIX:
 // - fixText() en strings del backend
 // ✅ REORDEN:
@@ -18,6 +16,13 @@
 // ✅ NUEVO:
 // - CSS propio en WorkOrderDetailModal.css
 // - Mejor responsive para teléfono
+// ✅ CAMBIOS PEDIDOS:
+// - Quitar Giro
+// - Quitar motivo en rechazada
+// - Quitar botón "Corregir reporte"
+// - Quitar inicio/término servicio en obra
+// - Quitar km llegada faena / km salida faena
+// - FIX pantalla blanca por variables eliminadas
 
 import { useEffect, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -30,50 +35,6 @@ const baseFromHost =
     ? `${window.location.protocol}//${window.location.host}/api`
     : "";
 const API_URL = (baseFromEnv || baseFromHost || "/api").replace(/\/+$/, "");
-
-function getToken() {
-  return localStorage.getItem("access_token") || "";
-}
-
-async function readError(res) {
-  const contentType = res.headers.get("content-type") || "";
-
-  if (contentType.includes("application/json")) {
-    try {
-      const data = await res.json();
-      if (Array.isArray(data?.message)) return data.message.join(" | ");
-      if (typeof data?.message === "string") return data.message;
-      return JSON.stringify(data);
-    } catch {}
-  }
-
-  try {
-    const t = await res.text();
-    return t || `HTTP ${res.status}`;
-  } catch {
-    return `HTTP ${res.status}`;
-  }
-}
-
-async function apiPatch(path, body) {
-  const res = await fetch(`${API_URL}${path}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${getToken()}`,
-    },
-    credentials: "include",
-    body: JSON.stringify(body || {}),
-  });
-
-  if (!res.ok) {
-    const msg = await readError(res);
-    throw new Error(msg || `PATCH ${path} -> ${res.status}`);
-  }
-
-  if (res.status === 204) return null;
-  return res.json();
-}
 
 function fmtDate(v) {
   if (!v) return "-";
@@ -110,10 +71,7 @@ function Field({ label, value, right, valueContainerStyle }) {
     <div className="wodm-field">
       <div className="wodm-field__label">{cleanLabel}</div>
 
-      <div
-        className="wodm-field__value"
-        style={valueContainerStyle}
-      >
+      <div className="wodm-field__value" style={valueContainerStyle}>
         {isEmpty ? "—" : cleanValue}
       </div>
 
@@ -175,12 +133,6 @@ function safeParseWorkerReport(v) {
     }
   }
   return null;
-}
-
-function isValidHora(h) {
-  const v = normalizeText(h);
-  if (!v) return false;
-  return /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
 }
 
 function buildPhotoUrl(p) {
@@ -250,68 +202,6 @@ function diasProgramadosPretty(arrISO) {
   return rest > 0 ? `${txt} +${rest}` : txt;
 }
 
-function LabeledInput({
-  label,
-  placeholder,
-  value,
-  onChange,
-  disabled,
-  error,
-  className = "",
-}) {
-  const errStyle = error
-    ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220,38,38,.15)" }
-    : undefined;
-
-  return (
-    <div className={`wodm-input-group ${className}`}>
-      <div className="wodm-input-group__label">
-        {fixText(String(label ?? ""))}
-        {error ? <span className="wodm-input-group__error"> • {fixText(String(error))}</span> : null}
-      </div>
-      <input
-        className="gt-input"
-        placeholder={placeholder}
-        value={value}
-        onChange={onChange}
-        disabled={disabled}
-        style={errStyle}
-      />
-    </div>
-  );
-}
-
-function LabeledTextarea({
-  label,
-  placeholder,
-  value,
-  onChange,
-  disabled,
-  error,
-  className = "",
-}) {
-  const errStyle = error
-    ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220,38,38,.15)" }
-    : undefined;
-
-  return (
-    <div className={`wodm-input-group ${className}`}>
-      <div className="wodm-input-group__label">
-        {fixText(String(label ?? ""))}
-        {error ? <span className="wodm-input-group__error"> • {fixText(String(error))}</span> : null}
-      </div>
-      <textarea
-        className="gt-input ot-textarea"
-        placeholder={placeholder}
-        value={value}
-        onChange={onChange}
-        disabled={disabled}
-        style={errStyle}
-      />
-    </div>
-  );
-}
-
 export default function WorkOrderDetailModal({
   open,
   onClose,
@@ -325,7 +215,6 @@ export default function WorkOrderDetailModal({
     pick(data?.cliente, data?.clienteNombre, data?.razonSocial)
   );
   const rut = normalizeText(pick(data?.rut, data?.clienteRut));
-  const giro = normalizeText(pick(data?.giro));
 
   const direccionCliente = normalizeText(pick(data?.direccion));
   const direccionFaena = normalizeText(pick(data?.direccionFaena));
@@ -379,7 +268,6 @@ export default function WorkOrderDetailModal({
     )}`
   );
 
-  const rejectReason = normalizeText(pick(data?.rejectReason));
   const approvalComment = normalizeText(pick(data?.approvalComment));
   const approvedAt = data?.approvedAt;
 
@@ -432,6 +320,7 @@ export default function WorkOrderDetailModal({
     open: false,
     src: "",
   });
+
   const signatureDataUrl = normalizeText(workerReport?.signature?.dataUrl);
 
   useEffect(() => {
@@ -444,139 +333,6 @@ export default function WorkOrderDetailModal({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [photoViewer.open, signatureViewer.open]);
-
-  const [adminEditOpen, setAdminEditOpen] = useState(false);
-  const [adminSaving, setAdminSaving] = useState(false);
-  const [adminErr, setAdminErr] = useState("");
-  const [adminFieldErr, setAdminFieldErr] = useState({});
-
-  const [adminF, setAdminF] = useState({
-    salidaPlanta: "",
-    llegadaFaena: "",
-    inicioServicioObra: "",
-    terminoServicioObra: "",
-    salidaFaena: "",
-    llegadaPlanta: "",
-    colacion: "",
-    kmSalidaPlanta: "",
-    kmLlegadaFaena: "",
-    kmSalidaFaena: "",
-    kmLlegadaPlanta: "",
-    movimientos: "",
-    comentarioFinal: "",
-  });
-
-  function adminSetField(k, v) {
-    setAdminF((p) => ({ ...p, [k]: v }));
-    setAdminFieldErr((p) => ({ ...p, [k]: undefined }));
-  }
-
-  useEffect(() => {
-    if (!open) return;
-    setAdminEditOpen(false);
-    setAdminSaving(false);
-    setAdminErr("");
-    setAdminFieldErr({});
-
-    const rep = safeParseWorkerReport(data?.workerReport);
-    const dh = rep?.detalleHoras || {};
-
-    const legacyKmSalida = normalizeText(dh?.kmSalida);
-    const legacyKmLlegada = normalizeText(dh?.kmLlegada);
-
-    setAdminF({
-      salidaPlanta: normalizeText(dh?.salidaPlanta),
-      llegadaFaena: normalizeText(dh?.llegadaFaena),
-      inicioServicioObra: normalizeText(dh?.inicioServicioObra),
-      terminoServicioObra: normalizeText(dh?.terminoServicioObra),
-      salidaFaena: normalizeText(dh?.salidaFaena),
-      llegadaPlanta: normalizeText(dh?.llegadaPlanta),
-      colacion: normalizeText(dh?.colacion),
-      kmSalidaPlanta: normalizeText(dh?.kmSalidaPlanta) || legacyKmSalida,
-      kmLlegadaFaena: normalizeText(dh?.kmLlegadaFaena),
-      kmSalidaFaena: normalizeText(dh?.kmSalidaFaena),
-      kmLlegadaPlanta:
-        normalizeText(dh?.kmLlegadaPlanta) || legacyKmLlegada,
-      movimientos: normalizeText(rep?.movimientos),
-      comentarioFinal: normalizeText(data?.comentarioFinal),
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, data?.id]);
-
-  function adminValidate() {
-    const e = {};
-    const hourFields = [
-      "salidaPlanta",
-      "llegadaFaena",
-      "inicioServicioObra",
-      "terminoServicioObra",
-      "salidaFaena",
-      "llegadaPlanta",
-    ];
-
-    for (const k of hourFields) {
-      const v = normalizeText(adminF[k]);
-      if (v && !isValidHora(v)) e[k] = "HH:MM";
-    }
-
-    if (!normalizeText(adminF.movimientos)) e.movimientos = "Obligatorio";
-
-    setAdminFieldErr(e);
-    const first = Object.keys(e)[0];
-    if (first) {
-      setAdminErr("Hay campos inválidos o faltan obligatorios.");
-      return false;
-    }
-    setAdminErr("");
-    return true;
-  }
-
-  async function adminSaveReport() {
-    if (!data?.id) return;
-    if (!adminValidate()) return;
-
-    try {
-      setAdminSaving(true);
-      setAdminErr("");
-
-      const workerReportPayload = {
-        detalleHoras: {
-          salidaPlanta: normalizeText(adminF.salidaPlanta) || null,
-          llegadaFaena: normalizeText(adminF.llegadaFaena) || null,
-          inicioServicioObra: normalizeText(adminF.inicioServicioObra) || null,
-          terminoServicioObra: normalizeText(adminF.terminoServicioObra) || null,
-          salidaFaena: normalizeText(adminF.salidaFaena) || null,
-          llegadaPlanta: normalizeText(adminF.llegadaPlanta) || null,
-          colacion: normalizeText(adminF.colacion) || null,
-          kmSalidaPlanta: normalizeText(adminF.kmSalidaPlanta) || null,
-          kmLlegadaFaena: normalizeText(adminF.kmLlegadaFaena) || null,
-          kmSalidaFaena: normalizeText(adminF.kmSalidaFaena) || null,
-          kmLlegadaPlanta: normalizeText(adminF.kmLlegadaPlanta) || null,
-        },
-        movimientos: normalizeText(adminF.movimientos),
-        signature: workerReport?.signature || undefined,
-        recibiConforme:
-          workerReport?.recibiConforme ||
-          workerReport?.recibeConforme ||
-          undefined,
-      };
-
-      const updated = await apiPatch(`/work-orders/${data.id}/admin-report`, {
-        workerReport: workerReportPayload,
-        comentarioFinal: normalizeText(adminF.comentarioFinal) || undefined,
-      });
-
-      setAdminEditOpen(false);
-      setAdminErr(
-        "✅ Reporte corregido. Si no se refresca altiro, cierra y vuelve a abrir el detalle."
-      );
-      return updated;
-    } catch (e) {
-      setAdminErr(fixText(e?.message || "Error guardando corrección"));
-    } finally {
-      setAdminSaving(false);
-    }
-  }
 
   const mapsValue = mapsLink ? (
     <div className="wodm-maps-row">
@@ -600,14 +356,8 @@ export default function WorkOrderDetailModal({
   const kmSalidaPlanta = normalizeText(
     pick(detalleHoras?.kmSalidaPlanta, detalleHoras?.kmSalida)
   );
-  const kmLlegadaFaena = normalizeText(pick(detalleHoras?.kmLlegadaFaena));
-  const kmSalidaFaena = normalizeText(pick(detalleHoras?.kmSalidaFaena));
   const kmLlegadaPlanta = normalizeText(
     pick(detalleHoras?.kmLlegadaPlanta, detalleHoras?.kmLlegada)
-  );
-  const inicioServicioObra = normalizeText(pick(detalleHoras?.inicioServicioObra));
-  const terminoServicioObra = normalizeText(
-    pick(detalleHoras?.terminoServicioObra)
   );
 
   return (
@@ -650,7 +400,9 @@ export default function WorkOrderDetailModal({
               {approvalComment ? (
                 <div className="wodm-banner__sub">
                   Comentario:{" "}
-                  <span className="wodm-banner__strong">{fixText(approvalComment)}</span>
+                  <span className="wodm-banner__strong">
+                    {fixText(approvalComment)}
+                  </span>
                 </div>
               ) : null}
             </div>
@@ -660,10 +412,6 @@ export default function WorkOrderDetailModal({
             <div className="wodm-banner wodm-banner--bad">
               ❌ OT rechazada {approvedAt ? `(${fmtDate(approvedAt)})` : ""}{" "}
               {approvedBy ? `• Por: ${approvedBy}` : ""}
-              <div className="wodm-banner__sub wodm-banner__sub--dark">
-                Motivo:{" "}
-                <span className="wodm-banner__strong">{fixText(rejectReason || "—")}</span>
-              </div>
             </div>
           ) : null}
 
@@ -671,7 +419,6 @@ export default function WorkOrderDetailModal({
             <div className="wodm-grid wodm-grid--3">
               <Field label="Cliente" value={cliente} />
               <Field label="RUT" value={rut} />
-              <Field label="Giro" value={giro} />
 
               <Field label="Solicitado por" value={solicitadoPor} />
               <Field label="Dirección (cliente)" value={direccionCliente} />
@@ -688,11 +435,6 @@ export default function WorkOrderDetailModal({
               <Field
                 label="Horario llegada"
                 value={horario}
-                right={
-                  isCompletedLike ? (
-                    <span className="wodm-chip-ok">✅ Reporte existe</span>
-                  ) : null
-                }
               />
 
               <Field label="Obra/Tramo" value={pick(direccionFaena, lugar)} />
@@ -748,135 +490,11 @@ export default function WorkOrderDetailModal({
           </Section>
 
           {workerReport ? (
-            <Section
-              title="Reporte del trabajador (completado)"
-              right={
-                <button
-                  className="gt-btn ghost"
-                  type="button"
-                  onClick={() => setAdminEditOpen((v) => !v)}
-                  style={{ height: 34, fontWeight: 900 }}
-                >
-                  ✏️ Corregir reporte
-                </button>
-              }
-            >
+            <Section title="Reporte del trabajador (completado)">
               <div className="wodm-badges-row">
                 <Badge>{`Completada: ${fmtDate(data?.completedAt)}`}</Badge>
                 <Badge>{`Por: ${completedBy || "—"}`}</Badge>
               </div>
-
-              {adminEditOpen ? (
-                <div className="wodm-admin-box">
-                  {adminErr ? (
-                    <div
-                      className={`gt-error wodm-admin-error ${
-                        adminErr.startsWith("✅") ? "wodm-admin-error--ok" : ""
-                      }`}
-                    >
-                      {fixText(adminErr)}
-                    </div>
-                  ) : null}
-
-                  <div className="wodm-admin-title">Editar horas</div>
-
-                  <div className="ot-grid-2 wodm-mb">
-                    <LabeledInput
-                      label="Hora salida planta"
-                      placeholder="Ej: 20:30"
-                      value={adminF.salidaPlanta}
-                      onChange={(e) => adminSetField("salidaPlanta", e.target.value)}
-                      disabled={adminSaving}
-                      error={adminFieldErr.salidaPlanta}
-                    />
-                    <LabeledInput
-                      label="Hora llegada faena"
-                      placeholder="Ej: 21:00"
-                      value={adminF.llegadaFaena}
-                      onChange={(e) => adminSetField("llegadaFaena", e.target.value)}
-                      disabled={adminSaving}
-                      error={adminFieldErr.llegadaFaena}
-                    />
-
-                    <LabeledInput
-                      label="Hora inicio servicio en obra"
-                      placeholder="Ej: 21:10"
-                      value={adminF.inicioServicioObra}
-                      onChange={(e) =>
-                        adminSetField("inicioServicioObra", e.target.value)
-                      }
-                      disabled={adminSaving}
-                      error={adminFieldErr.inicioServicioObra}
-                    />
-                    <LabeledInput
-                      label="Hora término servicio en obra"
-                      placeholder="Ej: 04:30"
-                      value={adminF.terminoServicioObra}
-                      onChange={(e) =>
-                        adminSetField("terminoServicioObra", e.target.value)
-                      }
-                      disabled={adminSaving}
-                      error={adminFieldErr.terminoServicioObra}
-                    />
-
-                    <LabeledInput
-                      label="Hora salida faena"
-                      placeholder="Ej: 05:00"
-                      value={adminF.salidaFaena}
-                      onChange={(e) => adminSetField("salidaFaena", e.target.value)}
-                      disabled={adminSaving}
-                      error={adminFieldErr.salidaFaena}
-                    />
-                    <LabeledInput
-                      label="Hora llegada planta"
-                      placeholder="Ej: 06:00"
-                      value={adminF.llegadaPlanta}
-                      onChange={(e) => adminSetField("llegadaPlanta", e.target.value)}
-                      disabled={adminSaving}
-                      error={adminFieldErr.llegadaPlanta}
-                    />
-                  </div>
-
-                  <LabeledTextarea
-                    label="Movimientos (obligatorio)"
-                    placeholder="Ej: instalación de paneles..."
-                    value={adminF.movimientos}
-                    onChange={(e) => adminSetField("movimientos", e.target.value)}
-                    disabled={adminSaving}
-                    error={adminFieldErr.movimientos}
-                  />
-
-                  <LabeledTextarea
-                    label="Comentario final (opcional)"
-                    placeholder="Ej: observaciones..."
-                    value={adminF.comentarioFinal}
-                    onChange={(e) =>
-                      adminSetField("comentarioFinal", e.target.value)
-                    }
-                    disabled={adminSaving}
-                  />
-
-                  <div className="wodm-actions-end">
-                    <button
-                      className="gt-btn"
-                      type="button"
-                      onClick={() => setAdminEditOpen(false)}
-                      disabled={adminSaving}
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      className="gt-btn gt-btn-primary"
-                      type="button"
-                      onClick={adminSaveReport}
-                      disabled={adminSaving}
-                      style={{ background: "#111", borderColor: "#111" }}
-                    >
-                      {adminSaving ? "Guardando..." : "Guardar corrección"}
-                    </button>
-                  </div>
-                </div>
-              ) : null}
 
               <div className="wodm-subtitle-strong">Detalle de horas</div>
 
@@ -888,14 +506,6 @@ export default function WorkOrderDetailModal({
                 <Field
                   label="Llegada faena"
                   value={normalizeText(pick(detalleHoras?.llegadaFaena))}
-                />
-                <Field
-                  label="Inicio servicio en obra"
-                  value={inicioServicioObra}
-                />
-                <Field
-                  label="Término servicio en obra"
-                  value={terminoServicioObra}
                 />
                 <Field
                   label="Salida faena"
@@ -910,8 +520,6 @@ export default function WorkOrderDetailModal({
                   value={normalizeText(pick(detalleHoras?.colacion))}
                 />
                 <Field label="Km salida planta" value={kmSalidaPlanta} />
-                <Field label="Km llegada faena" value={kmLlegadaFaena} />
-                <Field label="Km salida faena" value={kmSalidaFaena} />
                 <Field label="Km llegada planta" value={kmLlegadaPlanta} />
               </div>
 

@@ -26,6 +26,9 @@
 // - la evidencia actual se obtiene con lógica robusta
 // - usa los mismos campos posibles que la vista "Ver evidencia"
 // - así coincide mejor al editar y luego visualizar
+// ✅ FIX NUEVO AHORA:
+// - al guardar evidencia manda el texto en varios campos compatibles
+// - así "Ver evidencia" y "Editar evidencia" muestran lo mismo aunque el backend use otro nombre de campo
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -201,26 +204,30 @@ function parseObservationWithImage(text) {
 }
 
 function getTaskEvidenceData(task) {
-  const rawTextCandidates = [
-    task?.observaciones,
-    task?.observation,
-    task?.comentarios,
-    task?.notes,
-    task?.evidencia,
-    task?.evidenciaTexto,
-    task?.detalleEvidencia,
-    task?.trabajoRealizado,
-    task?.descripcionCierre,
-    task?.comentarioCierre,
-  ];
+  const observationRaw =
+    task?.observaciones ||
+    task?.observation ||
+    task?.comentarios ||
+    task?.notes ||
+    "";
 
-  const rawText =
-    rawTextCandidates.find((value) => String(value || "").trim()) || "";
+  const parsedObservation = parseObservationWithImage(observationRaw);
 
-  const parsed = parseObservationWithImage(rawText);
+  const textCandidates = [
+  task?.trabajoRealizado, // 🔥 PRIORIDAD REAL
+  parsedObservation.cleanText,
+  task?.evidencia,
+  task?.evidenciaTexto,
+  task?.detalleEvidencia,
+  task?.descripcionCierre,
+  task?.comentarioCierre,
+];
+
+  const finalText =
+    textCandidates.find((value) => String(value || "").trim()) || "";
 
   const imageCandidates = [
-    parsed.imageUrl,
+    parsedObservation.imageUrl,
     task?.evidenciaFotoUrl,
     task?.evidenciaImageUrl,
     task?.imageUrl,
@@ -233,7 +240,7 @@ function getTaskEvidenceData(task) {
     imageCandidates.find((value) => String(value || "").trim()) || "";
 
   return {
-    text: parsed.cleanText || "",
+    text: String(finalText || "").trim(),
     imageUrl: buildUploadUrl(imagePath),
   };
 }
@@ -546,20 +553,21 @@ export default function CreateWorkshopTaskModal({
 
       try {
         const body = {
-          observaciones: cleanObservaciones,
-          ...(photoBase64
-            ? {
-                foto: photoBase64,
-                fotoNombre: "tarea_evidencia.jpg",
-              }
-            : {}),
-          ...(removeCurrentPhoto
-            ? {
-                foto: "",
-                fotoNombre: "",
-              }
-            : {}),
-        };
+  observaciones: cleanObservaciones,
+  trabajoRealizado: cleanObservaciones,
+  ...(photoBase64
+    ? {
+        foto: photoBase64,
+        fotoNombre: "tarea_evidencia.jpg",
+      }
+    : {}),
+  ...(removeCurrentPhoto
+    ? {
+        foto: "",
+        fotoNombre: "",
+      }
+    : {}),
+};
 
         const res = await fetch(`${API_URL}/workshop/tasks/${task.id}`, {
           method: "PATCH",

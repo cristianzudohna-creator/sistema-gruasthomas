@@ -722,7 +722,6 @@ function Resumen({ f }) {
       <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 14, padding: 12 }}>
         <Row label="Cliente" value={v(f.cliente)} />
         <Row label="RUT" value={v(f.rut)} />
-        <Row label="Giro" value={v(f.giro)} />
         <Row label="Solicitado por" value={v(f.solicitadoPor)} />
         <Row label="Dirección" value={v(f.direccion)} />
         <Row label="Comuna" value={v(f.comuna)} />
@@ -747,7 +746,6 @@ export default function EditWorkOrderModal({ open, onClose, data, loading, error
   const [f, setF] = useState({
     cliente: "",
     rut: "",
-    giro: "",
     solicitadoPor: "",
     direccion: "",
     comuna: "",
@@ -775,7 +773,6 @@ export default function EditWorkOrderModal({ open, onClose, data, loading, error
     setF({
       cliente: data.cliente || "",
       rut: data.rut || "",
-      giro: data.giro || "",
       solicitadoPor: data.solicitadoPor || "",
       direccion: data.direccion || data.lugar || "",
       comuna: data.comuna || "",
@@ -846,7 +843,6 @@ export default function EditWorkOrderModal({ open, onClose, data, loading, error
 
       addIf(payload, "cliente", f.cliente);
       addIf(payload, "rut", f.rut);
-      addIf(payload, "giro", f.giro);
 
       addIf(payload, "solicitadoPor", f.solicitadoPor);
 
@@ -935,17 +931,6 @@ export default function EditWorkOrderModal({ open, onClose, data, loading, error
                     onChange={(e) => setField("rut", e.target.value)}
                     disabled={saving}
                     placeholder="RUT"
-                  />
-                </div>
-
-                <div className="gt-field">
-                  <label>Giro</label>
-                  <input
-                    className="gt-input"
-                    value={f.giro}
-                    onChange={(e) => setField("giro", e.target.value)}
-                    disabled={saving}
-                    placeholder="Giro"
                   />
                 </div>
 

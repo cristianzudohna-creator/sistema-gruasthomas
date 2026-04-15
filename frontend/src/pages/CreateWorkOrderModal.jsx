@@ -273,7 +273,6 @@ function Resumen({ f, photosCount }) {
         <Row label="Empresa" value={v(f.empresa)} />
         <Row label="Cliente" value={v(f.cliente)} />
         <Row label="RUT" value={v(f.rut)} />
-        <Row label="Giro" value={v(f.giro)} />
         <Row label="Solicitado por" value={v(f.solicitadoPor)} />
         <Row label="Dirección" value={v(f.direccion)} />
         <Row label="Comuna" value={v(f.comuna)} />
@@ -1309,7 +1308,6 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
     clientId: "",
     cliente: "",
     rut: "",
-    giro: "",
     solicitadoPor: "",
     direccion: "",
     comuna: "",
@@ -1364,7 +1362,6 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
     const id = normalizeText(c?.id || "");
     const nombre = normalizeText(c?.nombre || "");
     const rut = normalizeText(c?.rut || "");
-    const giro = normalizeText(c?.giro || "");
     const direccion = normalizeText(c?.direccion || "");
     const comuna = normalizeText(c?.comuna || "");
     const ciudad = normalizeText(c?.ciudad || "");
@@ -1374,7 +1371,6 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
       clientId: id || p.clientId,
       cliente: nombre || p.cliente,
       rut: rut || p.rut,
-      giro: giro || p.giro,
       direccion: direccion || p.direccion,
       comuna: comuna || p.comuna,
       ciudad: ciudad || p.ciudad,
@@ -1384,7 +1380,6 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
       ...prev,
       cliente: undefined,
       rut: undefined,
-      giro: undefined,
       direccion: undefined,
       comuna: undefined,
       ciudad: undefined,
@@ -1397,7 +1392,6 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
       clientId: "",
       cliente: "",
       rut: "",
-      giro: "",
       solicitadoPor: "",
       direccion: "",
       comuna: "",
@@ -1491,8 +1485,6 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
     if (!normalizeText(f.rut)) e.rut = "Obligatorio";
     else if (!isValidRut(f.rut)) e.rut = "RUT inválido";
 
-    if (!normalizeText(f.giro)) e.giro = "Obligatorio";
-
     if (!normalizeText(f.direccion)) e.direccion = "Obligatorio";
     if (!normalizeText(f.comuna)) e.comuna = "Obligatorio";
     if (!normalizeText(f.ciudad)) e.ciudad = "Obligatorio";
@@ -1540,7 +1532,6 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
 
       addIf(payload, "cliente", f.cliente);
       addIf(payload, "rut", f.rut);
-      addIf(payload, "giro", f.giro);
       addIf(payload, "solicitadoPor", f.solicitadoPor);
 
       addIf(payload, "direccion", f.direccion);
@@ -1633,17 +1624,6 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
                 disabled={saving}
                 error={errors.rut}
               />
-
-              <div className="ot-span">
-                <LabeledInput
-                  label="Giro"
-                  placeholder="Ej: Transporte / Construcción / Minería..."
-                  value={f.giro}
-                  onChange={(e) => setField("giro", e.target.value)}
-                  disabled={saving}
-                  error={errors.giro}
-                />
-              </div>
 
               <LabeledInput
                 label="Solicitado por Sr. (opcional)"

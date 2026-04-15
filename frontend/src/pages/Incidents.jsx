@@ -49,10 +49,11 @@
 // ✅ NUEVO AHORA:
 // - En incidente RESUELTO/CERRADO aparece botón "Evidencia"
 // - Abre modal mostrando la evidencia final subida al terminar el incidente
-// - Toma evidencia principalmente desde la última tarea del incidente
-// ✅ NUEVO AHORA:
-// - En tareas independientes aparece botón "Evidencia"
-// - Abre modal mostrando observación + foto de la evidencia de la tarea
+// - Toma evidencia desde la tarea que realmente tiene evidencia
+// ✅ FIX NUEVO:
+// - "Editar evidencia" NO aparece en incidentes recién creados o sin evidencia real
+// - "Ver evidencia" solo aparece cuando el incidente está cerrado Y tiene evidencia real
+// - En tareas independientes, "Editar evidencia" tampoco aparece si aún no existe evidencia real
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -318,39 +319,101 @@ function buildUploadUrl(imagePath) {
   return `${backendOrigin}/${raw}`;
 }
 
+function getIncidentEvidenceTask(incident) {
+  const tasks = Array.isArray(incident?.workshopTasks)
+    ? incident.workshopTasks
+    : [];
+
+  return tasks
+    .slice()
+    .sort((a, b) => {
+      const da = new Date(a?.updatedAt || a?.createdAt || 0).getTime();
+      const db = new Date(b?.updatedAt || b?.createdAt || 0).getTime();
+      return db - da;
+    })
+    .find((task) => {
+      const obs =
+        task?.observaciones ||
+        task?.observation ||
+        task?.comentarios ||
+        task?.notes ||
+        "";
+
+      const parsed = parseObservationWithImage(obs);
+
+      const hasTextCandidates = [
+        parsed.cleanText,
+        task?.trabajoRealizado,
+        task?.evidencia,
+        task?.evidenciaTexto,
+        task?.detalleEvidencia,
+        task?.descripcionCierre,
+        task?.comentarioCierre,
+      ];
+
+      const hasText = hasTextCandidates.some((value) =>
+        Boolean(String(value || "").trim())
+      );
+
+      const hasImageCandidates = [
+        parsed.imageUrl,
+        task?.evidenciaFotoUrl,
+        task?.evidenciaImageUrl,
+        task?.imageUrl,
+        task?.fotoUrl,
+        task?.photoUrl,
+        task?.imagenUrl,
+      ];
+
+      const hasImage = hasImageCandidates.some((value) =>
+        Boolean(String(value || "").trim())
+      );
+
+      return hasText || hasImage;
+    });
+}
+
 function getIncidentEvidenceData(incident) {
-  const latestTask = getLatestTask(incident);
+  const evidenceTask = getIncidentEvidenceTask(incident);
+
+  if (!evidenceTask) {
+    return {
+      text: "",
+      imageUrl: "",
+      hasEvidence: false,
+    };
+  }
 
   const observationRaw =
-    latestTask?.observaciones ||
-    latestTask?.observation ||
-    latestTask?.comentarios ||
-    latestTask?.notes ||
+    evidenceTask?.observaciones ||
+    evidenceTask?.observation ||
+    evidenceTask?.comentarios ||
+    evidenceTask?.notes ||
     "";
 
   const parsedObservation = parseObservationWithImage(observationRaw);
 
   const fallbackTextCandidates = [
-    parsedObservation.cleanText,
-    latestTask?.trabajoRealizado,
-    latestTask?.evidencia,
-    latestTask?.evidenciaTexto,
-    latestTask?.detalleEvidencia,
-    latestTask?.descripcionCierre,
-    latestTask?.comentarioCierre,
-  ];
+  evidenceTask?.trabajoRealizado, // 🔥 PRIORIDAD REAL
+  parsedObservation.cleanText,
+  evidenceTask?.evidencia,
+  evidenceTask?.evidenciaTexto,
+  evidenceTask?.detalleEvidencia,
+  evidenceTask?.descripcionCierre,
+  evidenceTask?.comentarioCierre,
+];
 
   const finalText =
     fallbackTextCandidates.find((value) => String(value || "").trim()) || "";
 
   const imageCandidates = [
     parsedObservation.imageUrl,
-    latestTask?.evidenciaFotoUrl,
-    latestTask?.evidenciaImageUrl,
-    latestTask?.imageUrl,
-    latestTask?.fotoUrl,
-    latestTask?.photoUrl,
-    latestTask?.imagenUrl,
+    evidenceTask?.evidenciaFotoUrl,
+    evidenceTask?.evidenciaImageUrl,
+    evidenceTask?.imageUrl,
+    evidenceTask?.fotoUrl,
+    evidenceTask?.photoUrl,
+    evidenceTask?.imagenUrl,
   ];
 
   const imagePath =
@@ -359,15 +422,37 @@ function getIncidentEvidenceData(incident) {
   return {
     text: String(finalText || "").trim(),
     imageUrl: buildUploadUrl(imagePath),
+    hasEvidence: !!(
+      String(finalText || "").trim() || String(imagePath || "").trim()
+    ),
   };
 }
 
 function getIndependentTaskEvidenceData(task) {
-  const observations = getTaskObservations(task);
-  const parsed = parseObservationWithImage(observations);
+  const observationRaw =
+    task?.observaciones ||
+    task?.observation ||
+    task?.comentarios ||
+    task?.notes ||
+    "";
+
+  const parsedObservation = parseObservationWithImage(observationRaw);
+
+ const textCandidates = [
+  task?.trabajoRealizado, // 🔥 MISMO FIX
+  parsedObservation.cleanText,
+  task?.evidencia,
+  task?.evidenciaTexto,
+  task?.detalleEvidencia,
+  task?.descripcionCierre,
+  task?.comentarioCierre,
+];
+
+  const finalText =
+    textCandidates.find((value) => String(value || "").trim()) || "";
 
   const imageCandidates = [
-    parsed.imageUrl,
+    parsedObservation.imageUrl,
     task?.evidenciaFotoUrl,
     task?.evidenciaImageUrl,
     task?.imageUrl,
@@ -380,9 +465,11 @@ function getIndependentTaskEvidenceData(task) {
     imageCandidates.find((value) => String(value || "").trim()) || "";
 
   return {
-    text: parsed.cleanText || "",
+    text: String(finalText || "").trim(),
     imageUrl: buildUploadUrl(imagePath),
-    hasEvidence: !!(parsed.cleanText || imagePath),
+    hasEvidence: !!(
+      String(finalText || "").trim() || String(imagePath || "").trim()
+    ),
   };
 }
 
@@ -1052,13 +1139,20 @@ export default function Incidents() {
                     const canShowAssignAction =
                       canManageIncidents && !isClosed;
 
+                    const hasResponsibleAssigned = !!principal;
+
                     const canShowCloseAction =
-                      canManageIncidents && !isClosed;
+                      canManageIncidents && !isClosed && hasResponsibleAssigned;
+
+                    const hasRealEvidence =
+                      !!String(incidentEvidence?.text || "").trim() ||
+                      !!String(incidentEvidence?.imageUrl || "").trim();
 
                     const canShowEditIncident = canManageIncidents;
-                    const canShowEditEvidence = canManageIncidents;
+                    const canShowEditEvidence =
+                      canManageIncidents && hasRealEvidence;
                     const canShowDeleteIncident = canManageIncidents;
-                    const canShowEvidenceButton = isClosed;
+                    const canShowEvidenceButton = isClosed && hasRealEvidence;
 
                     const incidentPhotoUrl = buildUploadUrl(incident?.fotoUrl);
 
@@ -1154,19 +1248,6 @@ export default function Incidents() {
                                   Ver evidencia
                                 </button>
                               </div>
-
-                              {!incidentEvidence.hasEvidence ? (
-                                <div
-                                  style={{
-                                    marginTop: 8,
-                                    fontSize: 13,
-                                    opacity: 0.75,
-                                  }}
-                                >
-                                  Este incidente no tiene evidencia final
-                                  visible.
-                                </div>
-                              ) : null}
                             </div>
                           ) : null}
 
@@ -1297,8 +1378,6 @@ export default function Incidents() {
 
                     const canShowDeleteTask = canDeleteWorkshopTask;
                     const canShowEditTask = canEditWorkshopTask;
-                    const canShowEditTaskEvidence = canEditWorkshopTask;
-                    const canShowTaskEvidenceButton = isHistoryTask;
 
                     const observations = getTaskObservations(task);
                     const { cleanText, imageUrl } =
@@ -1306,6 +1385,16 @@ export default function Incidents() {
                     const finalImageUrl = buildUploadUrl(imageUrl);
 
                     const taskEvidence = getIndependentTaskEvidenceData(task);
+
+                    const hasRealTaskEvidence =
+                      !!String(taskEvidence?.text || "").trim() ||
+                      !!String(taskEvidence?.imageUrl || "").trim();
+
+                    const canShowEditTaskEvidence =
+                      canEditWorkshopTask && hasRealTaskEvidence;
+
+                    const canShowTaskEvidenceButton =
+                      isHistoryTask && hasRealTaskEvidence;
 
                     const problemaRepuesto = String(
                       task?.problemaRepuesto || ""

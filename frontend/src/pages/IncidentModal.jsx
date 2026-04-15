@@ -315,7 +315,37 @@ export default function IncidentModal({
       .slice(0, 20);
   }, [availableVehicles, vehicleQuery]);
 
-  const latestTask = useMemo(() => getLatestTask(incident), [incident]);
+  const evidenceTask = useMemo(() => {
+  if (!Array.isArray(incident?.workshopTasks)) return null;
+
+  return incident.workshopTasks
+    .slice()
+    .sort((a, b) => {
+      const da = new Date(a?.updatedAt || a?.createdAt || 0).getTime();
+      const db = new Date(b?.updatedAt || b?.createdAt || 0).getTime();
+      return db - da;
+    })
+    .find((task) => {
+      const obs =
+        task?.observaciones ||
+        task?.observation ||
+        task?.comentarios ||
+        task?.notes ||
+        "";
+
+      const hasText = String(obs || "").trim().length > 0;
+
+      const hasImage =
+        task?.evidenciaFotoUrl ||
+        task?.evidenciaImageUrl ||
+        task?.imageUrl ||
+        task?.fotoUrl ||
+        task?.photoUrl ||
+        task?.imagenUrl;
+
+      return hasText || hasImage;
+    });
+}, [incident]);
 
   const incidentEvidence = useMemo(() => {
     return getIncidentEvidenceData(incident);
@@ -516,7 +546,7 @@ export default function IncidentModal({
 
       if (isEditMode && isEvidenceMode) {
         // ✅ Si existe tarea, guardar en la tarea
-        if (latestTask?.id) {
+        if (evidenceTask?.id) {
           const evidencePayload = {
             observaciones: String(form.descripcion || "").trim(),
             ...(photoBase64
@@ -533,23 +563,22 @@ export default function IncidentModal({
               : {}),
           };
 
-          const res = await fetch(`${API_URL}/workshop/tasks/${latestTask.id}`, {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-            credentials: "include",
-            body: JSON.stringify(evidencePayload),
-          });
+const res = await fetch(`${API_URL}/workshop/tasks/${evidenceTask.id}`, {
+  method: "PATCH",
+  headers: {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  },
+  credentials: "include",
+  body: JSON.stringify(evidencePayload),
+});
 
-          if (!res.ok) {
-            const text = await res.text().catch(() => "");
-            throw new Error(
-              text || "No se pudo actualizar la evidencia del incidente"
-            );
-          }
-
+if (!res.ok) {
+  const text = await res.text().catch(() => "");
+  throw new Error(
+    text || "No se pudo actualizar la evidencia del incidente"
+  );
+}
           const updated = await res.json().catch(() => null);
 
           resetForm();
