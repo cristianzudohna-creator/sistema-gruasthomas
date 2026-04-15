@@ -5,6 +5,7 @@
 // - listar solicitudes de insumos
 // - marcar insumo como comprado
 // - cancelar solicitud de insumo
+// - eliminar solicitud de insumo
 // ✅ NUEVO AHORA:
 // - updateIncident envía userId al service para notificación de resolución
 // - closeIncident envía userId al service para notificación de resolución
@@ -318,6 +319,12 @@ export class WorkshopController {
   cancelSupplyRequest(@Param('id') id: string, @Req() req: any) {
     const userId = req?.user?.id || req?.user?.sub;
     return this.workshopService.cancelSupplyRequest(id, userId);
+  }
+
+  @Delete('supplies/:id')
+  deleteSupplyRequest(@Param('id') id: string, @Req() req: any) {
+    const userId = req?.user?.id || req?.user?.sub;
+    return this.workshopService.deleteSupplyRequest(id, userId);
   }
 
   // ============================

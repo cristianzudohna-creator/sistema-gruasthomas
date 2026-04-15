@@ -18,8 +18,16 @@
 // - soporta prop task para editar
 // - carga descripción, vehículo, responsable y apoyos
 // - cambia título y botón según modo crear/editar
+// ✅ NUEVO AHORA:
+// - soporta mode="full" y mode="evidence"
+// - mode="full": editar tarea completa
+// - mode="evidence": editar observaciones/evidencia + foto
+// ✅ FIX NUEVO:
+// - la evidencia actual se obtiene con lógica robusta
+// - usa los mismos campos posibles que la vista "Ver evidencia"
+// - así coincide mejor al editar y luego visualizar
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
 import "./Admin.css";
 
@@ -119,16 +127,132 @@ function getTaskHelperIds(task) {
     .map((a) => String(a.user.id));
 }
 
+function getBackendOrigin() {
+  const api = String(API_URL || "").trim();
+
+  if (api === "/api") {
+    const host = window.location.hostname;
+
+    if (host === "localhost" || host === "127.0.0.1") {
+      return `${window.location.protocol}//${host}:3000`;
+    }
+
+    return window.location.origin;
+  }
+
+  if (api.startsWith("http://") || api.startsWith("https://")) {
+    return api.replace(/\/api\/?$/, "");
+  }
+
+  return window.location.origin;
+}
+
+function buildUploadUrl(imagePath) {
+  const raw = String(imagePath || "").trim();
+  if (!raw) return "";
+
+  if (raw.startsWith("data:image/")) {
+    return raw;
+  }
+
+  if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    return raw;
+  }
+
+  const backendOrigin = getBackendOrigin();
+
+  if (raw.startsWith("/")) {
+    return `${backendOrigin}${raw}`;
+  }
+
+  return `${backendOrigin}/${raw}`;
+}
+
+function parseObservationWithImage(text) {
+  const raw = String(text || "").trim();
+
+  if (!raw) {
+    return {
+      cleanText: "",
+      imageUrl: "",
+    };
+  }
+
+  const match = raw.match(/(\/uploads\/[^\s]+)/i);
+  const imageUrl = match?.[1] || "";
+
+  let cleanText = raw;
+
+  if (imageUrl) {
+    cleanText = cleanText.replace(imageUrl, "").trim();
+  }
+
+  cleanText = cleanText
+    .replace(/\s+📸\s*Foto:\s*$/i, "")
+    .replace(/\s+📸\s*Evidencia:\s*$/i, "")
+    .replace(/📸\s*Foto:\s*$/i, "")
+    .replace(/📸\s*Evidencia:\s*$/i, "")
+    .trim();
+
+  return {
+    cleanText,
+    imageUrl,
+  };
+}
+
+function getTaskEvidenceData(task) {
+  const rawTextCandidates = [
+    task?.observaciones,
+    task?.observation,
+    task?.comentarios,
+    task?.notes,
+    task?.evidencia,
+    task?.evidenciaTexto,
+    task?.detalleEvidencia,
+    task?.trabajoRealizado,
+    task?.descripcionCierre,
+    task?.comentarioCierre,
+  ];
+
+  const rawText =
+    rawTextCandidates.find((value) => String(value || "").trim()) || "";
+
+  const parsed = parseObservationWithImage(rawText);
+
+  const imageCandidates = [
+    parsed.imageUrl,
+    task?.evidenciaFotoUrl,
+    task?.evidenciaImageUrl,
+    task?.imageUrl,
+    task?.fotoUrl,
+    task?.photoUrl,
+    task?.imagenUrl,
+  ];
+
+  const imagePath =
+    imageCandidates.find((value) => String(value || "").trim()) || "";
+
+  return {
+    text: parsed.cleanText || "",
+    imageUrl: buildUploadUrl(imagePath),
+  };
+}
+
 export default function CreateWorkshopTaskModal({
   open,
   onClose,
   onCreated,
   onSaved,
   task = null,
+  mode = "full", // ✅ "full" | "evidence"
 }) {
   const token = useMemo(() => getToken(), []);
   const currentUser = useMemo(() => getUserFromStorage(), []);
   const isEditMode = Boolean(task?.id);
+  const isEvidenceMode = mode === "evidence";
+
+  const takePhotoInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
 
   const [saving, setSaving] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(false);
@@ -143,11 +267,23 @@ export default function CreateWorkshopTaskModal({
   const [responsableId, setResponsableId] = useState("");
   const [helperIds, setHelperIds] = useState([]);
 
+  const [observaciones, setObservaciones] = useState("");
+  const [photoBase64, setPhotoBase64] = useState("");
+  const [photoPreview, setPhotoPreview] = useState("");
+  const [removeCurrentPhoto, setRemoveCurrentPhoto] = useState(false);
+  const [currentPhotoFailed, setCurrentPhotoFailed] = useState(false);
+  const [newPhotoFailed, setNewPhotoFailed] = useState(false);
+
   function authHeaders(extra = {}) {
     return {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...extra,
     };
+  }
+
+  function resetInputs() {
+    if (takePhotoInputRef.current) takePhotoInputRef.current.value = "";
+    if (galleryInputRef.current) galleryInputRef.current.value = "";
   }
 
   function resetForm() {
@@ -156,7 +292,14 @@ export default function CreateWorkshopTaskModal({
     setVehicleQuery("");
     setResponsableId("");
     setHelperIds([]);
+    setObservaciones("");
+    setPhotoBase64("");
+    setPhotoPreview("");
+    setRemoveCurrentPhoto(false);
+    setCurrentPhotoFailed(false);
+    setNewPhotoFailed(false);
     setError("");
+    resetInputs();
   }
 
   const workshopWorkers = useMemo(() => {
@@ -208,7 +351,21 @@ export default function CreateWorkshopTaskModal({
       .slice(0, 20);
   }, [availableVehicles, vehicleQuery]);
 
+  const currentTaskEvidence = useMemo(() => {
+    return getTaskEvidenceData(task);
+  }, [task]);
+
+  const currentObservationImageUrl = useMemo(() => {
+    return currentTaskEvidence.imageUrl || "";
+  }, [currentTaskEvidence.imageUrl]);
+
   async function loadOptions() {
+    if (isEvidenceMode) {
+      setWorkers([]);
+      setVehicles([]);
+      return;
+    }
+
     setLoadingOptions(true);
     setError("");
 
@@ -245,14 +402,14 @@ export default function CreateWorkshopTaskModal({
       const workersItems = Array.isArray(workersData)
         ? workersData
         : Array.isArray(workersData?.items)
-        ? workersData.items
-        : [];
+          ? workersData.items
+          : [];
 
       const vehiclesItems = Array.isArray(vehiclesData)
         ? vehiclesData
         : Array.isArray(vehiclesData?.items)
-        ? vehiclesData.items
-        : [];
+          ? vehiclesData.items
+          : [];
 
       setWorkers(workersItems);
       setVehicles(vehiclesItems);
@@ -269,7 +426,7 @@ export default function CreateWorkshopTaskModal({
     if (!open) return;
     loadOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, isEvidenceMode]);
 
   useEffect(() => {
     if (!open) return;
@@ -285,19 +442,28 @@ export default function CreateWorkshopTaskModal({
       setVehicleQuery(taskVehicle ? fmtVehicle(taskVehicle) : "");
       setResponsableId(getTaskResponsibleId(task));
       setHelperIds(getTaskHelperIds(task));
+
+      setObservaciones(String(currentTaskEvidence.text || "").trim());
+      setPhotoBase64("");
+      setPhotoPreview("");
+      setRemoveCurrentPhoto(false);
+      setCurrentPhotoFailed(false);
+      setNewPhotoFailed(false);
       setError("");
+      resetInputs();
       return;
     }
 
     resetForm();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, isEditMode, task, availableVehicles.length]);
+  }, [open, isEditMode, task, availableVehicles.length, currentTaskEvidence.text]);
 
   useEffect(() => {
+    if (isEvidenceMode) return;
     if (selectedVehicle && !String(vehicleQuery || "").trim()) {
       setVehicleQuery(fmtVehicle(selectedVehicle));
     }
-  }, [selectedVehicle, vehicleQuery]);
+  }, [selectedVehicle, vehicleQuery, isEvidenceMode]);
 
   function toggleHelper(id) {
     setHelperIds((prev) => {
@@ -314,16 +480,114 @@ export default function CreateWorkshopTaskModal({
     setVehicleQuery(fmtVehicle(vehicle));
   }
 
+  function handlePhotoChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      setPhotoBase64(result);
+      setPhotoPreview(result);
+      setRemoveCurrentPhoto(false);
+      setNewPhotoFailed(false);
+      setCurrentPhotoFailed(false);
+    };
+
+    reader.onerror = () => {
+      setError("No se pudo leer la foto seleccionada.");
+    };
+
+    reader.readAsDataURL(file);
+  }
+
+  function removePhoto() {
+    setPhotoBase64("");
+    setPhotoPreview("");
+    setRemoveCurrentPhoto(true);
+    setCurrentPhotoFailed(false);
+    setNewPhotoFailed(false);
+    resetInputs();
+  }
+
+  function clearNewPhotoOnly() {
+    setPhotoBase64("");
+    setPhotoPreview("");
+    setNewPhotoFailed(false);
+    setRemoveCurrentPhoto(false);
+    setCurrentPhotoFailed(false);
+    resetInputs();
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
 
     const cleanDescripcion = String(descripcion || "").trim();
+    const cleanObservaciones = String(observaciones || "").trim();
+
     const createdById =
       currentUser?.id ? String(currentUser.id) : String(task?.createdById || "");
+
     const empresa =
       pickEmpresa(selectedVehicle?.empresa) ||
+      pickEmpresa(task?.vehicle?.empresa) ||
       pickEmpresa(task?.empresa) ||
       pickEmpresa(currentUser?.empresa);
+
+    if (isEvidenceMode) {
+      if (!isEditMode) {
+        setError("La evidencia solo puede editarse en una tarea existente.");
+        return;
+      }
+
+      setSaving(true);
+      setError("");
+
+      try {
+        const body = {
+          observaciones: cleanObservaciones,
+          ...(photoBase64
+            ? {
+                foto: photoBase64,
+                fotoNombre: "tarea_evidencia.jpg",
+              }
+            : {}),
+          ...(removeCurrentPhoto
+            ? {
+                foto: "",
+                fotoNombre: "",
+              }
+            : {}),
+        };
+
+        const res = await fetch(`${API_URL}/workshop/tasks/${task.id}`, {
+          method: "PATCH",
+          headers: authHeaders({
+            "Content-Type": "application/json",
+          }),
+          credentials: "include",
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new Error(text || "No se pudo actualizar la evidencia de la tarea");
+        }
+
+        const saved = await res.json().catch(() => null);
+
+        resetForm();
+        if (onSaved) onSaved(saved);
+        if (onClose) onClose();
+      } catch (err) {
+        setError(err?.message || "No se pudo actualizar la evidencia de la tarea");
+      } finally {
+        setSaving(false);
+      }
+
+      return;
+    }
 
     if (!cleanDescripcion) {
       setError("Debes ingresar la descripción de la tarea.");
@@ -387,7 +651,10 @@ export default function CreateWorkshopTaskModal({
       if (!res.ok) {
         const text = await res.text().catch(() => "");
         throw new Error(
-          text || (isEditMode ? "No se pudo actualizar la tarea" : "No se pudo crear la tarea")
+          text ||
+            (isEditMode
+              ? "No se pudo actualizar la tarea"
+              : "No se pudo crear la tarea")
         );
       }
 
@@ -405,7 +672,9 @@ export default function CreateWorkshopTaskModal({
     } catch (err) {
       setError(
         err?.message ||
-          (isEditMode ? "No se pudo actualizar la tarea" : "No se pudo crear la tarea")
+          (isEditMode
+            ? "No se pudo actualizar la tarea"
+            : "No se pudo crear la tarea")
       );
     } finally {
       setSaving(false);
@@ -419,16 +688,47 @@ export default function CreateWorkshopTaskModal({
   const trimmedVehicleQuery = String(vehicleQuery || "").trim();
 
   const showVehicleResults =
+    !isEvidenceMode &&
     trimmedVehicleQuery.length > 0 &&
     (!selectedVehicle || vehicleQuery !== fmtVehicle(selectedVehicle));
 
+  const photoActionBtnStyle = {
+    width: "100%",
+    minHeight: 46,
+    borderRadius: 14,
+    border: "1px solid rgba(15,23,42,.10)",
+    background: "#f8fafc",
+    cursor: saving ? "not-allowed" : "pointer",
+    fontWeight: 800,
+    fontSize: 14,
+    color: "#1f2937",
+  };
+
+  const hasNewPhoto = Boolean(photoPreview);
+  const hasCurrentPhoto =
+    isEditMode &&
+    !removeCurrentPhoto &&
+    !hasNewPhoto &&
+    Boolean(currentObservationImageUrl);
+
+  const modalTitle = isEvidenceMode
+    ? "Editar evidencia de la tarea"
+    : isEditMode
+      ? "Editar tarea de taller"
+      : "Crear tarea de taller";
+
+  const submitLabel = saving
+    ? isEditMode
+      ? "Guardando..."
+      : "Creando..."
+    : isEvidenceMode
+      ? "Guardar evidencia"
+      : isEditMode
+        ? "Guardar cambios"
+        : "Crear tarea";
+
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={isEditMode ? "Editar tarea de taller" : "Crear tarea de taller"}
-      size="lg"
-    >
+    <Modal open={open} onClose={onClose} title={modalTitle} size="lg">
       <form onSubmit={handleSubmit} style={{ display: "grid", gap: 16 }}>
         {error ? (
           <div
@@ -454,187 +754,399 @@ export default function CreateWorkshopTaskModal({
           </div>
         ) : (
           <>
-            <div className="modal-form">
-              <div style={{ gridColumn: "1 / -1" }}>
-                <label htmlFor="descripcionTarea">Descripción</label>
-                <textarea
-                  id="descripcionTarea"
-                  rows={4}
-                  value={descripcion}
-                  onChange={(e) => setDescripcion(e.target.value)}
-                  placeholder="Describe el trabajo que debe realizar el mecánico"
-                />
-              </div>
-            </div>
+            {!isEvidenceMode ? (
+              <>
+                <div className="modal-form">
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <label htmlFor="descripcionTarea">Descripción</label>
+                    <textarea
+                      id="descripcionTarea"
+                      rows={4}
+                      value={descripcion}
+                      onChange={(e) => setDescripcion(e.target.value)}
+                      placeholder="Describe el trabajo que debe realizar el mecánico"
+                    />
+                  </div>
+                </div>
 
-            <div className="modal-form">
-              <div style={{ position: "relative" }}>
-                <label htmlFor="vehicleSearchTarea">Vehículo</label>
-                <input
-                  id="vehicleSearchTarea"
-                  type="text"
-                  value={vehicleQuery}
-                  onChange={(e) => {
-                    setVehicleQuery(e.target.value);
-                    setVehicleId("");
-                  }}
-                  placeholder="Escribe patente o marca/modelo"
-                  autoComplete="off"
-                />
+                <div className="modal-form">
+                  <div style={{ position: "relative" }}>
+                    <label htmlFor="vehicleSearchTarea">Vehículo</label>
+                    <input
+                      id="vehicleSearchTarea"
+                      type="text"
+                      value={vehicleQuery}
+                      onChange={(e) => {
+                        setVehicleQuery(e.target.value);
+                        setVehicleId("");
+                      }}
+                      placeholder="Escribe patente o marca/modelo"
+                      autoComplete="off"
+                    />
 
-                {showVehicleResults ? (
-                  <div
-                    style={{
-                      marginTop: 8,
-                      maxHeight: 220,
-                      overflowY: "auto",
-                      border: "1px solid rgba(15,23,42,.10)",
-                      borderRadius: 14,
-                      background: "#fff",
-                      boxShadow: "0 12px 30px rgba(0,0,0,.08)",
-                    }}
-                  >
-                    {filteredVehicles.length === 0 ? (
+                    {showVehicleResults ? (
                       <div
                         style={{
-                          padding: 12,
-                          color: "#64748b",
-                          fontSize: 14,
+                          marginTop: 8,
+                          maxHeight: 220,
+                          overflowY: "auto",
+                          border: "1px solid rgba(15,23,42,.10)",
+                          borderRadius: 14,
+                          background: "#fff",
+                          boxShadow: "0 12px 30px rgba(0,0,0,.08)",
                         }}
                       >
-                        No se encontraron vehículos.
+                        {filteredVehicles.length === 0 ? (
+                          <div
+                            style={{
+                              padding: 12,
+                              color: "#64748b",
+                              fontSize: 14,
+                            }}
+                          >
+                            No se encontraron vehículos.
+                          </div>
+                        ) : (
+                          filteredVehicles.map((vehicle, index) => (
+                            <button
+                              key={vehicle.id}
+                              type="button"
+                              onClick={() => handleSelectVehicle(vehicle)}
+                              style={{
+                                width: "100%",
+                                textAlign: "left",
+                                padding: "12px 14px",
+                                border: "none",
+                                background: "transparent",
+                                cursor: "pointer",
+                                borderBottom:
+                                  index === filteredVehicles.length - 1
+                                    ? "none"
+                                    : "1px solid rgba(15,23,42,.08)",
+                                fontSize: 14,
+                              }}
+                            >
+                              {fmtVehicle(vehicle)}
+                            </button>
+                          ))
+                        )}
                       </div>
-                    ) : (
-                      filteredVehicles.map((vehicle, index) => (
-                        <button
-                          key={vehicle.id}
-                          type="button"
-                          onClick={() => handleSelectVehicle(vehicle)}
-                          style={{
-                            width: "100%",
-                            textAlign: "left",
-                            padding: "12px 14px",
-                            border: "none",
-                            background: "transparent",
-                            cursor: "pointer",
-                            borderBottom:
-                              index === filteredVehicles.length - 1
-                                ? "none"
-                                : "1px solid rgba(15,23,42,.08)",
-                            fontSize: 14,
-                          }}
-                        >
-                          {fmtVehicle(vehicle)}
-                        </button>
-                      ))
-                    )}
-                  </div>
-                ) : null}
+                    ) : null}
 
-                {selectedVehicle ? (
+                    {selectedVehicle ? (
+                      <div
+                        style={{
+                          marginTop: 8,
+                          fontSize: 13,
+                          color: "#0f766e",
+                          fontWeight: 700,
+                        }}
+                      >
+                        Vehículo seleccionado: {fmtVehicle(selectedVehicle)}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="modal-form">
+                  <div>
+                    <label htmlFor="responsableIdTarea">Responsable</label>
+                    <select
+                      id="responsableIdTarea"
+                      value={responsableId}
+                      onChange={(e) => {
+                        const nextId = e.target.value;
+                        setResponsableId(nextId);
+                        setHelperIds((prev) =>
+                          prev.filter((id) => String(id) !== String(nextId))
+                        );
+                      }}
+                    >
+                      <option value="">Seleccionar responsable</option>
+                      {workshopWorkers.map((worker) => (
+                        <option key={worker.id} value={worker.id}>
+                          {fmtWorker(worker)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label
+                    style={{
+                      display: "block",
+                      marginBottom: 8,
+                      fontWeight: 700,
+                      fontSize: 14,
+                    }}
+                  >
+                    Apoyos
+                  </label>
+
+                  {availableHelpers.length === 0 ? (
+                    <div
+                      style={{
+                        border: "1px solid rgba(15,23,42,.08)",
+                        borderRadius: 14,
+                        padding: 12,
+                        color: "#64748b",
+                        fontSize: 14,
+                      }}
+                    >
+                      No hay apoyos disponibles.
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: 8,
+                        maxHeight: 220,
+                        overflowY: "auto",
+                        border: "1px solid rgba(15,23,42,.08)",
+                        borderRadius: 14,
+                        padding: 12,
+                        background: "#fff",
+                      }}
+                    >
+                      {availableHelpers.map((worker) => {
+                        const checked = helperIds.some(
+                          (id) => String(id) === String(worker.id)
+                        );
+
+                        return (
+                          <label
+                            key={worker.id}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 10,
+                              fontSize: 14,
+                              cursor: "pointer",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleHelper(worker.id)}
+                            />
+                            <span>{fmtWorker(worker)}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : null}
+
+            {isEvidenceMode ? (
+              <div className="modal-form">
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label htmlFor="observacionesEvidenciaTarea">
+                    Descripción de la evidencia
+                  </label>
+                  <textarea
+                    id="observacionesEvidenciaTarea"
+                    rows={4}
+                    value={observaciones}
+                    onChange={(e) => setObservaciones(e.target.value)}
+                    placeholder="Describe la evidencia de la tarea"
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            {isEvidenceMode ? (
+              <div className="modal-form">
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label>Evidencia de la tarea</label>
+
                   <div
                     style={{
                       marginTop: 8,
-                      fontSize: 13,
-                      color: "#0f766e",
-                      fontWeight: 700,
+                      display: "grid",
+                      gap: 12,
                     }}
                   >
-                    Vehículo seleccionado: {fmtVehicle(selectedVehicle)}
+                    <input
+                      ref={takePhotoInputRef}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handlePhotoChange}
+                      style={{ display: "none" }}
+                    />
+
+                    <input
+                      ref={galleryInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoChange}
+                      style={{ display: "none" }}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => takePhotoInputRef.current?.click()}
+                      disabled={saving}
+                      style={photoActionBtnStyle}
+                    >
+                      📸 Tomar foto
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => galleryInputRef.current?.click()}
+                      disabled={saving}
+                      style={photoActionBtnStyle}
+                    >
+                      🖼️ Elegir desde galería
+                    </button>
+
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: "#64748b",
+                        lineHeight: 1.45,
+                      }}
+                    >
+                      En celular puedes tomar la foto directamente o elegir una
+                      imagen guardada.
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: 4,
+                        border: "1px solid rgba(0,0,0,.08)",
+                        borderRadius: 14,
+                        padding: 12,
+                        background: "#fff",
+                      }}
+                    >
+                      {hasNewPhoto ? (
+                        !newPhotoFailed ? (
+                          <img
+                            src={photoPreview}
+                            alt="Vista previa nueva"
+                            onError={() => setNewPhotoFailed(true)}
+                            style={{
+                              width: "100%",
+                              maxHeight: 260,
+                              objectFit: "contain",
+                              borderRadius: 12,
+                              display: "block",
+                              background: "#f8fafc",
+                            }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              minHeight: 180,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              borderRadius: 12,
+                              background: "#f8fafc",
+                              color: "#64748b",
+                              fontSize: 14,
+                              textAlign: "center",
+                              padding: 16,
+                            }}
+                          >
+                            No se pudo mostrar la nueva foto seleccionada.
+                          </div>
+                        )
+                      ) : hasCurrentPhoto ? (
+                        !currentPhotoFailed ? (
+                          <img
+                            src={currentObservationImageUrl}
+                            alt="Foto actual de la evidencia"
+                            onError={() => setCurrentPhotoFailed(true)}
+                            style={{
+                              width: "100%",
+                              maxHeight: 260,
+                              objectFit: "contain",
+                              borderRadius: 12,
+                              display: "block",
+                              background: "#f8fafc",
+                            }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              minHeight: 180,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              borderRadius: 12,
+                              background: "#f8fafc",
+                              color: "#64748b",
+                              fontSize: 14,
+                              textAlign: "center",
+                              padding: 16,
+                            }}
+                          >
+                            No se pudo mostrar la foto actual.
+                          </div>
+                        )
+                      ) : (
+                        <div
+                          style={{
+                            minHeight: 180,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            borderRadius: 12,
+                            background: "#f8fafc",
+                            color: "#64748b",
+                            fontSize: 14,
+                            textAlign: "center",
+                            padding: 16,
+                          }}
+                        >
+                          {removeCurrentPhoto
+                            ? "La foto fue quitada."
+                            : "No hay foto seleccionada."}
+                        </div>
+                      )}
+
+                      {(hasCurrentPhoto || hasNewPhoto || removeCurrentPhoto) && (
+                        <div
+                          style={{
+                            marginTop: 10,
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: 10,
+                            justifyContent: "flex-start",
+                          }}
+                        >
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={removePhoto}
+                            disabled={saving}
+                          >
+                            Quitar foto
+                          </button>
+
+                          {hasNewPhoto && isEditMode && currentObservationImageUrl ? (
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={clearNewPhotoOnly}
+                              disabled={saving}
+                            >
+                              Volver a foto actual
+                            </button>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="modal-form">
-              <div>
-                <label htmlFor="responsableIdTarea">Responsable</label>
-                <select
-                  id="responsableIdTarea"
-                  value={responsableId}
-                  onChange={(e) => {
-                    const nextId = e.target.value;
-                    setResponsableId(nextId);
-                    setHelperIds((prev) =>
-                      prev.filter((id) => String(id) !== String(nextId))
-                    );
-                  }}
-                >
-                  <option value="">Seleccionar responsable</option>
-                  {workshopWorkers.map((worker) => (
-                    <option key={worker.id} value={worker.id}>
-                      {fmtWorker(worker)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label
-                style={{
-                  display: "block",
-                  marginBottom: 8,
-                  fontWeight: 700,
-                  fontSize: 14,
-                }}
-              >
-                Apoyos
-              </label>
-
-              {availableHelpers.length === 0 ? (
-                <div
-                  style={{
-                    border: "1px solid rgba(15,23,42,.08)",
-                    borderRadius: 14,
-                    padding: 12,
-                    color: "#64748b",
-                    fontSize: 14,
-                  }}
-                >
-                  No hay apoyos disponibles.
                 </div>
-              ) : (
-                <div
-                  style={{
-                    display: "grid",
-                    gap: 8,
-                    maxHeight: 220,
-                    overflowY: "auto",
-                    border: "1px solid rgba(15,23,42,.08)",
-                    borderRadius: 14,
-                    padding: 12,
-                    background: "#fff",
-                  }}
-                >
-                  {availableHelpers.map((worker) => {
-                    const checked = helperIds.some(
-                      (id) => String(id) === String(worker.id)
-                    );
-
-                    return (
-                      <label
-                        key={worker.id}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 10,
-                          fontSize: 14,
-                          cursor: "pointer",
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleHelper(worker.id)}
-                        />
-                        <span>{fmtWorker(worker)}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+              </div>
+            ) : null}
           </>
         )}
 
@@ -653,13 +1165,7 @@ export default function CreateWorkshopTaskModal({
             className="btn-primary"
             disabled={saving || loadingOptions}
           >
-            {saving
-              ? isEditMode
-                ? "Guardando..."
-                : "Creando..."
-              : isEditMode
-              ? "Guardar cambios"
-              : "Crear tarea"}
+            {submitLabel}
           </button>
         </div>
       </form>

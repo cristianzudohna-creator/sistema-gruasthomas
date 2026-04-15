@@ -473,6 +473,53 @@ export class WorkshopService {
     };
   }
 
+    private saveWorkshopEvidencePhoto(
+    fotoDataUrl?: string | null,
+    fotoNombre?: string | null,
+  ) {
+    const buffer = this.parseImageDataUrl(fotoDataUrl);
+    if (!buffer) {
+      return {
+        fotoUrl: null as string | null,
+        filePath: null as string | null,
+        originalName: null as string | null,
+        mimeType: null as string | null,
+        sizeBytes: null as number | null,
+      };
+    }
+
+    const uploadDir = path.join(process.cwd(), 'uploads', 'workshop-evidence');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    const rawName = String(fotoNombre || '').trim();
+    const lowerName = rawName.toLowerCase();
+    const extFromName = lowerName.includes('.') ? lowerName.split('.').pop() : '';
+    const allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
+    const ext = allowedExts.includes(String(extFromName)) ? String(extFromName) : 'jpg';
+
+    let mimeType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+    if (ext === 'jpeg') mimeType = 'image/jpeg';
+    if (ext === 'webp') mimeType = 'image/webp';
+    if (ext === 'png') mimeType = 'image/png';
+
+    const fileName = `evidence_${Date.now()}_${Math.random()
+      .toString(36)
+      .substring(2, 8)}.${ext}`;
+
+    const absolutePath = path.join(uploadDir, fileName);
+    fs.writeFileSync(absolutePath, buffer);
+
+    return {
+      fotoUrl: `/uploads/workshop-evidence/${fileName}`,
+      filePath: absolutePath,
+      originalName: rawName || fileName,
+      mimeType,
+      sizeBytes: buffer.length,
+    };
+  }
+
   private deleteUploadedFile(fileUrlOrPath?: string | null) {
     try {
       const raw = String(fileUrlOrPath || '').trim();
@@ -2539,302 +2586,375 @@ export class WorkshopService {
     return task;
   }
 
-  async updateWorkshopTask(id: string, dto: UpdateWorkshopTaskDto) {
-  const existingTask = await this.prisma.workshopTask.findUnique({
-    where: { id },
-    include: {
-      incident: true,
-      assignments: {
-        include: {
-          user: true,
-        },
-      },
-    },
-  });
-
-  if (!existingTask) {
-    throw new NotFoundException('Tarea de taller no encontrada');
-  }
-
-  const helperIdsRaw = Array.isArray((dto as any).helperIds)
-    ? (dto as any).helperIds.filter(Boolean)
-    : undefined;
-
-  const nextResponsibleId =
-    dto.assignedToId !== undefined
-      ? String(dto.assignedToId || '').trim()
-      : String(existingTask.assignedToId || '').trim();
-
-  const helperIds =
-    helperIdsRaw !== undefined
-      ? helperIdsRaw
-          .map((id: any) => String(id || '').trim())
-          .filter(Boolean)
-          .filter((helperId: string) => helperId !== nextResponsibleId)
-      : existingTask.assignments
-          .filter((a) => a.role === WorkshopTaskAssignmentRole.APOYO && a.userId)
-          .map((a) => String(a.userId));
-
-  const uniqueUserIds = Array.from(
-    new Set(
-      [nextResponsibleId, ...helperIds].filter(
-        (userId): userId is string =>
-          typeof userId === 'string' && userId.trim().length > 0,
-      ),
-    ),
-  );
-
-  if (dto.vehicleId) {
-    const vehicle = await this.prisma.vehicle.findUnique({
-      where: { id: dto.vehicleId },
-      select: {
-        id: true,
-        activo: true,
-      },
-    });
-
-    if (!vehicle) {
-      throw new NotFoundException('Vehículo no encontrado');
-    }
-
-    if (!vehicle.activo) {
-      throw new BadRequestException('El vehículo seleccionado está inactivo');
-    }
-  }
-
-  if (dto.createdById) {
-    const creator = await this.prisma.user.findUnique({
-      where: { id: dto.createdById },
-      select: {
-        id: true,
-        activo: true,
-      },
-    });
-
-    if (!creator) {
-      throw new NotFoundException('Usuario creador no encontrado');
-    }
-
-    if (!creator.activo) {
-      throw new BadRequestException('El usuario creador está inactivo');
-    }
-  }
-
-  if (dto.incidentId) {
-    const incident = await this.prisma.vehicleIncident.findUnique({
-      where: { id: dto.incidentId },
-      select: { id: true },
-    });
-
-    if (!incident) {
-      throw new NotFoundException('Incidente relacionado no encontrado');
-    }
-  }
-
-  if (uniqueUserIds.length > 0) {
-    const users = await this.prisma.user.findMany({
-      where: {
-        id: {
-          in: uniqueUserIds,
-        },
-      },
-      select: {
-        id: true,
-        activo: true,
-      },
-    });
-
-    if (users.length !== uniqueUserIds.length) {
-      throw new NotFoundException(
-        'Uno o más técnicos seleccionados no existen',
-      );
-    }
-
-    const inactiveUser = users.find((u) => !u.activo);
-    if (inactiveUser) {
-      throw new BadRequestException(
-        'Uno o más técnicos seleccionados están inactivos',
-      );
-    }
-  }
-
-  const nextStatus = dto.status
-    ? (dto.status as WorkshopTaskStatus)
-    : existingTask.status;
-
-  const normalizedObservaciones =
-    typeof dto.observaciones === 'string'
-      ? dto.observaciones.trim()
-      : undefined;
-
-  const problemaRepuestoRaw = (dto as any).problemaRepuesto;
-  const problemaRepuesto =
-    problemaRepuestoRaw !== undefined
-      ? String(problemaRepuestoRaw || '').trim()
-      : undefined;
-
-  const data: Prisma.WorkshopTaskUpdateInput = {
-    empresa: dto.empresa,
-    titulo:
-      dto.titulo !== undefined
-        ? String(dto.titulo || '').trim() || 'Tarea de taller'
-        : undefined,
-    descripcion: dto.descripcion,
-    priority: dto.priority,
-    status: dto.status,
-    diagnostico: dto.diagnostico,
-    trabajoRealizado: dto.trabajoRealizado,
-    observaciones:
-      normalizedObservaciones !== undefined
-        ? normalizedObservaciones
-        : dto.observaciones,
-    estimatedCost: dto.estimatedCost,
-    actualCost: dto.actualCost,
-    problemaRepuesto:
-      problemaRepuesto !== undefined
-        ? problemaRepuesto || null
-        : undefined,
-  };
-
-  if (nextStatus === WorkshopTaskStatus.EN_REPARACION) {
-    data.startedAt = existingTask.startedAt ?? new Date();
-    data.closedAt = null;
-  }
-
-  if (nextStatus === WorkshopTaskStatus.ESPERANDO_REPUESTO) {
-    data.startedAt = existingTask.startedAt ?? new Date();
-    data.closedAt = null;
-  }
-
-  if (nextStatus === WorkshopTaskStatus.TERMINADA) {
-    data.closedAt = new Date();
-  }
-
-  if (nextStatus === WorkshopTaskStatus.CANCELADA) {
-    data.closedAt = new Date();
-  }
-
-  if (dto.incidentId) {
-    data.incident = {
-      connect: { id: dto.incidentId },
-    };
-  }
-
-  if (dto.vehicleId) {
-    data.vehicle = {
-      connect: { id: dto.vehicleId },
-    };
-  }
-
-  if (dto.createdById) {
-    data.createdBy = {
-      connect: { id: dto.createdById },
-    };
-  }
-
-  if (nextResponsibleId) {
-    data.assignedTo = {
-      connect: { id: nextResponsibleId },
-    };
-  }
-
-  if (dto.closedById) {
-    data.closedBy = {
-      connect: { id: dto.closedById },
-    };
-  }
-
-  const updatedTask = await this.prisma.$transaction(async (tx) => {
-    await tx.workshopTask.update({
-      where: { id },
-      data,
-    });
-
-    if (helperIdsRaw !== undefined || dto.assignedToId !== undefined) {
-      await tx.workshopTaskAssignment.deleteMany({
-        where: {
-          workshopTaskId: id,
-        },
-      });
-
-      const assignmentRows = [
-        ...(nextResponsibleId
-          ? [
-              {
-                workshopTaskId: id,
-                userId: nextResponsibleId,
-                role: WorkshopTaskAssignmentRole.RESPONSABLE,
-              },
-            ]
-          : []),
-        ...helperIds.map((helperId) => ({
-          workshopTaskId: id,
-          userId: helperId,
-          role: WorkshopTaskAssignmentRole.APOYO,
-        })),
-      ];
-
-      if (assignmentRows.length > 0) {
-        await tx.workshopTaskAssignment.createMany({
-          data: assignmentRows,
-          skipDuplicates: true,
-        });
-      }
-    }
-
-    return tx.workshopTask.findUnique({
+    async updateWorkshopTask(id: string, dto: UpdateWorkshopTaskDto) {
+    const existingTask = await this.prisma.workshopTask.findUnique({
       where: { id },
       include: {
-        vehicle: true,
         incident: true,
-        createdBy: true,
-        assignedTo: true,
-        closedBy: true,
         assignments: {
           include: {
             user: true,
           },
         },
-        partsUsed: true,
       },
     });
-  });
 
-  if (existingTask.incidentId) {
-    if (nextStatus === WorkshopTaskStatus.TERMINADA) {
-      await this.prisma.vehicleIncident.update({
-        where: { id: existingTask.incidentId },
-        data: {
-          status: VehicleIncidentStatus.RESUELTO,
-          cerradoEn: new Date(),
-        },
-      });
-    } else if (
-      nextStatus === WorkshopTaskStatus.EN_REVISION ||
-      nextStatus === WorkshopTaskStatus.EN_REPARACION ||
-      nextStatus === WorkshopTaskStatus.ESPERANDO_REPUESTO ||
-      nextStatus === WorkshopTaskStatus.PENDIENTE
-    ) {
-      await this.prisma.vehicleIncident.update({
-        where: { id: existingTask.incidentId },
-        data: {
-          status: VehicleIncidentStatus.EN_REVISION,
-          cerradoEn: null,
-        },
-      });
-    } else if (nextStatus === WorkshopTaskStatus.CANCELADA) {
-      await this.prisma.vehicleIncident.update({
-        where: { id: existingTask.incidentId },
-        data: {
-          status: VehicleIncidentStatus.CANCELADO,
-          cerradoEn: new Date(),
-        },
-      });
+    if (!existingTask) {
+      throw new NotFoundException('Tarea de taller no encontrada');
     }
+
+    const helperIdsRaw = Array.isArray((dto as any).helperIds)
+      ? (dto as any).helperIds.filter(Boolean)
+      : undefined;
+
+    const nextResponsibleId =
+      dto.assignedToId !== undefined
+        ? String(dto.assignedToId || '').trim()
+        : String(existingTask.assignedToId || '').trim();
+
+    const helperIds =
+      helperIdsRaw !== undefined
+        ? helperIdsRaw
+            .map((id: any) => String(id || '').trim())
+            .filter(Boolean)
+            .filter((helperId: string) => helperId !== nextResponsibleId)
+        : existingTask.assignments
+            .filter(
+              (a) =>
+                a.role === WorkshopTaskAssignmentRole.APOYO && a.userId,
+            )
+            .map((a) => String(a.userId));
+
+    const uniqueUserIds = Array.from(
+      new Set(
+        [nextResponsibleId, ...helperIds].filter(
+          (userId): userId is string =>
+            typeof userId === 'string' && userId.trim().length > 0,
+        ),
+      ),
+    );
+
+    if (dto.vehicleId) {
+      const vehicle = await this.prisma.vehicle.findUnique({
+        where: { id: dto.vehicleId },
+        select: {
+          id: true,
+          activo: true,
+        },
+      });
+
+      if (!vehicle) {
+        throw new NotFoundException('Vehículo no encontrado');
+      }
+
+      if (!vehicle.activo) {
+        throw new BadRequestException('El vehículo seleccionado está inactivo');
+      }
+    }
+
+    if (dto.createdById) {
+      const creator = await this.prisma.user.findUnique({
+        where: { id: dto.createdById },
+        select: {
+          id: true,
+          activo: true,
+        },
+      });
+
+      if (!creator) {
+        throw new NotFoundException('Usuario creador no encontrado');
+      }
+
+      if (!creator.activo) {
+        throw new BadRequestException('El usuario creador está inactivo');
+      }
+    }
+
+    if (dto.incidentId) {
+      const incident = await this.prisma.vehicleIncident.findUnique({
+        where: { id: dto.incidentId },
+        select: { id: true },
+      });
+
+      if (!incident) {
+        throw new NotFoundException('Incidente relacionado no encontrado');
+      }
+    }
+
+    if (uniqueUserIds.length > 0) {
+      const users = await this.prisma.user.findMany({
+        where: {
+          id: {
+            in: uniqueUserIds,
+          },
+        },
+        select: {
+          id: true,
+          activo: true,
+        },
+      });
+
+      if (users.length !== uniqueUserIds.length) {
+        throw new NotFoundException(
+          'Uno o más técnicos seleccionados no existen',
+        );
+      }
+
+      const inactiveUser = users.find((u) => !u.activo);
+      if (inactiveUser) {
+        throw new BadRequestException(
+          'Uno o más técnicos seleccionados están inactivos',
+        );
+      }
+    }
+
+    const nextStatus = dto.status
+      ? (dto.status as WorkshopTaskStatus)
+      : existingTask.status;
+
+    // =========================================================
+    // ✅ MANEJO DE EVIDENCIA EN OBSERVACIONES
+    // =========================================================
+    
+    const originalObservaciones = String(existingTask.observaciones || '').trim();
+
+const evidencePathMatch = originalObservaciones.match(
+  /(\/uploads\/workshop-evidence\/[^\s]+)/i,
+);
+const previousEvidencePath = evidencePathMatch?.[1] || '';
+
+let cleanObservaciones = originalObservaciones;
+
+if (previousEvidencePath) {
+  cleanObservaciones = cleanObservaciones.replace(previousEvidencePath, '').trim();
+}
+
+cleanObservaciones = cleanObservaciones
+  .replace(/\n?\s*📸\s*Evidencia:\s*$/i, '')
+  .replace(/\n?\s*📸\s*Foto:\s*$/i, '')
+  .trim();
+
+const normalizedObservaciones =
+  typeof dto.observaciones === 'string'
+    ? dto.observaciones.trim()
+    : undefined;
+
+let finalObservaciones =
+  normalizedObservaciones !== undefined
+    ? normalizedObservaciones
+    : cleanObservaciones;
+
+const fotoEvidenciaSource =
+  (dto as any).fotoEvidencia !== undefined
+    ? (dto as any).fotoEvidencia
+    : (dto as any).foto !== undefined
+      ? (dto as any).foto
+      : undefined;
+
+const fotoEvidenciaNombre =
+  (dto as any).fotoNombre !== undefined
+    ? String((dto as any).fotoNombre ?? '').trim()
+    : 'evidencia_tarea.jpg';
+
+const fotoEvidenciaRaw =
+  fotoEvidenciaSource !== undefined
+    ? String(fotoEvidenciaSource ?? '').trim()
+    : undefined;
+
+// fotoEvidencia / foto:
+// undefined => no tocar foto existente
+// ""        => quitar foto existente
+// base64    => reemplazar/agregar foto
+if (fotoEvidenciaRaw !== undefined) {
+  if (previousEvidencePath) {
+    this.deleteUploadedFile(previousEvidencePath);
   }
 
-  return updatedTask;
+  if (fotoEvidenciaRaw) {
+    const savedEvidence = this.saveWorkshopEvidencePhoto(
+      fotoEvidenciaRaw,
+      fotoEvidenciaNombre || 'evidencia_tarea.jpg',
+    );
+
+    if (!savedEvidence.fotoUrl) {
+      throw new BadRequestException(
+        'No se pudo guardar la evidencia de la tarea',
+      );
+    }
+
+    finalObservaciones = finalObservaciones
+      ? `${finalObservaciones}\n📸 Evidencia: ${savedEvidence.fotoUrl}`
+      : `📸 Evidencia: ${savedEvidence.fotoUrl}`;
+  } else {
+    finalObservaciones = finalObservaciones || '';
+  }
 }
+
+    const problemaRepuestoRaw = (dto as any).problemaRepuesto;
+    const problemaRepuesto =
+      problemaRepuestoRaw !== undefined
+        ? String(problemaRepuestoRaw || '').trim()
+        : undefined;
+
+    const data: Prisma.WorkshopTaskUpdateInput = {
+      empresa: dto.empresa,
+      titulo:
+        dto.titulo !== undefined
+          ? String(dto.titulo || '').trim() || 'Tarea de taller'
+          : undefined,
+      descripcion: dto.descripcion,
+      priority: dto.priority,
+      status: dto.status,
+      diagnostico: dto.diagnostico,
+      trabajoRealizado: dto.trabajoRealizado,
+      observaciones: finalObservaciones,
+      estimatedCost: dto.estimatedCost,
+      actualCost: dto.actualCost,
+      problemaRepuesto:
+        problemaRepuesto !== undefined
+          ? problemaRepuesto || null
+          : undefined,
+    };
+
+    if (nextStatus === WorkshopTaskStatus.EN_REPARACION) {
+      data.startedAt = existingTask.startedAt ?? new Date();
+      data.closedAt = null;
+    }
+
+    if (nextStatus === WorkshopTaskStatus.ESPERANDO_REPUESTO) {
+      data.startedAt = existingTask.startedAt ?? new Date();
+      data.closedAt = null;
+    }
+
+    if (nextStatus === WorkshopTaskStatus.TERMINADA) {
+      data.closedAt = new Date();
+    }
+
+    if (nextStatus === WorkshopTaskStatus.CANCELADA) {
+      data.closedAt = new Date();
+    }
+
+    if (dto.incidentId) {
+      data.incident = {
+        connect: { id: dto.incidentId },
+      };
+    }
+
+    if (dto.vehicleId) {
+      data.vehicle = {
+        connect: { id: dto.vehicleId },
+      };
+    }
+
+    if (dto.createdById) {
+      data.createdBy = {
+        connect: { id: dto.createdById },
+      };
+    }
+
+    if (nextResponsibleId) {
+      data.assignedTo = {
+        connect: { id: nextResponsibleId },
+      };
+    }
+
+    if (dto.closedById) {
+      data.closedBy = {
+        connect: { id: dto.closedById },
+      };
+    }
+
+    const updatedTask = await this.prisma.$transaction(async (tx) => {
+      await tx.workshopTask.update({
+        where: { id },
+        data,
+      });
+
+      if (helperIdsRaw !== undefined || dto.assignedToId !== undefined) {
+        await tx.workshopTaskAssignment.deleteMany({
+          where: {
+            workshopTaskId: id,
+          },
+        });
+
+        const assignmentRows = [
+          ...(nextResponsibleId
+            ? [
+                {
+                  workshopTaskId: id,
+                  userId: nextResponsibleId,
+                  role: WorkshopTaskAssignmentRole.RESPONSABLE,
+                },
+              ]
+            : []),
+          ...helperIds.map((helperId) => ({
+            workshopTaskId: id,
+            userId: helperId,
+            role: WorkshopTaskAssignmentRole.APOYO,
+          })),
+        ];
+
+        if (assignmentRows.length > 0) {
+          await tx.workshopTaskAssignment.createMany({
+            data: assignmentRows,
+            skipDuplicates: true,
+          });
+        }
+      }
+
+      return tx.workshopTask.findUnique({
+        where: { id },
+        include: {
+          vehicle: true,
+          incident: true,
+          createdBy: true,
+          assignedTo: true,
+          closedBy: true,
+          assignments: {
+            include: {
+              user: true,
+            },
+          },
+          partsUsed: true,
+        },
+      });
+    });
+
+    if (existingTask.incidentId) {
+      if (nextStatus === WorkshopTaskStatus.TERMINADA) {
+        await this.prisma.vehicleIncident.update({
+          where: { id: existingTask.incidentId },
+          data: {
+            status: VehicleIncidentStatus.RESUELTO,
+            cerradoEn: new Date(),
+          },
+        });
+      } else if (
+        nextStatus === WorkshopTaskStatus.EN_REVISION ||
+        nextStatus === WorkshopTaskStatus.EN_REPARACION ||
+        nextStatus === WorkshopTaskStatus.ESPERANDO_REPUESTO ||
+        nextStatus === WorkshopTaskStatus.PENDIENTE
+      ) {
+        await this.prisma.vehicleIncident.update({
+          where: { id: existingTask.incidentId },
+          data: {
+            status: VehicleIncidentStatus.EN_REVISION,
+            cerradoEn: null,
+          },
+        });
+      } else if (nextStatus === WorkshopTaskStatus.CANCELADA) {
+        await this.prisma.vehicleIncident.update({
+          where: { id: existingTask.incidentId },
+          data: {
+            status: VehicleIncidentStatus.CANCELADO,
+            cerradoEn: new Date(),
+          },
+        });
+      }
+    }
+
+    return updatedTask;
+  }
 
   async closeWorkshopTask(id: string) {
     const existingTask = await this.prisma.workshopTask.findUnique({
@@ -3439,6 +3559,69 @@ export class WorkshopService {
         compradoPor: true,
       },
     });
+  }
+
+    async deleteSupplyRequest(id: string, userId: string) {
+    const request = await this.ensureSupplyRequestExists(id);
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        activo: true,
+        role: true,
+        workerType: true,
+        empresa: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    if (!user.activo) {
+      throw new BadRequestException('Usuario inactivo');
+    }
+
+    const canDelete =
+      user.role === Role.SUPERADMIN || request.solicitadoPorId === user.id;
+
+    if (!canDelete) {
+      throw new BadRequestException(
+        'Solo el solicitante o superadmin pueden eliminar la solicitud',
+      );
+    }
+
+    if (
+      user.role !== Role.SUPERADMIN &&
+      user.empresa &&
+      request.empresa &&
+      user.empresa !== request.empresa
+    ) {
+      throw new BadRequestException(
+        'No puedes eliminar solicitudes de otra empresa',
+      );
+    }
+
+    if (request.estado === WorkshopSupplyRequestStatus.COMPRADO) {
+      throw new BadRequestException(
+        'No se puede eliminar una solicitud que ya fue comprada',
+      );
+    }
+
+    if (request.filePath) {
+      this.deleteUploadedFile(request.filePath);
+    } else if (request.fotoUrl) {
+      this.deleteUploadedFile(request.fotoUrl);
+    }
+
+    await this.prisma.workshopSupplyRequest.delete({
+      where: { id },
+    });
+
+    return {
+      message: 'Solicitud eliminada correctamente',
+    };
   }
 
   // ============================

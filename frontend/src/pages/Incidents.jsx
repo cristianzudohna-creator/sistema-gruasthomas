@@ -33,12 +33,26 @@
 // - Muestra "PROBLEMAS CON EL REPUESTO" + botón "Ver problema"
 // ✅ NUEVO AHORA:
 // - Botón "Editar incidente"
-// - IncidentModal reutilizado en modo edición
-// - SUPERADMIN / CONTROL_FLOTA / JEFE_TALLER pueden editar incidente
+// - Botón "Editar evidencia"
+// - IncidentModal reutilizado en modo edición normal y modo evidencia
+// - SUPERADMIN / CONTROL_FLOTA / JEFE_TALLER pueden editar incidente/evidencia
 // ✅ NUEVO AHORA:
-// - Botón "Editar tarea"
-// - CreateWorkshopTaskModal reutilizado en modo edición de tarea
-// - SUPERADMIN / CONTROL_FLOTA / JEFE_TALLER pueden editar tarea independiente
+// - En tareas independientes existe:
+//   - Botón "Editar tarea"
+//   - Botón "Editar evidencia"
+// - CreateWorkshopTaskModal reutilizado en modo full y mode="evidence"
+// ✅ FIX NUEVO:
+// - Aunque el incidente esté RESUELTO o CERRADO, se puede seguir editando
+//   y también editar/agregar/quitar evidencia.
+// - En historial se ocultan solo las acciones operativas:
+//   "Asignar trabajo" y "Marcar como resuelto"
+// ✅ NUEVO AHORA:
+// - En incidente RESUELTO/CERRADO aparece botón "Evidencia"
+// - Abre modal mostrando la evidencia final subida al terminar el incidente
+// - Toma evidencia principalmente desde la última tarea del incidente
+// ✅ NUEVO AHORA:
+// - En tareas independientes aparece botón "Evidencia"
+// - Abre modal mostrando observación + foto de la evidencia de la tarea
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -304,6 +318,74 @@ function buildUploadUrl(imagePath) {
   return `${backendOrigin}/${raw}`;
 }
 
+function getIncidentEvidenceData(incident) {
+  const latestTask = getLatestTask(incident);
+
+  const observationRaw =
+    latestTask?.observaciones ||
+    latestTask?.observation ||
+    latestTask?.comentarios ||
+    latestTask?.notes ||
+    "";
+
+  const parsedObservation = parseObservationWithImage(observationRaw);
+
+  const fallbackTextCandidates = [
+    parsedObservation.cleanText,
+    latestTask?.trabajoRealizado,
+    latestTask?.evidencia,
+    latestTask?.evidenciaTexto,
+    latestTask?.detalleEvidencia,
+    latestTask?.descripcionCierre,
+    latestTask?.comentarioCierre,
+  ];
+
+  const finalText =
+    fallbackTextCandidates.find((value) => String(value || "").trim()) || "";
+
+  const imageCandidates = [
+    parsedObservation.imageUrl,
+    latestTask?.evidenciaFotoUrl,
+    latestTask?.evidenciaImageUrl,
+    latestTask?.imageUrl,
+    latestTask?.fotoUrl,
+    latestTask?.photoUrl,
+    latestTask?.imagenUrl,
+  ];
+
+  const imagePath =
+    imageCandidates.find((value) => String(value || "").trim()) || "";
+
+  return {
+    text: String(finalText || "").trim(),
+    imageUrl: buildUploadUrl(imagePath),
+  };
+}
+
+function getIndependentTaskEvidenceData(task) {
+  const observations = getTaskObservations(task);
+  const parsed = parseObservationWithImage(observations);
+
+  const imageCandidates = [
+    parsed.imageUrl,
+    task?.evidenciaFotoUrl,
+    task?.evidenciaImageUrl,
+    task?.imageUrl,
+    task?.fotoUrl,
+    task?.photoUrl,
+    task?.imagenUrl,
+  ];
+
+  const imagePath =
+    imageCandidates.find((value) => String(value || "").trim()) || "";
+
+  return {
+    text: parsed.cleanText || "",
+    imageUrl: buildUploadUrl(imagePath),
+    hasEvidence: !!(parsed.cleanText || imagePath),
+  };
+}
+
 function prettifyTaskStatus(value) {
   const v = norm(value);
   if (v === "PENDIENTE") return "Pendiente";
@@ -361,8 +443,15 @@ export default function Incidents() {
   const [editingIncident, setEditingIncident] = useState(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
 
+  const [editingEvidenceIncident, setEditingEvidenceIncident] = useState(null);
+  const [editEvidenceModalOpen, setEditEvidenceModalOpen] = useState(false);
+
   const [editingTask, setEditingTask] = useState(null);
   const [editTaskModalOpen, setEditTaskModalOpen] = useState(false);
+
+  const [editingEvidenceTask, setEditingEvidenceTask] = useState(null);
+  const [editTaskEvidenceModalOpen, setEditTaskEvidenceModalOpen] =
+    useState(false);
 
   const [closingId, setClosingId] = useState(null);
   const [deletingIncidentId, setDeletingIncidentId] = useState(null);
@@ -380,6 +469,21 @@ export default function Incidents() {
 
   const [problemModalOpen, setProblemModalOpen] = useState(false);
   const [selectedProblemText, setSelectedProblemText] = useState("");
+
+  const [incidentEvidenceModalOpen, setIncidentEvidenceModalOpen] =
+    useState(false);
+  const [selectedIncidentEvidence, setSelectedIncidentEvidence] = useState({
+    title: "",
+    text: "",
+    imageUrl: "",
+  });
+
+  const [taskEvidenceModalOpen, setTaskEvidenceModalOpen] = useState(false);
+  const [selectedTaskEvidence, setSelectedTaskEvidence] = useState({
+    title: "",
+    text: "",
+    imageUrl: "",
+  });
 
   const token = useMemo(() => getToken(), []);
   const user = useMemo(() => getUserFromStorage(), []);
@@ -449,6 +553,46 @@ export default function Incidents() {
     setProblemModalOpen(false);
   }
 
+  function openIncidentEvidenceModal(incident) {
+    const evidence = getIncidentEvidenceData(incident);
+
+    setSelectedIncidentEvidence({
+      title: getIncidentTitle(incident),
+      text: evidence.text || "",
+      imageUrl: evidence.imageUrl || "",
+    });
+    setIncidentEvidenceModalOpen(true);
+  }
+
+  function closeIncidentEvidenceModal() {
+    setIncidentEvidenceModalOpen(false);
+    setSelectedIncidentEvidence({
+      title: "",
+      text: "",
+      imageUrl: "",
+    });
+  }
+
+  function openTaskEvidenceModal(task) {
+    const evidence = getIndependentTaskEvidenceData(task);
+
+    setSelectedTaskEvidence({
+      title: getTaskTitle(task),
+      text: evidence.text || "",
+      imageUrl: evidence.imageUrl || "",
+    });
+    setTaskEvidenceModalOpen(true);
+  }
+
+  function closeTaskEvidenceModal() {
+    setTaskEvidenceModalOpen(false);
+    setSelectedTaskEvidence({
+      title: "",
+      text: "",
+      imageUrl: "",
+    });
+  }
+
   function openEditIncidentModal(incident) {
     setEditingIncident(incident);
     setEditModalOpen(true);
@@ -459,6 +603,16 @@ export default function Incidents() {
     setEditingIncident(null);
   }
 
+  function openEditEvidenceModal(incident) {
+    setEditingEvidenceIncident(incident);
+    setEditEvidenceModalOpen(true);
+  }
+
+  function closeEditEvidenceModal() {
+    setEditEvidenceModalOpen(false);
+    setEditingEvidenceIncident(null);
+  }
+
   function openEditTaskModal(task) {
     setEditingTask(task);
     setEditTaskModalOpen(true);
@@ -467,6 +621,16 @@ export default function Incidents() {
   function closeEditTaskModal() {
     setEditTaskModalOpen(false);
     setEditingTask(null);
+  }
+
+  function openEditTaskEvidenceModal(task) {
+    setEditingEvidenceTask(task);
+    setEditTaskEvidenceModalOpen(true);
+  }
+
+  function closeEditTaskEvidenceModal() {
+    setEditTaskEvidenceModalOpen(false);
+    setEditingEvidenceTask(null);
   }
 
   function openCloseIncidentModal(incident) {
@@ -880,13 +1044,22 @@ export default function Incidents() {
                       latestTask?.problemaRepuesto || ""
                     ).trim();
 
+                    const incidentEvidence = getIncidentEvidenceData(incident);
+
                     const isClosing = closingId === incident.id;
                     const isDeleting = deletingIncidentId === incident.id;
 
-                    const canShowOperationalActions =
+                    const canShowAssignAction =
                       canManageIncidents && !isClosed;
 
+                    const canShowCloseAction =
+                      canManageIncidents && !isClosed;
+
+                    const canShowEditIncident = canManageIncidents;
+                    const canShowEditEvidence = canManageIncidents;
                     const canShowDeleteIncident = canManageIncidents;
+                    const canShowEvidenceButton = isClosed;
+
                     const incidentPhotoUrl = buildUploadUrl(incident?.fotoUrl);
 
                     return (
@@ -969,6 +1142,34 @@ export default function Incidents() {
                             )}
                           </div>
 
+                          {canShowEvidenceButton ? (
+                            <div className="inc-meta__item">
+                              <b>EVIDENCIA</b>
+                              <div style={{ marginTop: 8 }}>
+                                <button
+                                  type="button"
+                                  onClick={() => openIncidentEvidenceModal(incident)}
+                                  className="btn-secondary inc-action-btn"
+                                >
+                                  Ver evidencia
+                                </button>
+                              </div>
+
+                              {!incidentEvidence.hasEvidence ? (
+                                <div
+                                  style={{
+                                    marginTop: 8,
+                                    fontSize: 13,
+                                    opacity: 0.75,
+                                  }}
+                                >
+                                  Este incidente no tiene evidencia final
+                                  visible.
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
+
                           {problemaRepuesto ? (
                             <div className="inc-meta__item">
                               <b>PROBLEMAS CON EL REPUESTO</b>
@@ -985,39 +1186,56 @@ export default function Incidents() {
                           ) : null}
                         </div>
 
-                        {(canShowOperationalActions || canShowDeleteIncident) && (
+                        {(canShowEditIncident ||
+                          canShowEditEvidence ||
+                          canShowAssignAction ||
+                          canShowCloseAction ||
+                          canShowDeleteIncident) && (
                           <div className="inc-actions">
-                            {canShowOperationalActions && (
-                              <>
-                                <button
-                                  type="button"
-                                  className="btn-primary inc-action-btn"
-                                  onClick={() => openEditIncidentModal(incident)}
-                                  disabled={isDeleting || isClosing}
-                                >
-                                  Editar incidente
-                                </button>
+                            {canShowEditIncident && (
+                              <button
+                                type="button"
+                                className="btn-primary inc-action-btn"
+                                onClick={() => openEditIncidentModal(incident)}
+                                disabled={isDeleting || isClosing}
+                              >
+                                Editar incidente
+                              </button>
+                            )}
 
-                                <button
-                                  className="btn-primary inc-action-btn"
-                                  onClick={() => openAssignModal(incident)}
-                                  disabled={isDeleting}
-                                >
-                                  {principal || helpers.length > 0
-                                    ? "Editar asignación"
-                                    : "Asignar trabajo"}
-                                </button>
+                            {canShowEditEvidence && (
+                              <button
+                                type="button"
+                                className="btn-secondary inc-action-btn"
+                                onClick={() => openEditEvidenceModal(incident)}
+                                disabled={isDeleting || isClosing}
+                              >
+                                Editar evidencia
+                              </button>
+                            )}
 
-                                <button
-                                  className="btn-secondary inc-action-btn"
-                                  onClick={() => openCloseIncidentModal(incident)}
-                                  disabled={isClosing || isDeleting}
-                                >
-                                  {isClosing
-                                    ? "Cerrando..."
-                                    : "Marcar como resuelto"}
-                                </button>
-                              </>
+                            {canShowAssignAction && (
+                              <button
+                                className="btn-primary inc-action-btn"
+                                onClick={() => openAssignModal(incident)}
+                                disabled={isDeleting}
+                              >
+                                {principal || helpers.length > 0
+                                  ? "Editar asignación"
+                                  : "Asignar trabajo"}
+                              </button>
+                            )}
+
+                            {canShowCloseAction && (
+                              <button
+                                className="btn-secondary inc-action-btn"
+                                onClick={() => openCloseIncidentModal(incident)}
+                                disabled={isClosing || isDeleting}
+                              >
+                                {isClosing
+                                  ? "Cerrando..."
+                                  : "Marcar como resuelto"}
+                              </button>
                             )}
 
                             {canShowDeleteIncident && (
@@ -1078,12 +1296,16 @@ export default function Incidents() {
                       taskStatus === "TERMINADA" || taskStatus === "CANCELADA";
 
                     const canShowDeleteTask = canDeleteWorkshopTask;
-                    const canShowEditTask = canEditWorkshopTask && !isHistoryTask;
+                    const canShowEditTask = canEditWorkshopTask;
+                    const canShowEditTaskEvidence = canEditWorkshopTask;
+                    const canShowTaskEvidenceButton = isHistoryTask;
 
                     const observations = getTaskObservations(task);
                     const { cleanText, imageUrl } =
                       parseObservationWithImage(observations);
                     const finalImageUrl = buildUploadUrl(imageUrl);
+
+                    const taskEvidence = getIndependentTaskEvidenceData(task);
 
                     const problemaRepuesto = String(
                       task?.problemaRepuesto || ""
@@ -1145,7 +1367,32 @@ export default function Incidents() {
                             )}
                           </div>
 
-                          {observations ? (
+                          {canShowTaskEvidenceButton ? (
+                            <div className="inc-meta__item">
+                              <b>EVIDENCIA</b>
+                              <div style={{ marginTop: 8 }}>
+                                <button
+                                  type="button"
+                                  onClick={() => openTaskEvidenceModal(task)}
+                                  className="btn-secondary inc-action-btn"
+                                >
+                                  Ver evidencia
+                                </button>
+                              </div>
+
+                              {!taskEvidence.hasEvidence ? (
+                                <div
+                                  style={{
+                                    marginTop: 8,
+                                    fontSize: 13,
+                                    opacity: 0.75,
+                                  }}
+                                >
+                                  Esta tarea no tiene evidencia visible.
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : observations ? (
                             <div className="inc-meta__item">
                               <b>OBSERVACIONES</b>{" "}
                               {cleanText ? <span>{cleanText}</span> : null}
@@ -1180,7 +1427,9 @@ export default function Incidents() {
                           ) : null}
                         </div>
 
-                        {(canShowEditTask || canShowDeleteTask) ? (
+                        {canShowEditTask ||
+                        canShowEditTaskEvidence ||
+                        canShowDeleteTask ? (
                           <div className="inc-actions">
                             {canShowEditTask ? (
                               <button
@@ -1190,6 +1439,17 @@ export default function Incidents() {
                                 className="btn-primary inc-action-btn"
                               >
                                 Editar tarea
+                              </button>
+                            ) : null}
+
+                            {canShowEditTaskEvidence ? (
+                              <button
+                                type="button"
+                                onClick={() => openEditTaskEvidenceModal(task)}
+                                disabled={isDeletingTask}
+                                className="btn-secondary inc-action-btn"
+                              >
+                                Editar evidencia
                               </button>
                             ) : null}
 
@@ -1234,9 +1494,21 @@ export default function Incidents() {
       <IncidentModal
         open={editModalOpen}
         incident={editingIncident}
+        mode="full"
         onClose={closeEditIncidentModal}
         onSaved={() => {
           closeEditIncidentModal();
+          loadAll();
+        }}
+      />
+
+      <IncidentModal
+        open={editEvidenceModalOpen}
+        incident={editingEvidenceIncident}
+        mode="evidence"
+        onClose={closeEditEvidenceModal}
+        onSaved={() => {
+          closeEditEvidenceModal();
           loadAll();
         }}
       />
@@ -1263,6 +1535,7 @@ export default function Incidents() {
       <CreateWorkshopTaskModal
         open={editTaskModalOpen}
         task={editingTask}
+        mode="full"
         onClose={closeEditTaskModal}
         onCreated={() => {
           closeEditTaskModal();
@@ -1270,6 +1543,21 @@ export default function Incidents() {
         }}
         onSaved={() => {
           closeEditTaskModal();
+          loadAll();
+        }}
+      />
+
+      <CreateWorkshopTaskModal
+        open={editTaskEvidenceModalOpen}
+        task={editingEvidenceTask}
+        mode="evidence"
+        onClose={closeEditTaskEvidenceModal}
+        onCreated={() => {
+          closeEditTaskEvidenceModal();
+          loadAll();
+        }}
+        onSaved={() => {
+          closeEditTaskEvidenceModal();
           loadAll();
         }}
       />
@@ -1330,6 +1618,250 @@ export default function Incidents() {
           ) : (
             <div style={{ opacity: 0.7 }}>No hay imagen disponible</div>
           )}
+        </div>
+      </Modal>
+
+      <Modal
+        open={incidentEvidenceModalOpen}
+        onClose={closeIncidentEvidenceModal}
+        title="Evidencia del incidente"
+        subtitle={
+          selectedIncidentEvidence?.title
+            ? `Cierre de: ${selectedIncidentEvidence.title}`
+            : "Detalle cargado al terminar el incidente"
+        }
+        width={900}
+      >
+        <div
+          style={{
+            padding: "6px 2px 2px",
+            display: "grid",
+            gap: 16,
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontWeight: 800,
+                fontSize: 14,
+                marginBottom: 8,
+                color: "#0f172a",
+              }}
+            >
+              DETALLE
+            </div>
+
+            <div
+              style={{
+                background: "rgba(15, 23, 42, 0.04)",
+                border: "1px solid rgba(15, 23, 42, 0.08)",
+                color: "#0f172a",
+                borderRadius: 14,
+                padding: 16,
+                fontSize: 15,
+                lineHeight: 1.6,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                minHeight: 90,
+              }}
+            >
+              {selectedIncidentEvidence?.text || "Sin detalle de evidencia."}
+            </div>
+          </div>
+
+          <div>
+            <div
+              style={{
+                fontWeight: 800,
+                fontSize: 14,
+                marginBottom: 8,
+                color: "#0f172a",
+              }}
+            >
+              FOTO
+            </div>
+
+            <div
+              style={{
+                minHeight: 220,
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                background: "rgba(15, 23, 42, 0.03)",
+                border: "1px solid rgba(15, 23, 42, 0.08)",
+                borderRadius: 16,
+                padding: 14,
+              }}
+            >
+              {selectedIncidentEvidence?.imageUrl ? (
+                <img
+                  src={selectedIncidentEvidence.imageUrl}
+                  alt="Evidencia final del incidente"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                  }}
+                  style={{
+                    maxWidth: "100%",
+                    maxHeight: "70vh",
+                    objectFit: "contain",
+                    borderRadius: 12,
+                    boxShadow: "0 10px 24px rgba(0,0,0,.12)",
+                  }}
+                />
+              ) : (
+                <div style={{ opacity: 0.7 }}>Sin foto de evidencia.</div>
+              )}
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: 10,
+            }}
+          >
+            {selectedIncidentEvidence?.imageUrl ? (
+              <button
+                type="button"
+                onClick={() =>
+                  openImageModal(selectedIncidentEvidence.imageUrl)
+                }
+                className="btn-secondary"
+              >
+                📷 Ver foto grande
+              </button>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={closeIncidentEvidenceModal}
+              className="btn-primary"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={taskEvidenceModalOpen}
+        onClose={closeTaskEvidenceModal}
+        title="Evidencia de la tarea"
+        subtitle={
+          selectedTaskEvidence?.title
+            ? `Cierre de: ${selectedTaskEvidence.title}`
+            : "Detalle cargado al terminar la tarea"
+        }
+        width={900}
+      >
+        <div
+          style={{
+            padding: "6px 2px 2px",
+            display: "grid",
+            gap: 16,
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontWeight: 800,
+                fontSize: 14,
+                marginBottom: 8,
+                color: "#0f172a",
+              }}
+            >
+              DETALLE
+            </div>
+
+            <div
+              style={{
+                background: "rgba(15, 23, 42, 0.04)",
+                border: "1px solid rgba(15, 23, 42, 0.08)",
+                color: "#0f172a",
+                borderRadius: 14,
+                padding: 16,
+                fontSize: 15,
+                lineHeight: 1.6,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                minHeight: 90,
+              }}
+            >
+              {selectedTaskEvidence?.text || "Sin detalle de evidencia."}
+            </div>
+          </div>
+
+          <div>
+            <div
+              style={{
+                fontWeight: 800,
+                fontSize: 14,
+                marginBottom: 8,
+                color: "#0f172a",
+              }}
+            >
+              FOTO
+            </div>
+
+            <div
+              style={{
+                minHeight: 220,
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                background: "rgba(15, 23, 42, 0.03)",
+                border: "1px solid rgba(15, 23, 42, 0.08)",
+                borderRadius: 16,
+                padding: 14,
+              }}
+            >
+              {selectedTaskEvidence?.imageUrl ? (
+                <img
+                  src={selectedTaskEvidence.imageUrl}
+                  alt="Evidencia final de la tarea"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                  }}
+                  style={{
+                    maxWidth: "100%",
+                    maxHeight: "70vh",
+                    objectFit: "contain",
+                    borderRadius: 12,
+                    boxShadow: "0 10px 24px rgba(0,0,0,.12)",
+                  }}
+                />
+              ) : (
+                <div style={{ opacity: 0.7 }}>Sin foto de evidencia.</div>
+              )}
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: 10,
+            }}
+          >
+            {selectedTaskEvidence?.imageUrl ? (
+              <button
+                type="button"
+                onClick={() => openImageModal(selectedTaskEvidence.imageUrl)}
+                className="btn-secondary"
+              >
+                📷 Ver foto grande
+              </button>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={closeTaskEvidenceModal}
+              className="btn-primary"
+            >
+              Cerrar
+            </button>
+          </div>
         </div>
       </Modal>
 

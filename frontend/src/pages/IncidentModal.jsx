@@ -1,11 +1,23 @@
 // ✅ Archivo: src/pages/IncidentModal.jsx
 // ✅ Modal para crear y editar incidentes
+// ✅ NUEVO:
+// - soporte para mode="full" y mode="evidence"
+// - mode="full": editar incidente completo
+// - mode="evidence": editar descripción + agregar/quitar/reemplazar evidencia
 // ✅ FIX REAL:
 // - sin título
 // - la foto actual se toma DIRECTO desde incident.fotoUrl
 // - no depende de existingPhotoUrl en state
 // - la foto nueva reemplaza visualmente a la actual
 // - si la actual existe, se ve igual que en la vista principal
+// ✅ FIX NUEVO:
+// - en mode="evidence" ahora carga la evidencia real del cierre
+// - toma texto y foto desde la última tarea del incidente
+// - así coincide con el modal "Ver evidencia"
+// ✅ FIX NUEVO AHORA:
+// - editar evidencia del incidente YA NO actualiza incident.fotoUrl
+// - ahora actualiza la última tarea del incidente
+// - así "Ver evidencia" cambia correctamente y "Ver foto" del incidente no se toca
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -101,6 +113,97 @@ function prettifyIncidentStatus(value) {
   return value || "—";
 }
 
+function parseObservationWithImage(text) {
+  const raw = String(text || "").trim();
+
+  if (!raw) {
+    return {
+      cleanText: "",
+      imageUrl: "",
+    };
+  }
+
+  const match = raw.match(/(\/uploads\/[^\s]+)/i);
+  const imageUrl = match?.[1] || "";
+
+  let cleanText = raw;
+
+  if (imageUrl) {
+    cleanText = cleanText.replace(imageUrl, "").trim();
+  }
+
+  cleanText = cleanText
+    .replace(/\s+📸\s*Foto:\s*$/i, "")
+    .replace(/\s+📸\s*Evidencia:\s*$/i, "")
+    .replace(/📸\s*Foto:\s*$/i, "")
+    .replace(/📸\s*Evidencia:\s*$/i, "")
+    .trim();
+
+  return {
+    cleanText,
+    imageUrl,
+  };
+}
+
+function getLatestTask(incident) {
+  if (
+    !Array.isArray(incident?.workshopTasks) ||
+    incident.workshopTasks.length === 0
+  ) {
+    return null;
+  }
+
+  return [...incident.workshopTasks].sort((a, b) => {
+    const da = new Date(a?.updatedAt || a?.createdAt || 0).getTime();
+    const db = new Date(b?.updatedAt || b?.createdAt || 0).getTime();
+    return db - da;
+  })[0];
+}
+
+function getIncidentEvidenceData(incident) {
+  const latestTask = getLatestTask(incident);
+
+  const observationRaw =
+    latestTask?.observaciones ||
+    latestTask?.observation ||
+    latestTask?.comentarios ||
+    latestTask?.notes ||
+    "";
+
+  const parsedObservation = parseObservationWithImage(observationRaw);
+
+  const fallbackTextCandidates = [
+    parsedObservation.cleanText,
+    latestTask?.trabajoRealizado,
+    latestTask?.evidencia,
+    latestTask?.evidenciaTexto,
+    latestTask?.detalleEvidencia,
+    latestTask?.descripcionCierre,
+    latestTask?.comentarioCierre,
+  ];
+
+  const finalText =
+    fallbackTextCandidates.find((value) => String(value || "").trim()) || "";
+
+  const imageCandidates = [
+    parsedObservation.imageUrl,
+    latestTask?.evidenciaFotoUrl,
+    latestTask?.evidenciaImageUrl,
+    latestTask?.imageUrl,
+    latestTask?.fotoUrl,
+    latestTask?.photoUrl,
+    latestTask?.imagenUrl,
+  ];
+
+  const imagePath =
+    imageCandidates.find((value) => String(value || "").trim()) || "";
+
+  return {
+    text: String(finalText || "").trim(),
+    imageUrl: buildUploadUrl(imagePath),
+  };
+}
+
 const INCIDENT_STATUS_OPTIONS = [
   "ABIERTO",
   "EN_REVISION",
@@ -115,6 +218,7 @@ export default function IncidentModal({
   onCreated,
   onSaved,
   incident = null,
+  mode = "full", // ✅ "full" | "evidence"
 }) {
   const currentUser = useMemo(() => getUserFromStorage(), []);
 
@@ -127,6 +231,8 @@ export default function IncidentModal({
   const [error, setError] = useState("");
 
   const isEditMode = Boolean(incident?.id);
+  const isEvidenceMode = mode === "evidence";
+  const shouldLoadVehicles = !isEvidenceMode;
 
   const [form, setForm] = useState({
     vehicleId: "",
@@ -197,15 +303,26 @@ export default function IncidentModal({
       .slice(0, 20);
   }, [availableVehicles, vehicleQuery]);
 
+  const latestTask = useMemo(() => getLatestTask(incident), [incident]);
+
+  const incidentEvidence = useMemo(() => {
+    return getIncidentEvidenceData(incident);
+  }, [incident]);
+
   const currentIncidentPhotoUrl = useMemo(() => {
+    if (isEvidenceMode) {
+      return incidentEvidence.imageUrl || "";
+    }
+
     return buildUploadUrl(incident?.fotoUrl);
-  }, [incident?.fotoUrl]);
+  }, [incident?.fotoUrl, incidentEvidence.imageUrl, isEvidenceMode]);
 
   useEffect(() => {
     if (!open) return;
+    if (!shouldLoadVehicles) return;
     loadVehicles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, shouldLoadVehicles]);
 
   useEffect(() => {
     if (!open) return;
@@ -216,7 +333,9 @@ export default function IncidentModal({
 
       setForm({
         vehicleId: String(incidentVehicle?.id || ""),
-        descripcion: String(incident?.descripcion || "").trim(),
+        descripcion: isEvidenceMode
+          ? String(incidentEvidence.text || "").trim()
+          : String(incident?.descripcion || "").trim(),
         ubicacionTexto: String(incident?.ubicacionTexto || "").trim(),
         status: String(incident?.status || "ABIERTO").trim() || "ABIERTO",
       });
@@ -233,9 +352,10 @@ export default function IncidentModal({
     }
 
     resetForm();
-  }, [open, isEditMode, incident]);
+  }, [open, isEditMode, incident, isEvidenceMode, incidentEvidence.text]);
 
   useEffect(() => {
+    if (isEvidenceMode) return;
     if (!selectedVehicle) return;
 
     const formatted = fmtVehicle(selectedVehicle);
@@ -243,7 +363,7 @@ export default function IncidentModal({
     if (!vehicleQuery || String(form.vehicleId || "").trim()) {
       setVehicleQuery(formatted);
     }
-  }, [selectedVehicle]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedVehicle, isEvidenceMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadVehicles() {
     try {
@@ -269,8 +389,8 @@ export default function IncidentModal({
       const items = Array.isArray(data)
         ? data
         : Array.isArray(data?.items)
-        ? data.items
-        : [];
+          ? data.items
+          : [];
 
       setVehicles(items);
     } catch (err) {
@@ -344,23 +464,43 @@ export default function IncidentModal({
 
     const empresa =
       pickEmpresa(selectedVehicle?.empresa) ||
+      pickEmpresa(incident?.vehicle?.empresa) ||
       pickEmpresa(incident?.empresa) ||
       pickEmpresa(currentUser?.empresa) ||
       "GRUAS_THOMAS";
 
-    if (!form.vehicleId) {
-      setError("Debes seleccionar un vehículo.");
-      return;
-    }
+    if (!isEvidenceMode) {
+      if (!form.vehicleId) {
+        setError("Debes seleccionar un vehículo.");
+        return;
+      }
 
-    if (!String(form.descripcion || "").trim()) {
-      setError("Debes ingresar la descripción del incidente.");
-      return;
-    }
+      if (!String(form.descripcion || "").trim()) {
+        setError("Debes ingresar la descripción del incidente.");
+        return;
+      }
 
-    if (!reportedById && !isEditMode) {
-      setError("No se pudo identificar el usuario que reporta.");
-      return;
+      if (!reportedById && !isEditMode) {
+        setError("No se pudo identificar el usuario que reporta.");
+        return;
+      }
+    } else {
+      if (!isEditMode) {
+        setError("La evidencia solo puede editarse en un incidente existente.");
+        return;
+      }
+
+      if (!latestTask?.id) {
+        setError(
+          "Este incidente no tiene una tarea asociada para guardar la evidencia."
+        );
+        return;
+      }
+
+      if (!String(form.descripcion || "").trim()) {
+        setError("Debes ingresar la descripción de la evidencia.");
+        return;
+      }
     }
 
     setSaving(true);
@@ -368,6 +508,46 @@ export default function IncidentModal({
 
     try {
       const token = getToken();
+
+      if (isEditMode && isEvidenceMode) {
+        const evidencePayload = {
+          observaciones: String(form.descripcion || "").trim(),
+          ...(photoBase64
+            ? {
+                foto: photoBase64,
+                fotoNombre: "incidente_evidencia.jpg",
+              }
+            : {}),
+          ...(removeCurrentPhoto
+            ? {
+                foto: "",
+                fotoNombre: "",
+              }
+            : {}),
+        };
+
+        const res = await fetch(`${API_URL}/workshop/tasks/${latestTask.id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          credentials: "include",
+          body: JSON.stringify(evidencePayload),
+        });
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new Error(text || "No se pudo actualizar la evidencia del incidente");
+        }
+
+        const updated = await res.json().catch(() => null);
+
+        resetForm();
+        if (onSaved) onSaved(updated);
+        if (onClose) onClose();
+        return;
+      }
 
       let payload;
 
@@ -391,18 +571,15 @@ export default function IncidentModal({
           payload.fotoNombre = "";
         }
 
-        const res = await fetch(
-          `${API_URL}/workshop/incidents/${incident.id}`,
-          {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-            credentials: "include",
-            body: JSON.stringify(payload),
-          }
-        );
+        const res = await fetch(`${API_URL}/workshop/incidents/${incident.id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          credentials: "include",
+          body: JSON.stringify(payload),
+        });
 
         if (!res.ok) {
           const text = await res.text().catch(() => "");
@@ -455,6 +632,7 @@ export default function IncidentModal({
   }
 
   const showVehicleResults =
+    !isEvidenceMode &&
     String(vehicleQuery || "").trim().length > 0 &&
     (!selectedVehicle || vehicleQuery !== fmtVehicle(selectedVehicle));
 
@@ -477,13 +655,24 @@ export default function IncidentModal({
     !hasNewPhoto &&
     Boolean(currentIncidentPhotoUrl);
 
+  const modalTitle = isEditMode
+    ? isEvidenceMode
+      ? "Editar evidencia"
+      : "Editar incidente"
+    : "Reportar incidente";
+
+  const submitLabel = saving
+    ? isEditMode
+      ? "Guardando..."
+      : "Creando..."
+    : isEditMode
+      ? isEvidenceMode
+        ? "Guardar evidencia"
+        : "Guardar cambios"
+      : "Crear incidente";
+
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={isEditMode ? "Editar incidente" : "Reportar incidente"}
-      width={640}
-    >
+    <Modal open={open} onClose={onClose} title={modalTitle} width={640}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -515,7 +704,7 @@ export default function IncidentModal({
           </div>
         ) : (
           <>
-            {isEditMode ? (
+            {!isEvidenceMode && isEditMode ? (
               <div className="modal-form">
                 <div>
                   <label htmlFor="incidentStatus">Estado</label>
@@ -534,84 +723,86 @@ export default function IncidentModal({
               </div>
             ) : null}
 
-            <div className="modal-form">
-              <div style={{ position: "relative" }}>
-                <label htmlFor="incidentVehicleSearch">Vehículo</label>
-                <input
-                  id="incidentVehicleSearch"
-                  type="text"
-                  value={vehicleQuery}
-                  onChange={(e) => {
-                    setVehicleQuery(e.target.value);
-                    setForm((prev) => ({ ...prev, vehicleId: "" }));
-                  }}
-                  placeholder="Escribe patente o marca/modelo"
-                  autoComplete="off"
-                />
-
-                {showVehicleResults ? (
-                  <div
-                    style={{
-                      marginTop: 8,
-                      maxHeight: 220,
-                      overflowY: "auto",
-                      border: "1px solid rgba(15,23,42,.10)",
-                      borderRadius: 14,
-                      background: "#fff",
-                      boxShadow: "0 12px 30px rgba(0,0,0,.08)",
+            {!isEvidenceMode ? (
+              <div className="modal-form">
+                <div style={{ position: "relative" }}>
+                  <label htmlFor="incidentVehicleSearch">Vehículo</label>
+                  <input
+                    id="incidentVehicleSearch"
+                    type="text"
+                    value={vehicleQuery}
+                    onChange={(e) => {
+                      setVehicleQuery(e.target.value);
+                      setForm((prev) => ({ ...prev, vehicleId: "" }));
                     }}
-                  >
-                    {filteredVehicles.length === 0 ? (
-                      <div
-                        style={{
-                          padding: 12,
-                          color: "#64748b",
-                          fontSize: 14,
-                        }}
-                      >
-                        No se encontraron vehículos.
-                      </div>
-                    ) : (
-                      filteredVehicles.map((vehicle, index) => (
-                        <button
-                          key={vehicle.id}
-                          type="button"
-                          onClick={() => handleSelectVehicle(vehicle)}
+                    placeholder="Escribe patente o marca/modelo"
+                    autoComplete="off"
+                  />
+
+                  {showVehicleResults ? (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        maxHeight: 220,
+                        overflowY: "auto",
+                        border: "1px solid rgba(15,23,42,.10)",
+                        borderRadius: 14,
+                        background: "#fff",
+                        boxShadow: "0 12px 30px rgba(0,0,0,.08)",
+                      }}
+                    >
+                      {filteredVehicles.length === 0 ? (
+                        <div
                           style={{
-                            width: "100%",
-                            textAlign: "left",
-                            padding: "12px 14px",
-                            border: "none",
-                            background: "transparent",
-                            cursor: "pointer",
-                            borderBottom:
-                              index === filteredVehicles.length - 1
-                                ? "none"
-                                : "1px solid rgba(15,23,42,.08)",
+                            padding: 12,
+                            color: "#64748b",
                             fontSize: 14,
                           }}
                         >
-                          {fmtVehicle(vehicle)}
-                        </button>
-                      ))
-                    )}
-                  </div>
-                ) : null}
+                          No se encontraron vehículos.
+                        </div>
+                      ) : (
+                        filteredVehicles.map((vehicle, index) => (
+                          <button
+                            key={vehicle.id}
+                            type="button"
+                            onClick={() => handleSelectVehicle(vehicle)}
+                            style={{
+                              width: "100%",
+                              textAlign: "left",
+                              padding: "12px 14px",
+                              border: "none",
+                              background: "transparent",
+                              cursor: "pointer",
+                              borderBottom:
+                                index === filteredVehicles.length - 1
+                                  ? "none"
+                                  : "1px solid rgba(15,23,42,.08)",
+                              fontSize: 14,
+                            }}
+                          >
+                            {fmtVehicle(vehicle)}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  ) : null}
 
-                {selectedVehicle ? (
-                  <div
-                    style={{
-                      marginTop: 8,
-                      fontSize: 13,
-                      color: "#0f766e",
-                      fontWeight: 700,
-                    }}
-                  >
-                    Vehículo seleccionado: {fmtVehicle(selectedVehicle)}
-                  </div>
-                ) : null}
+                  {selectedVehicle ? (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        fontSize: 13,
+                        color: "#0f766e",
+                        fontWeight: 700,
+                      }}
+                    >
+                      Vehículo seleccionado: {fmtVehicle(selectedVehicle)}
+                    </div>
+                  ) : null}
+                </div>
               </div>
-            </div>
+            ) : null}
 
             <div className="modal-form">
               <div style={{ gridColumn: "1 / -1" }}>
@@ -621,26 +812,34 @@ export default function IncidentModal({
                   rows={4}
                   value={form.descripcion}
                   onChange={(e) => updateField("descripcion", e.target.value)}
-                  placeholder="Describe claramente el problema reportado"
+                  placeholder={
+                    isEvidenceMode
+                      ? "Describe la evidencia del incidente"
+                      : "Describe claramente el problema reportado"
+                  }
                 />
               </div>
             </div>
 
-            <div className="modal-form">
-              <div>
-                <label htmlFor="incidentLocation">Ubicación</label>
-                <input
-                  id="incidentLocation"
-                  value={form.ubicacionTexto}
-                  onChange={(e) => updateField("ubicacionTexto", e.target.value)}
-                  placeholder="Ej: Lo Errázuriz 7080"
-                />
+            {!isEvidenceMode ? (
+              <div className="modal-form">
+                <div>
+                  <label htmlFor="incidentLocation">Ubicación</label>
+                  <input
+                    id="incidentLocation"
+                    value={form.ubicacionTexto}
+                    onChange={(e) => updateField("ubicacionTexto", e.target.value)}
+                    placeholder="Ej: Lo Errázuriz 7080"
+                  />
+                </div>
               </div>
-            </div>
+            ) : null}
 
             <div className="modal-form">
               <div style={{ gridColumn: "1 / -1" }}>
-                <label>Foto del incidente</label>
+                <label>
+                  {isEvidenceMode ? "Evidencia del incidente" : "Foto del incidente"}
+                </label>
 
                 <div
                   style={{
@@ -810,7 +1009,7 @@ export default function IncidentModal({
                           Quitar foto
                         </button>
 
-                        {hasNewPhoto && isEditMode && incident?.fotoUrl ? (
+                        {hasNewPhoto && hasCurrentPhoto ? (
                           <button
                             type="button"
                             className="btn-secondary"
@@ -845,13 +1044,7 @@ export default function IncidentModal({
             disabled={saving || loadingVehicles}
             onClick={submit}
           >
-            {saving
-              ? isEditMode
-                ? "Guardando..."
-                : "Creando..."
-              : isEditMode
-              ? "Guardar cambios"
-              : "Crear incidente"}
+            {submitLabel}
           </button>
         </div>
       </form>

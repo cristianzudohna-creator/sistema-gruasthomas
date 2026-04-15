@@ -261,6 +261,27 @@ function parseObservation(observations) {
   };
 }
 
+function getFinalEvidenceData(task) {
+  const parsedObservation = parseObservation(getTaskObservations(task));
+
+  const evidenceTextCandidates = [
+    task?.trabajoRealizado,
+    task?.evidencia,
+    task?.evidenciaTexto,
+    task?.detalleEvidencia,
+    task?.descripcionCierre,
+    task?.comentarioCierre,
+  ];
+
+  const finalText =
+    evidenceTextCandidates.find((value) => String(value || "").trim()) || "";
+
+  return {
+    text: String(finalText || "").trim(),
+    image: parsedObservation.evidenceImage || "",
+  };
+}
+
 function hasSparePartRequest(task) {
   const status = norm(task?.status);
 
@@ -367,6 +388,25 @@ function fileToDataUrl(file) {
   });
 }
 
+function buildUploadUrl(imagePath) {
+  const raw = String(imagePath || "").trim();
+  if (!raw) return "";
+
+  if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    return raw;
+  }
+
+  if (raw.startsWith("/api/uploads/")) {
+    return raw;
+  }
+
+  if (raw.startsWith("/uploads/")) {
+    return `${API_URL}${raw}`;
+  }
+
+  return `${API_URL}/${raw.replace(/^\/+/, "")}`;
+}
+
 export default function WorkshopMyTasks() {
   const token = useMemo(() => getToken(), []);
   const user = useMemo(() => getUser(), []);
@@ -394,6 +434,11 @@ export default function WorkshopMyTasks() {
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
   const [imageViewerSrc, setImageViewerSrc] = useState("");
   const [imageViewerTitle, setImageViewerTitle] = useState("");
+
+  const [evidenceViewerOpen, setEvidenceViewerOpen] = useState(false);
+  const [evidenceViewerTitle, setEvidenceViewerTitle] = useState("");
+  const [evidenceViewerSrc, setEvidenceViewerSrc] = useState("");
+  const [evidenceViewerText, setEvidenceViewerText] = useState("");
 
   const [problemModalOpen, setProblemModalOpen] = useState(false);
   const [problemModalText, setProblemModalText] = useState("");
@@ -424,6 +469,23 @@ export default function WorkshopMyTasks() {
     setImageViewerOpen(false);
     setImageViewerSrc("");
     setImageViewerTitle("");
+  }
+
+  function openEvidenceViewer(task) {
+    const evidence = getFinalEvidenceData(task);
+    const imageSrc = buildUploadUrl(evidence.image);
+
+    setEvidenceViewerTitle("Evidencia final");
+    setEvidenceViewerSrc(imageSrc);
+    setEvidenceViewerText(String(evidence.text || "").trim());
+    setEvidenceViewerOpen(true);
+  }
+
+  function closeEvidenceViewer() {
+    setEvidenceViewerOpen(false);
+    setEvidenceViewerTitle("");
+    setEvidenceViewerSrc("");
+    setEvidenceViewerText("");
   }
 
   function openProblemModal(problemText) {
@@ -1044,7 +1106,7 @@ export default function WorkshopMyTasks() {
                               className="btn-secondary"
                               onClick={() =>
                                 openImageViewer(
-                                  `${API_URL}${parsedObservation.spareImage}`,
+                                  buildUploadUrl(parsedObservation.spareImage),
                                   "Foto repuesto"
                                 )
                               }
@@ -1060,12 +1122,7 @@ export default function WorkshopMyTasks() {
                             <button
                               type="button"
                               className="btn-secondary"
-                              onClick={() =>
-                                openImageViewer(
-                                  `${API_URL}${parsedObservation.evidenceImage}`,
-                                  "Evidencia final"
-                                )
-                              }
+                              onClick={() => openEvidenceViewer(task)}
                             >
                               Ver imagen
                             </button>
@@ -1497,6 +1554,92 @@ export default function WorkshopMyTasks() {
               objectFit: "contain",
             }}
           />
+        </div>
+      </Modal>
+
+      <Modal
+        open={evidenceViewerOpen}
+        onClose={closeEvidenceViewer}
+        title={evidenceViewerTitle || "Evidencia final"}
+        size="lg"
+      >
+        <div
+          style={{
+            display: "grid",
+            gap: 16,
+            padding: "8px 10px 10px",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontWeight: 800,
+                fontSize: 14,
+                marginBottom: 8,
+                color: "#0f172a",
+              }}
+            >
+              DETALLE
+            </div>
+
+            <div
+              style={{
+                background: "rgba(15, 23, 42, 0.04)",
+                border: "1px solid rgba(15, 23, 42, 0.08)",
+                color: "#0f172a",
+                borderRadius: 14,
+                padding: 16,
+                fontSize: 15,
+                lineHeight: 1.6,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                minHeight: 80,
+              }}
+            >
+              {evidenceViewerText || "Sin detalle de evidencia."}
+            </div>
+          </div>
+
+          <div>
+            <div
+              style={{
+                fontWeight: 800,
+                fontSize: 14,
+                marginBottom: 8,
+                color: "#0f172a",
+              }}
+            >
+              FOTO
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                minHeight: 220,
+                padding: 12,
+                borderRadius: 16,
+                background: "rgba(15, 23, 42, 0.03)",
+                border: "1px solid rgba(15, 23, 42, 0.08)",
+              }}
+            >
+              {evidenceViewerSrc ? (
+                <img
+                  src={evidenceViewerSrc}
+                  alt={evidenceViewerTitle || "Evidencia final"}
+                  style={{
+                    maxWidth: "100%",
+                    maxHeight: "70vh",
+                    borderRadius: "12px",
+                    objectFit: "contain",
+                  }}
+                />
+              ) : (
+                <div style={{ opacity: 0.7 }}>Sin foto de evidencia.</div>
+              )}
+            </div>
+          </div>
         </div>
       </Modal>
 

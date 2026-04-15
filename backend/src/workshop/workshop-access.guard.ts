@@ -4,6 +4,11 @@
 // - SUPERVISOR_TERRENO puede CREAR y VER incidentes
 // - SUPERVISOR_TERRENO NO es supervisor de taller
 // - SUPERVISOR_TERRENO NO puede gestionar tareas, horas extras ni solicitudes de insumos
+// ✅ FIX NUEVO:
+// - ADMINISTRADORA puede entrar a administración de horas extras
+// - ADMINISTRADORA puede descargar PDF de horas extras
+// - ADMINISTRADORA puede descargar EXCEL de horas extras
+// - SUPERADMIN también queda cubierto por bypass global
 
 import {
   CanActivate,
@@ -79,6 +84,7 @@ export class WorkshopAccessGuard implements CanActivate {
       bodyStatus,
     });
 
+    // ✅ SUPERADMIN pasa siempre
     if (role === 'SUPERADMIN') return true;
 
     const isIncidentsRoute = originalUrl.includes('/workshop/incidents');
@@ -102,6 +108,10 @@ export class WorkshopAccessGuard implements CanActivate {
     const isExtraHoursPdfRoute =
       method === 'GET' &&
       /\/workshop\/extra-hours\/pdf\/[^/]+(?:\?.*)?$/.test(originalUrl);
+
+    const isExtraHoursExcelRoute =
+      method === 'GET' &&
+      /\/workshop\/extra-hours\/excel(?:\?.*)?$/.test(originalUrl);
 
     const isRequestedPartsRoute =
       originalUrl.includes('/workshop/tasks/requested-parts');
@@ -216,7 +226,20 @@ export class WorkshopAccessGuard implements CanActivate {
       );
     }
 
+    if (isExtraHoursExcelRoute) {
+      if (isAdministradora) {
+        return true;
+      }
+
+      throw new ForbiddenException(
+        'No tienes permisos para descargar el Excel de horas extras',
+      );
+    }
+
     if (isExtraHoursRoute) {
+      // ✅ ADMINISTRADORA también puede entrar al módulo admin de horas extras
+      if (isAdministradora) return true;
+
       if (isControlFlota) return true;
 
       if (isJefeTaller) return true;

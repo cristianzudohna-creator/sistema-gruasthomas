@@ -38,7 +38,7 @@ export class UpdateWorkshopTaskDto {
   @IsUUID()
   assignedToId?: string;
 
-  // ✅ NUEVO 🔥 SOPORTE APOYOS
+  // ✅ SOPORTE APOYOS
   @IsOptional()
   @IsArray()
   @IsUUID("all", { each: true })
@@ -71,7 +71,6 @@ export class UpdateWorkshopTaskDto {
   @MaxLength(2000)
   diagnostico?: string;
 
-  // ✅ YA EXISTE → LO USAREMOS COMO DESCRIPCIÓN FINAL
   @IsOptional()
   @IsString()
   @MaxLength(4000)
@@ -79,10 +78,10 @@ export class UpdateWorkshopTaskDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(2000)
+  @MaxLength(4000)
   observaciones?: string;
 
-  // ✅ NUEVO: problema libre del repuesto
+  // ✅ problema libre del repuesto
   @IsOptional()
   @IsString()
   @MaxLength(2000)
@@ -100,8 +99,19 @@ export class UpdateWorkshopTaskDto {
   @Min(0)
   actualCost?: number;
 
-  // ✅ NUEVO: FOTO EVIDENCIA (base64)
+  // ✅ compatibilidad anterior
   @IsOptional()
   @IsString()
   fotoEvidencia?: string;
+
+  // ✅ NUEVO: foto base64 para editar evidencia desde frontend actual
+  @IsOptional()
+  @IsString()
+  foto?: string;
+
+  // ✅ NUEVO: nombre original/virtual del archivo
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  fotoNombre?: string;
 }

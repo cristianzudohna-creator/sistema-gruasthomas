@@ -61,6 +61,12 @@ type ActorLike =
       email?: string;
       role?: string;
       empresa?: Empresa;
+      workerType?: string;
+      tipoTrabajador?: string;
+      worker_type?: string;
+      tipo_trabajador?: string;
+      cargo?: string;
+      type?: string;
     }
   | null;
 
@@ -81,16 +87,26 @@ function diffDaysFromToday(target: Date) {
 function calcEstadoByFechaProxima(
   fechaProxima: Date | null
 ): { estado: VehicleEstado; detalle: string } {
-  if (!fechaProxima) return { estado: "VIGENTE", detalle: "Sin próxima mantención registrada" };
+  if (!fechaProxima) {
+    return { estado: "VIGENTE", detalle: "Sin próxima mantención registrada" };
+  }
 
   const diffDays = diffDaysFromToday(fechaProxima);
 
   if (diffDays < 0) {
-    return { estado: "VENCIDO", detalle: `Mantención vencida (${Math.abs(diffDays)} día(s) atrasada)` };
+    return {
+      estado: "VENCIDO",
+      detalle: `Mantención vencida (${Math.abs(diffDays)} día(s) atrasada)`,
+    };
   }
+
   if (diffDays <= 30) {
-    return { estado: "POR_VENCER", detalle: `Mantención próxima en ${diffDays} día(s)` };
+    return {
+      estado: "POR_VENCER",
+      detalle: `Mantención próxima en ${diffDays} día(s)`,
+    };
   }
+
   return { estado: "VIGENTE", detalle: `Mantención al día (faltan ${diffDays} día(s))` };
 }
 
@@ -108,7 +124,10 @@ function calcEstadoFromCounts(criticos: number, porVencer: number): VehicleEstad
   return "VIGENTE";
 }
 
-function calcEstadoGeneral(estadoDocs: VehicleEstado, estadoMaint: VehicleEstado): VehicleEstado {
+function calcEstadoGeneral(
+  estadoDocs: VehicleEstado,
+  estadoMaint: VehicleEstado
+): VehicleEstado {
   if (estadoDocs === "VENCIDO" || estadoMaint === "VENCIDO") return "VENCIDO";
   if (estadoDocs === "POR_VENCER" || estadoMaint === "POR_VENCER") return "POR_VENCER";
   return "VIGENTE";
@@ -128,7 +147,6 @@ function safeActor(actor?: ActorLike) {
   return actor?.id && actor?.email ? { id: actor.id, email: actor.email } : null;
 }
 
-// ✅ helper: safe trim
 function sTrim(v: any) {
   return String(v ?? "").trim();
 }
@@ -139,41 +157,85 @@ export class VehiclesService {
 
   // ======================
   // 🔒 SCOPING POR EMPRESA
-  // ✅ MÓDULO CAMIONES: SOLO SUPERADMIN + CONTROL_FLOTA (FULL)
   // ======================
 
-  // ✅ FIX: ahora normaliza (CONTROL DE FLOTA / control-flota / etc -> CONTROL_FLOTA)
   private roleUpper(actor?: ActorLike) {
     return normRole(actor?.role);
   }
 
-  // ✅ roles con FULL access al módulo camiones
+  private workerTypeUpper(actor?: ActorLike) {
+    return String(
+      actor?.workerType ||
+        actor?.tipoTrabajador ||
+        actor?.worker_type ||
+        actor?.tipo_trabajador ||
+        actor?.cargo ||
+        actor?.type ||
+        ""
+    )
+      .trim()
+      .toUpperCase();
+  }
+
   private isGlobalFleetRole(actor?: ActorLike) {
     const role = this.roleUpper(actor);
     return role === "SUPERADMIN" || role === "CONTROL_FLOTA";
   }
 
-  // ✅ NUEVO: roles que pueden VER vehículos (scoped por empresa)
+  // ✅ NUEVO:
+  // JEFE_TALLER y SUPERVISOR deben poder ver vehículos de ambas empresas
+  // para crear incidentes y tareas de taller.
+  private isWorkshopCrossCompanyViewer(actor?: ActorLike) {
+    const role = this.roleUpper(actor);
+    const workerType = this.workerTypeUpper(actor);
+
+    if (role !== "TRABAJADOR") return false;
+
+    return (
+      workerType === "JEFE_TALLER" ||
+      workerType === "SUPERVISOR" ||
+      workerType === "SUPERVISOR_TERRENO"
+    );
+  }
+
   private isScopedFleetViewer(actor?: ActorLike) {
     const role = this.roleUpper(actor);
     return role === "TRABAJADOR" || role === "ADMINISTRADORA" || role === "ADMIN";
   }
 
-  // (se mantiene por compat, aunque ya no lo usamos para permisos)
-  private empresaFromActorOrThrow(actor?: ActorLike): Empresa {
+  // ✅ FIX REAL:
+  // primero usa actor.empresa si viene
+  // si NO viene, la busca en base de datos usando actor.id
+  private async empresaFromActorOrThrow(actor?: ActorLike): Promise<Empresa> {
     const emp = actor?.empresa as Empresa | undefined | null;
-    if (!emp) throw new ForbiddenException("No se pudo determinar la empresa del usuario.");
-    return emp;
+
+    if (emp === "GRUAS_THOMAS" || emp === "INSPROTEL") {
+      return emp;
+    }
+
+    const userId = String(actor?.id || "").trim();
+    if (!userId) {
+      throw new ForbiddenException("No se pudo determinar la empresa del usuario.");
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { empresa: true },
+    });
+
+    const dbEmpresa = user?.empresa as Empresa | undefined | null;
+
+    if (dbEmpresa === "GRUAS_THOMAS" || dbEmpresa === "INSPROTEL") {
+      return dbEmpresa;
+    }
+
+    throw new ForbiddenException("No se pudo determinar la empresa del usuario.");
   }
 
-  // ✅ ahora: SOLO SUPERADMIN / CONTROL_FLOTA
   private assertEmpresaAccess(actor: ActorLike | undefined, _empresa: Empresa) {
     const role = this.roleUpper(actor ?? null);
 
-    // ✅ DEBUG: confirma qué llega realmente al backend
-    // eslint-disable-next-line no-console
     console.log("[FLEET] actor:", actor);
-    // eslint-disable-next-line no-console
     console.log("[FLEET] roleUpper:", role);
 
     if (role === "SUPERADMIN" || role === "CONTROL_FLOTA") return;
@@ -181,8 +243,6 @@ export class VehiclesService {
     throw new ForbiddenException(`No tienes permisos. [VEHICLES_SERVICE role=${role}]`);
   }
 
-  // ✅ usado por controller para proteger /vehicles/:id/***
-  // ✅ CAMBIO: si activo=false => NotFound
   async ensureVehicleAccessOrThrow(vehicleId: string, actor: ActorLike) {
     const v = await this.prisma.vehicle.findUnique({
       where: { id: vehicleId },
@@ -238,7 +298,6 @@ export class VehiclesService {
     return m;
   }
 
-  // ⚠️ Si este método se usa en otro módulo público, déjalo.
   async listWorkerVehicles(empresa: Empresa) {
     return this.prisma.vehicle.findMany({
       where: { empresa: empresa as any, activo: true as any },
@@ -282,9 +341,6 @@ export class VehiclesService {
     return { activo: true as any };
   }
 
-  // ==========================================================
-  // ✅ SEARCH SIMPLE (para autocomplete de patentes)
-  // ==========================================================
   async searchSimple(params: { empresa: string; query: string; limit: number }) {
     const empresa = String(params?.empresa || "").toUpperCase();
     const query = String(params?.query || "").trim();
@@ -316,18 +372,21 @@ export class VehiclesService {
     });
   }
 
-  // ==========================================================
-  // ✅ LISTAR
-  // - SUPERADMIN/CONTROL_FLOTA: ve todo
-  // - TRABAJADOR/ADMINISTRADORA/ADMIN: ve SOLO su empresa (activos)
-  // ==========================================================
+  // ✅ FIX:
+  // - SUPERADMIN / CONTROL_FLOTA => ven todo
+  // - JEFE_TALLER / SUPERVISOR => ven todo para incidentes/taller
+  // - resto => solo su empresa
   async list(actor: ActorLike = null) {
     if (this.isGlobalFleetRole(actor)) {
       return this.listInternalAll();
     }
 
+    if (this.isWorkshopCrossCompanyViewer(actor)) {
+      return this.listInternalAll();
+    }
+
     if (this.isScopedFleetViewer(actor)) {
-      const emp = this.empresaFromActorOrThrow(actor);
+      const emp = await this.empresaFromActorOrThrow(actor);
       return this.listInternalByEmpresa(emp);
     }
 
@@ -354,7 +413,6 @@ export class VehiclesService {
     return this.mapVehiclesWithEstados(vehicles);
   }
 
-  // ✅ NUEVO: listar por empresa (activos) para roles no globales
   private async listInternalByEmpresa(empresa: Empresa) {
     const vehicles = await this.prisma.vehicle.findMany({
       where: { empresa: empresa as any, ...this.whereActivosOnly() } as any,
@@ -456,10 +514,6 @@ export class VehiclesService {
     });
   }
 
-  // ======================
-  // EXPORTS (Excel) con scoping (solo activos)
-  // ✅ SOLO SUPERADMIN / CONTROL_FLOTA
-  // ======================
   private empresaFilterByActor(actor: ActorLike, empresa: EmpresaFilter): EmpresaFilter {
     if (!this.isGlobalFleetRole(actor)) throw new ForbiddenException("No tienes permisos.");
     return this.normalizeEmpresaFilter(empresa);
@@ -629,10 +683,6 @@ export class VehiclesService {
     });
   }
 
-  // ======================
-  // EXPIRACIONES (solo activos + operativos)
-  // ✅ SOLO SUPERADMIN / CONTROL_FLOTA
-  // ======================
   async listDocsExpirations(
     actor: ActorLike,
     status: "VENCIDO" | "POR_VENCER",
@@ -797,7 +847,9 @@ export class VehiclesService {
     status: VehicleOperationalStatus,
     actor?: ActorLike
   ) {
-    if (!this.isGlobalFleetRole(actor ?? null)) throw new ForbiddenException("No tienes permisos.");
+    if (!this.isGlobalFleetRole(actor ?? null)) {
+      throw new ForbiddenException("No tienes permisos.");
+    }
 
     if (
       status !== VehicleOperationalStatus.OPERATIVO &&
@@ -809,8 +861,9 @@ export class VehiclesService {
 
     const current = await this.prisma.vehicle.findUnique({ where: { id: vehicleId } });
     if (!current) throw new NotFoundException("Vehículo no encontrado");
-    if ((current as any).activo === false)
+    if ((current as any).activo === false) {
       throw new BadRequestException("Este vehículo está eliminado (inactivo).");
+    }
 
     const updated = await this.prisma.vehicle.update({
       where: { id: vehicleId },
@@ -833,13 +886,10 @@ export class VehiclesService {
     return updated;
   }
 
-  // ======================
-  // CRUD (FULL)
-  // ✅ SOLO SUPERADMIN / CONTROL_FLOTA
-  // ======================
-
   async create(dto: CreateVehicleDto, actor?: ActorLike) {
-    if (!this.isGlobalFleetRole(actor ?? null)) throw new ForbiddenException("No tienes permisos.");
+    if (!this.isGlobalFleetRole(actor ?? null)) {
+      throw new ForbiddenException("No tienes permisos.");
+    }
 
     const patente = sTrim(dto.patente).toUpperCase();
     if (!patente) throw new BadRequestException("Patente es obligatoria");
@@ -888,12 +938,15 @@ export class VehiclesService {
   }
 
   async update(id: string, dto: UpdateVehicleDto, actor?: ActorLike) {
-    if (!this.isGlobalFleetRole(actor ?? null)) throw new ForbiddenException("No tienes permisos.");
+    if (!this.isGlobalFleetRole(actor ?? null)) {
+      throw new ForbiddenException("No tienes permisos.");
+    }
 
     const current = await this.prisma.vehicle.findUnique({ where: { id } });
     if (!current) throw new NotFoundException("Vehículo no encontrado");
-    if ((current as any).activo === false)
+    if ((current as any).activo === false) {
       throw new BadRequestException("Este vehículo está eliminado (inactivo).");
+    }
 
     const nextPatente = dto.patente ? sTrim(dto.patente).toUpperCase() : current.patente;
 
@@ -968,7 +1021,9 @@ export class VehiclesService {
   }
 
   async remove(id: string, actor?: ActorLike) {
-    if (!this.isGlobalFleetRole(actor ?? null)) throw new ForbiddenException("No tienes permisos.");
+    if (!this.isGlobalFleetRole(actor ?? null)) {
+      throw new ForbiddenException("No tienes permisos.");
+    }
 
     const current = await this.prisma.vehicle.findUnique({
       where: { id },
@@ -1024,7 +1079,9 @@ export class VehiclesService {
   }
 
   async listDeleted(actor?: ActorLike) {
-    if (!this.isGlobalFleetRole(actor ?? null)) throw new ForbiddenException("No tienes permisos.");
+    if (!this.isGlobalFleetRole(actor ?? null)) {
+      throw new ForbiddenException("No tienes permisos.");
+    }
 
     const items = await this.prisma.vehicle.findMany({
       where: { activo: false as any },
@@ -1045,7 +1102,9 @@ export class VehiclesService {
   }
 
   async restore(id: string, actor?: ActorLike) {
-    if (!this.isGlobalFleetRole(actor ?? null)) throw new ForbiddenException("No tienes permisos.");
+    if (!this.isGlobalFleetRole(actor ?? null)) {
+      throw new ForbiddenException("No tienes permisos.");
+    }
 
     const current = await this.prisma.vehicle.findUnique({ where: { id } });
     if (!current) throw new NotFoundException("Vehículo no encontrado");

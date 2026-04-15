@@ -112,7 +112,6 @@ export default function WorkshopSuppliesRequest() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // ✅ visor modal de foto en la misma página
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerImage, setViewerImage] = useState("");
   const [viewerTitle, setViewerTitle] = useState("");
@@ -320,6 +319,9 @@ export default function WorkshopSuppliesRequest() {
   async function cancelRequest(id) {
     if (!id) return;
 
+    const ok = window.confirm("¿Seguro que quieres cancelar esta solicitud?");
+    if (!ok) return;
+
     setProcessingId(id);
     setError("");
     setSuccess("");
@@ -344,6 +346,43 @@ export default function WorkshopSuppliesRequest() {
       await fetchRequests();
     } catch (err) {
       setError(err.message || "Error al cancelar la solicitud");
+    } finally {
+      setProcessingId("");
+    }
+  }
+
+  async function deleteRequest(id) {
+    if (!id) return;
+
+    const ok = window.confirm(
+      "¿Seguro que quieres eliminar esta solicitud? Esta acción no se puede deshacer."
+    );
+    if (!ok) return;
+
+    setProcessingId(id);
+    setError("");
+    setSuccess("");
+
+    try {
+      const token = getToken();
+
+      const res = await fetch(`${API_URL}/workshop/supplies/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data?.message || "No se pudo eliminar la solicitud");
+      }
+
+      setSuccess("✅ Solicitud eliminada correctamente");
+      await fetchRequests();
+    } catch (err) {
+      setError(err.message || "Error al eliminar la solicitud");
     } finally {
       setProcessingId("");
     }
@@ -469,6 +508,9 @@ export default function WorkshopSuppliesRequest() {
           <div className="wsr-list">
             {filteredRequests.map((item) => {
               const photoUrl = buildPhotoUrl(item?.fotoUrl);
+              const status = fixText(item?.estado).toUpperCase();
+              const isPending = status === "PENDIENTE";
+              const isProcessing = processingId === item.id;
 
               return (
                 <article key={item.id} className="wsr-item">
@@ -525,19 +567,30 @@ export default function WorkshopSuppliesRequest() {
                       </button>
                     ) : null}
 
-                    {/* ✅ OJO:
-                        esta pantalla es para solicitar/cancelar.
-                        NO para comprar.
-                        comprado lo hace PREVENCION en su módulo */}
-                    {fixText(item?.estado).toUpperCase() === "PENDIENTE" ? (
-                      <button
-                        type="button"
-                        className="wsr-btn wsr-btn--danger"
-                        onClick={() => cancelRequest(item.id)}
-                        disabled={processingId === item.id}
-                      >
-                        {processingId === item.id ? "Cancelando..." : "Cancelar"}
-                      </button>
+                    {isPending ? (
+                      <>
+                        <button
+                          type="button"
+                          className="wsr-btn wsr-btn--danger"
+                          onClick={() => cancelRequest(item.id)}
+                          disabled={isProcessing}
+                        >
+                          {isProcessing ? "Procesando..." : "Cancelar"}
+                        </button>
+
+                        <button
+                          type="button"
+                          className="wsr-btn wsr-btn--danger"
+                          onClick={() => deleteRequest(item.id)}
+                          disabled={isProcessing}
+                          style={{
+                            background: "#991b1b",
+                            borderColor: "#991b1b",
+                          }}
+                        >
+                          {isProcessing ? "Procesando..." : "Eliminar"}
+                        </button>
+                      </>
                     ) : null}
                   </div>
                 </article>
@@ -547,7 +600,6 @@ export default function WorkshopSuppliesRequest() {
         )}
       </section>
 
-      {/* ✅ MODAL / VISOR DE FOTO EN LA MISMA PÁGINA */}
       {viewerOpen && (
         <div
           onClick={closeViewer}
