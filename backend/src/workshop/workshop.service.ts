@@ -42,6 +42,7 @@ import { CreateWorkshopTaskPartDto } from './dto/create-workshop-task-part.dto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ExcelJS from 'exceljs';
+import sharp from 'sharp';
 
 const PDFDocument = require('pdfkit');
 
@@ -412,51 +413,61 @@ export class WorkshopService {
     return full || user?.email || '—';
   }
 
-    private parseImageDataUrlMeta(dataUrl?: string | null) {
-    const raw = String(dataUrl || '').trim();
-    if (!raw) return null;
+    private async parseImageDataUrlMeta(dataUrl?: string | null) {
+  const raw = String(dataUrl || '').trim();
+  if (!raw) return null;
 
-    const match = raw.match(
-      /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/i,
-    );
-    if (!match) return null;
+  const match = raw.match(
+    /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/i,
+  );
+  if (!match) return null;
 
-    const mimeType = String(match[1] || '').toLowerCase();
-    const base64 = match[2] || '';
+  const mimeType = String(match[1] || '').toLowerCase();
+  const base64 = match[2] || '';
 
-    try {
-      const buffer = Buffer.from(base64, 'base64');
+  try {
+    let buffer: Buffer = Buffer.from(base64, 'base64');
+    let finalMimeType = mimeType;
+    let ext = 'jpg';
 
-      const mimeToExt: Record<string, string> = {
-        'image/jpeg': 'jpg',
-        'image/jpg': 'jpg',
-        'image/png': 'png',
-        'image/webp': 'webp',
-        'image/heic': 'heic',
-        'image/heif': 'heif',
-      };
-
-      const ext = mimeToExt[mimeType] || 'jpg';
-
-      return {
-        buffer,
-        mimeType,
-        ext,
-      };
-    } catch {
-      return null;
+    if (mimeType === 'image/png') {
+      ext = 'png';
+    } else if (mimeType === 'image/webp') {
+      ext = 'webp';
+    } else if (mimeType === 'image/jpeg' || mimeType === 'image/jpg') {
+      ext = 'jpg';
+      finalMimeType = 'image/jpeg';
+    } else if (mimeType === 'image/heic' || mimeType === 'image/heif') {
+      buffer = Buffer.from(await sharp(buffer).jpeg({ quality: 90 }).toBuffer());
+      ext = 'jpg';
+      finalMimeType = 'image/jpeg';
+    } else {
+      buffer = Buffer.from(await sharp(buffer).jpeg({ quality: 90 }).toBuffer());
+      ext = 'jpg';
+      finalMimeType = 'image/jpeg';
     }
-  }
 
-  private parseImageDataUrl(dataUrl?: string | null): Buffer | null {
-    return this.parseImageDataUrlMeta(dataUrl)?.buffer || null;
+    return {
+      buffer,
+      mimeType: finalMimeType,
+      ext,
+    };
+  } catch (error) {
+    console.error('❌ Error procesando imagen base64:', error);
+    return null;
   }
+}
 
-    private saveIncidentPhoto(
+  private async parseImageDataUrl(dataUrl?: string | null): Promise<Buffer | null> {
+  const parsed = await this.parseImageDataUrlMeta(dataUrl);
+  return parsed?.buffer || null;
+}
+
+    private async saveIncidentPhoto(
     fotoDataUrl?: string | null,
     fotoNombre?: string | null,
   ) {
-    const parsed = this.parseImageDataUrlMeta(fotoDataUrl);
+    const parsed = await this.parseImageDataUrlMeta(fotoDataUrl);
     if (!parsed) {
       return {
         fotoUrl: null as string | null,
@@ -492,11 +503,11 @@ export class WorkshopService {
     };
   }
 
-      private saveWorkshopEvidencePhoto(
+      private async saveWorkshopEvidencePhoto(
     fotoDataUrl?: string | null,
     fotoNombre?: string | null,
   ) {
-    const parsed = this.parseImageDataUrlMeta(fotoDataUrl);
+    const parsed = await this.parseImageDataUrlMeta(fotoDataUrl);
     if (!parsed) {
       return {
         fotoUrl: null as string | null,
@@ -872,11 +883,11 @@ export class WorkshopService {
   // HELPERS INSUMOS
   // ============================
 
-    private saveSupplyPhoto(
+    private async saveSupplyPhoto(
     fotoDataUrl?: string | null,
     fotoNombre?: string | null,
   ) {
-    const parsed = this.parseImageDataUrlMeta(fotoDataUrl);
+    const parsed = await this.parseImageDataUrlMeta(fotoDataUrl);
     if (!parsed) {
       return {
         fotoUrl: null as string | null,
@@ -1808,7 +1819,7 @@ export class WorkshopService {
       throw new NotFoundException('No se encontró un vehículo con esa patente');
     }
 
-    const savedPhoto = this.saveIncidentPhoto(
+    const savedPhoto = await this.saveIncidentPhoto(
       (dto as any).foto,
       (dto as any).fotoNombre,
     );
@@ -2024,7 +2035,7 @@ export class WorkshopService {
         this.deleteUploadedFile(existingIncident.fotoUrl);
       }
     } else {
-      const savedPhoto = this.saveIncidentPhoto(
+      const savedPhoto = await this.saveIncidentPhoto(
         (dto as any).foto,
         (dto as any).fotoNombre,
       );
@@ -2796,7 +2807,7 @@ export class WorkshopService {
 
         if (fotoEvidenciaRaw !== undefined) {
       if (fotoEvidenciaRaw) {
-        const savedEvidence = this.saveWorkshopEvidencePhoto(
+        const savedEvidence = await this.saveWorkshopEvidencePhoto(
           fotoEvidenciaRaw,
           fotoEvidenciaNombre || 'evidencia_tarea.jpg',
         );
@@ -3185,7 +3196,7 @@ export class WorkshopService {
         let imagePath: string | null = null;
 
     if (dto.fotoDataUrl) {
-      const parsed = this.parseImageDataUrlMeta(dto.fotoDataUrl);
+      const parsed = await this.parseImageDataUrlMeta(dto.fotoDataUrl);
 
       if (parsed) {
         const uploadDir = path.join(process.cwd(), 'uploads/workshop-parts');
@@ -3316,7 +3327,7 @@ export class WorkshopService {
         let imagePath: string | null = null;
 
     if (dto?.fotoEvidencia) {
-      const savedEvidence = this.saveWorkshopEvidencePhoto(
+      const savedEvidence = await this.saveWorkshopEvidencePhoto(
         dto.fotoEvidencia,
         'evidencia_tarea.jpg',
       );
@@ -3401,7 +3412,7 @@ export class WorkshopService {
       );
     }
 
-    const savedPhoto = this.saveSupplyPhoto(dto?.fotoDataUrl, dto?.fotoNombre);
+    const savedPhoto = await this.saveSupplyPhoto(dto?.fotoDataUrl, dto?.fotoNombre);
 
     const created = await this.prisma.workshopSupplyRequest.create({
       data: {
