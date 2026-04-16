@@ -412,26 +412,52 @@ export class WorkshopService {
     return full || user?.email || '—';
   }
 
-  private parseImageDataUrl(dataUrl?: string | null): Buffer | null {
+    private parseImageDataUrlMeta(dataUrl?: string | null) {
     const raw = String(dataUrl || '').trim();
     if (!raw) return null;
 
-    const match = raw.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/);
+    const match = raw.match(
+      /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/i,
+    );
     if (!match) return null;
 
+    const mimeType = String(match[1] || '').toLowerCase();
+    const base64 = match[2] || '';
+
     try {
-      return Buffer.from(match[1], 'base64');
+      const buffer = Buffer.from(base64, 'base64');
+
+      const mimeToExt: Record<string, string> = {
+        'image/jpeg': 'jpg',
+        'image/jpg': 'jpg',
+        'image/png': 'png',
+        'image/webp': 'webp',
+        'image/heic': 'heic',
+        'image/heif': 'heif',
+      };
+
+      const ext = mimeToExt[mimeType] || 'jpg';
+
+      return {
+        buffer,
+        mimeType,
+        ext,
+      };
     } catch {
       return null;
     }
   }
 
-  private saveIncidentPhoto(
+  private parseImageDataUrl(dataUrl?: string | null): Buffer | null {
+    return this.parseImageDataUrlMeta(dataUrl)?.buffer || null;
+  }
+
+    private saveIncidentPhoto(
     fotoDataUrl?: string | null,
     fotoNombre?: string | null,
   ) {
-    const buffer = this.parseImageDataUrl(fotoDataUrl);
-    if (!buffer) {
+    const parsed = this.parseImageDataUrlMeta(fotoDataUrl);
+    if (!parsed) {
       return {
         fotoUrl: null as string | null,
         filePath: null as string | null,
@@ -441,21 +467,14 @@ export class WorkshopService {
       };
     }
 
+    const { buffer, mimeType, ext } = parsed;
+
     const uploadDir = path.join(process.cwd(), 'uploads', 'incidents');
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
 
     const rawName = String(fotoNombre || '').trim();
-    const lowerName = rawName.toLowerCase();
-    const extFromName = lowerName.includes('.') ? lowerName.split('.').pop() : '';
-    const allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
-    const ext = allowedExts.includes(String(extFromName)) ? String(extFromName) : 'jpg';
-
-    let mimeType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
-    if (ext === 'jpeg') mimeType = 'image/jpeg';
-    if (ext === 'webp') mimeType = 'image/webp';
-    if (ext === 'png') mimeType = 'image/png';
 
     const fileName = `incident_${Date.now()}_${Math.random()
       .toString(36)
@@ -473,12 +492,12 @@ export class WorkshopService {
     };
   }
 
-    private saveWorkshopEvidencePhoto(
+      private saveWorkshopEvidencePhoto(
     fotoDataUrl?: string | null,
     fotoNombre?: string | null,
   ) {
-    const buffer = this.parseImageDataUrl(fotoDataUrl);
-    if (!buffer) {
+    const parsed = this.parseImageDataUrlMeta(fotoDataUrl);
+    if (!parsed) {
       return {
         fotoUrl: null as string | null,
         filePath: null as string | null,
@@ -488,21 +507,14 @@ export class WorkshopService {
       };
     }
 
+    const { buffer, mimeType, ext } = parsed;
+
     const uploadDir = path.join(process.cwd(), 'uploads', 'workshop-evidence');
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
 
     const rawName = String(fotoNombre || '').trim();
-    const lowerName = rawName.toLowerCase();
-    const extFromName = lowerName.includes('.') ? lowerName.split('.').pop() : '';
-    const allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
-    const ext = allowedExts.includes(String(extFromName)) ? String(extFromName) : 'jpg';
-
-    let mimeType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
-    if (ext === 'jpeg') mimeType = 'image/jpeg';
-    if (ext === 'webp') mimeType = 'image/webp';
-    if (ext === 'png') mimeType = 'image/png';
 
     const fileName = `evidence_${Date.now()}_${Math.random()
       .toString(36)
@@ -860,12 +872,12 @@ export class WorkshopService {
   // HELPERS INSUMOS
   // ============================
 
-  private saveSupplyPhoto(
+    private saveSupplyPhoto(
     fotoDataUrl?: string | null,
     fotoNombre?: string | null,
   ) {
-    const buffer = this.parseImageDataUrl(fotoDataUrl);
-    if (!buffer) {
+    const parsed = this.parseImageDataUrlMeta(fotoDataUrl);
+    if (!parsed) {
       return {
         fotoUrl: null as string | null,
         filePath: null as string | null,
@@ -875,21 +887,14 @@ export class WorkshopService {
       };
     }
 
+    const { buffer, mimeType, ext } = parsed;
+
     const uploadDir = path.join(process.cwd(), 'uploads', 'workshop-supplies');
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
 
     const rawName = String(fotoNombre || '').trim();
-    const lowerName = rawName.toLowerCase();
-    const extFromName = lowerName.includes('.') ? lowerName.split('.').pop() : '';
-    const allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
-    const ext = allowedExts.includes(String(extFromName)) ? String(extFromName) : 'jpg';
-
-    let mimeType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
-    if (ext === 'jpeg') mimeType = 'image/jpeg';
-    if (ext === 'webp') mimeType = 'image/webp';
-    if (ext === 'png') mimeType = 'image/png';
 
     const fileName = `supply_${Date.now()}_${Math.random()
       .toString(36)
@@ -3177,37 +3182,25 @@ export class WorkshopService {
       );
     }
 
-    let imagePath: string | null = null;
+        let imagePath: string | null = null;
 
     if (dto.fotoDataUrl) {
-      const buffer = this.parseImageDataUrl(dto.fotoDataUrl);
+      const parsed = this.parseImageDataUrlMeta(dto.fotoDataUrl);
 
-      if (buffer) {
+      if (parsed) {
         const uploadDir = path.join(process.cwd(), 'uploads/workshop-parts');
 
         if (!fs.existsSync(uploadDir)) {
           fs.mkdirSync(uploadDir, { recursive: true });
         }
 
-        const safeOriginalName = String(dto.fotoNombre || '')
-          .trim()
-          .toLowerCase();
-        const originalExt = safeOriginalName.includes('.')
-          ? safeOriginalName.split('.').pop()
-          : '';
-
-        const allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
-        const ext = allowedExts.includes(String(originalExt))
-          ? String(originalExt)
-          : 'jpg';
-
         const fileName = `part_${Date.now()}_${Math.random()
           .toString(36)
-          .substring(2, 8)}.${ext}`;
+          .substring(2, 8)}.${parsed.ext}`;
 
         const fullPath = path.join(uploadDir, fileName);
 
-        fs.writeFileSync(fullPath, buffer);
+        fs.writeFileSync(fullPath, parsed.buffer);
 
         imagePath = `/uploads/workshop-parts/${fileName}`;
       }
