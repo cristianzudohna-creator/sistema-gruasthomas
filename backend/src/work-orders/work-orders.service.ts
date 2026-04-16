@@ -2858,18 +2858,33 @@ export class WorkOrdersService {
     );
 
     const sigBuf = getSignatureBuffer(wo as any, id);
-    if (sigBuf) {
-      try {
-        const sigMaxW = colW - 20;
-        const sigMaxH = 44;
-        const sigY = lineY - sigMaxH - 5;
-        doc.image(sigBuf, firmaX1 + 10, sigY, {
-          fit: [sigMaxW, sigMaxH],
-          align: "left",
-          valign: "center",
-        });
-      } catch {}
-    }
+if (sigBuf) {
+  try {
+    const sigMaxW = 160;
+    const sigMaxH = 50;
+
+    const firmaBoxW = firmaX2 - firmaX1;
+
+    // 👉 calcular tamaño proporcional real
+    const img = doc.openImage(sigBuf);
+
+    let drawW = img.width;
+    let drawH = img.height;
+
+    const ratio = Math.min(sigMaxW / drawW, sigMaxH / drawH, 1);
+    drawW = drawW * ratio;
+    drawH = drawH * ratio;
+
+    // 👉 CENTRADO REAL
+    const sigX = firmaX1 + (firmaBoxW - drawW) / 2;
+    const sigY = lineY - drawH - 5;
+
+    doc.image(sigBuf, sigX, sigY, {
+      width: drawW,
+      height: drawH,
+    });
+  } catch {}
+}
 
     doc.end();
 
