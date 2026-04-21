@@ -318,12 +318,10 @@ export class VehicleFailureReportsService {
           activo: true,
           empresa: report.empresa,
           OR: [
-            { role: Role.SUPERADMIN },
-            { workerType: WorkerType.JEFE_TALLER },
-            { workerType: WorkerType.SUPERVISOR },
-            { workerType: "SUPERVISOR_TALLER_MECANICO" as WorkerType },
-            { workerType: "SUPERVISOR_TALLER" as WorkerType },
-          ],
+  { role: Role.SUPERADMIN },
+  { workerType: WorkerType.JEFE_TALLER },
+  { workerType: WorkerType.SUPERVISOR },
+],
         },
         select: {
           id: true,

@@ -172,8 +172,18 @@ function PreviewThumb({ item, onRemove, onOpen }) {
 
 export default function VehicleFailureReportsCreate() {
   const user = useMemo(() => getUserFromStorage(), []);
-  const role = useMemo(() => pickRole(user), [user]);
-  const canCreate = role === "SUPERADMIN" || role === "CONTROL_FLOTA";
+
+  const role = useMemo(() => {
+    return String(pickRole(user) || "")
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, "_");
+  }, [user]);
+
+  const canCreate =
+    role === "SUPERADMIN" ||
+    role === "CONTROL_FLOTA" ||
+    role === "CONTROL_DE_FLOTA";
 
   const [vehicles, setVehicles] = useState([]);
   const [loadingVehicles, setLoadingVehicles] = useState(false);
@@ -445,15 +455,11 @@ export default function VehicleFailureReportsCreate() {
                   {loadingVehicles ? "Cargando vehículos..." : "Selecciona un vehículo"}
                 </option>
 
-                {vehicles.map((vehicle) => {
-  console.log("VEHICLE:", vehicle);
-
-  return (
-    <option key={vehicle.id} value={vehicle.id}>
-      {vehicleLabel(vehicle)}
-    </option>
-  );
-})}
+                {vehicles.map((vehicle) => (
+                  <option key={vehicle.id} value={vehicle.id}>
+                    {vehicleLabel(vehicle)}
+                  </option>
+                ))}
               </select>
 
               {vehiclesError ? (

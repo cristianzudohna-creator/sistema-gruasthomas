@@ -13,6 +13,10 @@
 // - upload-evidence permitido para CONTROL_FLOTA
 // - upload-evidence permitido para usuarios de taller
 // - útil para módulo reporte ingreso con fallas
+// ✅ NUEVO AHORA:
+// - upload-ingreso permitido para CONTROL_FLOTA
+// - upload-ingreso permitido para usuarios de taller
+// - útil para fotos del reporte de ingreso con fallas
 
 import {
   CanActivate,
@@ -165,6 +169,11 @@ export class WorkshopAccessGuard implements CanActivate {
       method === 'POST' &&
       /\/workshop\/upload-evidence(?:\?.*)?$/.test(originalUrl);
 
+    // ✅ NUEVO: upload ingreso
+    const isUploadIngresoRoute =
+      method === 'POST' &&
+      /\/workshop\/upload-ingreso(?:\?.*)?$/.test(originalUrl);
+
     const isAdquisiciones =
       role === 'TRABAJADOR' && workerType === 'ADQUISICIONES';
 
@@ -200,6 +209,18 @@ export class WorkshopAccessGuard implements CanActivate {
 
       throw new ForbiddenException(
         'No tienes permisos para subir evidencias',
+      );
+    }
+
+    if (isUploadIngresoRoute) {
+      if (isControlFlota) return true;
+
+      if (role === 'TRABAJADOR' && isWorkshopWorker(workerType)) {
+        return true;
+      }
+
+      throw new ForbiddenException(
+        'No tienes permisos para subir fotos de ingreso',
       );
     }
 
