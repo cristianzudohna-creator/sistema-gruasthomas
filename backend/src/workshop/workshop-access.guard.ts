@@ -9,6 +9,10 @@
 // - ADMINISTRADORA puede descargar PDF de horas extras
 // - ADMINISTRADORA puede descargar EXCEL de horas extras
 // - SUPERADMIN también queda cubierto por bypass global
+// ✅ NUEVO AHORA:
+// - upload-evidence permitido para CONTROL_FLOTA
+// - upload-evidence permitido para usuarios de taller
+// - útil para módulo reporte ingreso con fallas
 
 import {
   CanActivate,
@@ -156,6 +160,11 @@ export class WorkshopAccessGuard implements CanActivate {
       method === 'PATCH' &&
       /\/workshop\/supplies\/[^/]+\/cancel(?:\?.*)?$/.test(originalUrl);
 
+    // ✅ NUEVO: upload evidence
+    const isUploadEvidenceRoute =
+      method === 'POST' &&
+      /\/workshop\/upload-evidence(?:\?.*)?$/.test(originalUrl);
+
     const isAdquisiciones =
       role === 'TRABAJADOR' && workerType === 'ADQUISICIONES';
 
@@ -177,6 +186,22 @@ export class WorkshopAccessGuard implements CanActivate {
       'COMPRADO',
       'ENTREGADO',
     ];
+
+    // ============================
+    // UPLOAD EVIDENCE
+    // ============================
+
+    if (isUploadEvidenceRoute) {
+      if (isControlFlota) return true;
+
+      if (role === 'TRABAJADOR' && isWorkshopWorker(workerType)) {
+        return true;
+      }
+
+      throw new ForbiddenException(
+        'No tienes permisos para subir evidencias',
+      );
+    }
 
     // ============================
     // HORAS EXTRAS
@@ -237,7 +262,6 @@ export class WorkshopAccessGuard implements CanActivate {
     }
 
     if (isExtraHoursRoute) {
-      // ✅ ADMINISTRADORA también puede entrar al módulo admin de horas extras
       if (isAdministradora) return true;
 
       if (isControlFlota) return true;
@@ -425,8 +449,6 @@ export class WorkshopAccessGuard implements CanActivate {
     // INSUMOS -> PREVENCION
     // ============================
 
-    // POST /workshop/supplies/request
-    // JEFE_TALLER + SUPERVISOR
     if (isSupplyRequestRoute) {
       if (isJefeTaller) {
         return true;
@@ -437,8 +459,6 @@ export class WorkshopAccessGuard implements CanActivate {
       );
     }
 
-    // GET /workshop/supplies
-    // PREVENCION + JEFE_TALLER + SUPERVISOR + CONTROL_FLOTA
     if (isSupplyListRoute) {
       if (isPrevencion) return true;
       if (isJefeTaller) return true;
@@ -449,8 +469,6 @@ export class WorkshopAccessGuard implements CanActivate {
       );
     }
 
-    // PATCH /workshop/supplies/:id/purchase
-    // PREVENCION
     if (isSupplyPurchaseRoute) {
       if (isPrevencion) return true;
 
@@ -459,8 +477,6 @@ export class WorkshopAccessGuard implements CanActivate {
       );
     }
 
-    // PATCH /workshop/supplies/:id/cancel
-    // JEFE_TALLER + SUPERVISOR + CONTROL_FLOTA
     if (isSupplyCancelRoute) {
       if (isJefeTaller) return true;
       if (isControlFlota) return true;

@@ -45,6 +45,9 @@ import WorkshopSuppliesRequest from "./pages/WorkshopSuppliesRequest";
 // ✅ NUEVO: PREVENCIÓN compras de insumos
 import PreventionSupplies from "./pages/PreventionSupplies";
 
+// ✅ NUEVO: reporte de ingreso con fallas
+import VehicleFailureReportsCreate from "./pages/VehicleFailureReportsCreate";
+
 // ✅ Firebase foreground notifications
 import { onMessage } from "firebase/messaging";
 import { getMessagingInstance } from "./firebase";
@@ -225,6 +228,16 @@ export default function App() {
             }
           />
 
+          {/* ✅ NUEVO: crear reporte de ingreso con fallas */}
+          <Route
+            path="reportes-fallas-vehiculos/nuevo"
+            element={
+              <ProtectedRoute role={["CONTROL_FLOTA", "SUPERADMIN"]}>
+                <VehicleFailureReportsCreate />
+              </ProtectedRoute>
+            }
+          />
+
           <Route
             path="clientes"
             element={
@@ -373,7 +386,6 @@ export default function App() {
     </BrowserRouter>
   );
 }
-
 
 
 

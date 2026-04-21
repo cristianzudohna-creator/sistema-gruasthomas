@@ -543,6 +543,46 @@ export class WorkshopService {
     };
   }
 
+    private async saveWorkshopIngresoPhoto(
+    fotoDataUrl?: string | null,
+    fotoNombre?: string | null,
+  ) {
+    const parsed = await this.parseImageDataUrlMeta(fotoDataUrl);
+    if (!parsed) {
+      return {
+        fotoUrl: null as string | null,
+        filePath: null as string | null,
+        originalName: null as string | null,
+        mimeType: null as string | null,
+        sizeBytes: null as number | null,
+      };
+    }
+
+    const { buffer, mimeType, ext } = parsed;
+
+    const uploadDir = path.join(process.cwd(), 'uploads', 'workshop-ingreso');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    const rawName = String(fotoNombre || '').trim();
+
+    const fileName = `ingreso_${Date.now()}_${Math.random()
+      .toString(36)
+      .substring(2, 8)}.${ext}`;
+
+    const absolutePath = path.join(uploadDir, fileName);
+    fs.writeFileSync(absolutePath, buffer);
+
+    return {
+      fotoUrl: `/uploads/workshop-ingreso/${fileName}`,
+      filePath: absolutePath,
+      originalName: rawName || fileName,
+      mimeType,
+      sizeBytes: buffer.length,
+    };
+  }
+
   private deleteUploadedFile(fileUrlOrPath?: string | null) {
     try {
       const raw = String(fileUrlOrPath || '').trim();
@@ -1071,6 +1111,130 @@ export class WorkshopService {
     throw new BadRequestException(
       'Solo superadmin o administradora pueden acceder a esta vista',
     );
+  }
+
+    async uploadEvidence(
+    userId: string,
+    dto: {
+      filename?: string;
+      mimeType?: string;
+      base64?: string;
+    },
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        activo: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    if (!user.activo) {
+      throw new BadRequestException('Usuario inactivo');
+    }
+
+    const rawFilename = String(dto?.filename || '').trim();
+    const rawMimeType = String(dto?.mimeType || '').trim();
+    const rawBase64 = String(dto?.base64 || '').trim();
+
+    if (!rawBase64) {
+      throw new BadRequestException('La imagen en base64 es obligatoria');
+    }
+
+    const parsed = await this.parseImageDataUrlMeta(rawBase64);
+
+    if (!parsed) {
+      throw new BadRequestException('Imagen base64 inválida');
+    }
+
+    const { buffer, mimeType, ext } = parsed;
+
+    const uploadDir = path.join(process.cwd(), 'uploads', 'workshop-evidence');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    const fileName = `evidence_${Date.now()}_${Math.random()
+      .toString(36)
+      .substring(2, 8)}.${ext}`;
+
+    const absolutePath = path.join(uploadDir, fileName);
+    fs.writeFileSync(absolutePath, buffer);
+
+    return {
+      ok: true,
+      fileUrl: `/uploads/workshop-evidence/${fileName}`,
+      filePath: absolutePath,
+      originalName: rawFilename || fileName,
+      mimeType: mimeType || rawMimeType || 'image/jpeg',
+      sizeBytes: buffer.length,
+    };
+  }
+
+    async uploadIngreso(
+    userId: string,
+    dto: {
+      filename?: string;
+      mimeType?: string;
+      base64?: string;
+    },
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        activo: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    if (!user.activo) {
+      throw new BadRequestException('Usuario inactivo');
+    }
+
+    const rawFilename = String(dto?.filename || '').trim();
+    const rawMimeType = String(dto?.mimeType || '').trim();
+    const rawBase64 = String(dto?.base64 || '').trim();
+
+    if (!rawBase64) {
+      throw new BadRequestException('La imagen en base64 es obligatoria');
+    }
+
+    const parsed = await this.parseImageDataUrlMeta(rawBase64);
+
+    if (!parsed) {
+      throw new BadRequestException('Imagen base64 inválida');
+    }
+
+    const { buffer, mimeType, ext } = parsed;
+
+    const uploadDir = path.join(process.cwd(), 'uploads', 'workshop-ingreso');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    const fileName = `ingreso_${Date.now()}_${Math.random()
+      .toString(36)
+      .substring(2, 8)}.${ext}`;
+
+    const absolutePath = path.join(uploadDir, fileName);
+    fs.writeFileSync(absolutePath, buffer);
+
+    return {
+      ok: true,
+      fileUrl: `/uploads/workshop-ingreso/${fileName}`,
+      filePath: absolutePath,
+      originalName: rawFilename || fileName,
+      mimeType: mimeType || rawMimeType || 'image/jpeg',
+      sizeBytes: buffer.length,
+    };
   }
 
   // ============================
@@ -2475,6 +2639,17 @@ export class WorkshopService {
 
     const titulo = dto.titulo?.trim() || 'Tarea de taller';
 
+        const savedIngresoPhoto = await this.saveWorkshopIngresoPhoto(
+      (dto as any).fotoIngreso,
+      (dto as any).fotoIngresoNombre,
+    );
+
+    const observacionesConIngreso = savedIngresoPhoto.fotoUrl
+      ? [String(dto.observaciones || '').trim(), `📸 Foto vehículo: ${savedIngresoPhoto.fotoUrl}`]
+          .filter(Boolean)
+          .join('\n')
+      : dto.observaciones;
+
     const createdTask = await this.prisma.$transaction(async (tx) => {
       const codigo = await this.generateWorkshopCode(tx);
 
@@ -2504,7 +2679,7 @@ export class WorkshopService {
           status: dto.status ?? 'PENDIENTE',
           diagnostico: dto.diagnostico,
           trabajoRealizado: dto.trabajoRealizado,
-          observaciones: dto.observaciones,
+                    observaciones: observacionesConIngreso,
           problemaRepuesto:
             (dto as any).problemaRepuesto !== undefined
               ? String((dto as any).problemaRepuesto || '').trim() || null
@@ -2651,7 +2826,71 @@ export class WorkshopService {
     return task;
   }
 
-    async updateWorkshopTask(id: string, dto: UpdateWorkshopTaskDto) {
+    private extractWorkshopIngresoImagesFromObservaciones(
+  observaciones?: string | null,
+) {
+  const raw = String(observaciones || '').trim();
+  if (!raw) return [];
+
+  const matches = [
+    ...raw.matchAll(/📸\s*Foto vehículo:\s*(\/uploads\/workshop-ingreso\/[^\s]+)/gi),
+  ];
+
+  return [
+    ...new Set(
+      matches
+        .map((m) => String(m?.[1] || '').trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
+private removeWorkshopIngresoImagesFromObservaciones(
+  observaciones?: string | null,
+) {
+  let raw = String(observaciones || '').trim();
+  if (!raw) return '';
+
+  raw = raw.replace(
+    /\n?\s*📸\s*Foto vehículo:\s*\/uploads\/workshop-ingreso\/[^\s]+/gi,
+    '',
+  );
+
+  raw = raw
+    .replace(/\n?\s*📸\s*Foto vehículo:\s*$/i, '')
+    .replace(/\n?\s*📸\s*Fotos del vehículo:\s*$/i, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return raw;
+}
+
+private buildWorkshopObservacionesWithIngresoImages(
+  baseObservaciones?: string | null,
+  imagePaths: string[] = [],
+) {
+  const cleanBase = this.removeWorkshopIngresoImagesFromObservaciones(
+    baseObservaciones,
+  );
+
+  const cleanImagePaths = [...new Set(
+    (Array.isArray(imagePaths) ? imagePaths : [])
+      .map((p) => String(p || '').trim())
+      .filter(Boolean),
+  )];
+
+  if (!cleanImagePaths.length) {
+    return cleanBase || null;
+  }
+
+  const photoLines = cleanImagePaths.map(
+    (imgPath) => `📸 Foto vehículo: ${imgPath}`,
+  );
+
+  return [cleanBase, ...photoLines].filter(Boolean).join('\n').trim() || null;
+}
+
+      async updateWorkshopTask(id: string, dto: UpdateWorkshopTaskDto) {
     const existingTask = await this.prisma.workshopTask.findUnique({
       where: { id },
       include: {
@@ -2778,10 +3017,56 @@ export class WorkshopService {
       : existingTask.status;
 
     // =========================================================
+    // ✅ MANEJO DE FOTO DE INGRESO EN OBSERVACIONES
+    // =========================================================
+    const previousIngresoPaths =
+  this.extractWorkshopIngresoImagesFromObservaciones(
+    existingTask.observaciones,
+  );
+
+    const fotoIngresoRaw =
+      (dto as any).fotoIngreso !== undefined
+        ? String((dto as any).fotoIngreso ?? '').trim()
+        : undefined;
+
+    const fotoIngresoNombre =
+      (dto as any).fotoIngresoNombre !== undefined
+        ? String((dto as any).fotoIngresoNombre ?? '').trim()
+        : 'foto_ingreso.jpg';
+
+    let finalIngresoImagePaths = [...previousIngresoPaths];
+
+    if (fotoIngresoRaw !== undefined) {
+  if (fotoIngresoRaw) {
+    const savedIngreso = await this.saveWorkshopIngresoPhoto(
+      fotoIngresoRaw,
+      fotoIngresoNombre || 'foto_ingreso.jpg',
+    );
+
+    if (!savedIngreso.fotoUrl) {
+      throw new BadRequestException(
+        'No se pudo guardar la foto del ingreso',
+      );
+    }
+
+    previousIngresoPaths.forEach((imgPath) => {
+      this.deleteUploadedFile(imgPath);
+    });
+
+    finalIngresoImagePaths = [savedIngreso.fotoUrl];
+  } else {
+    previousIngresoPaths.forEach((imgPath) => {
+      this.deleteUploadedFile(imgPath);
+    });
+
+    finalIngresoImagePaths = [];
+  }
+}
+
+    // =========================================================
     // ✅ MANEJO DE EVIDENCIA EN OBSERVACIONES
     // =========================================================
-    
-        const previousEvidencePath =
+    const previousEvidencePath =
       this.extractWorkshopEvidenceImageFromObservaciones(
         existingTask.observaciones,
       );
@@ -2805,7 +3090,7 @@ export class WorkshopService {
 
     let finalEvidenceImagePath = previousEvidencePath || '';
 
-        if (fotoEvidenciaRaw !== undefined) {
+    if (fotoEvidenciaRaw !== undefined) {
       if (fotoEvidenciaRaw) {
         const savedEvidence = await this.saveWorkshopEvidencePhoto(
           fotoEvidenciaRaw,
@@ -2843,6 +3128,23 @@ export class WorkshopService {
         ? String(problemaRepuestoRaw || '').trim()
         : undefined;
 
+    const observacionesBase =
+      normalizedObservaciones !== undefined
+        ? normalizedObservaciones
+        : existingTask.observaciones;
+
+    const observacionesConIngreso =
+  this.buildWorkshopObservacionesWithIngresoImages(
+    observacionesBase,
+    finalIngresoImagePaths,
+  );
+
+    const observacionesFinal =
+      this.buildWorkshopObservacionesWithEvidenceImage(
+        observacionesConIngreso,
+        finalEvidenceImagePath,
+      );
+
     const data: Prisma.WorkshopTaskUpdateInput = {
       empresa: dto.empresa,
       titulo:
@@ -2853,14 +3155,11 @@ export class WorkshopService {
       priority: dto.priority,
       status: dto.status,
       diagnostico: dto.diagnostico,
-            trabajoRealizado:
-        normalizedObservaciones !== undefined
-          ? normalizedObservaciones || null
-          : dto.trabajoRealizado,
-      observaciones: this.buildWorkshopObservacionesWithEvidenceImage(
-        existingTask.observaciones,
-        finalEvidenceImagePath,
-      ),
+      trabajoRealizado:
+  dto.trabajoRealizado !== undefined
+    ? dto.trabajoRealizado
+    : undefined,
+      observaciones: observacionesFinal,
       estimatedCost: dto.estimatedCost,
       actualCost: dto.actualCost,
       problemaRepuesto:
@@ -2868,7 +3167,7 @@ export class WorkshopService {
           ? problemaRepuesto || null
           : undefined,
     };
-  
+
     if (nextStatus === WorkshopTaskStatus.EN_REPARACION) {
       data.startedAt = existingTask.startedAt ?? new Date();
       data.closedAt = null;

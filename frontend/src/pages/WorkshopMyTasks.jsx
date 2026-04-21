@@ -1,4 +1,22 @@
 // ✅ Archivo: src/pages/WorkshopMyTasks.jsx
+// ✅ FIX NUEVO:
+// - limpia observaciones para que no muestren nombres de archivos ni rutas /uploads
+// - detecta imagen de repuesto y evidencia final con lógica más robusta
+// - no muestra en texto cosas como "archivo.jpg: /uploads/..."
+// - mantiene evidencia final separada del texto
+// - soporta mejor múltiples formatos heredados
+// ✅ FIX NUEVO AHORA:
+// - vuelve a mostrar las fotos del ingreso
+// - separa fotos genéricas del ingreso, foto repuesto y evidencia final
+// - mantiene el texto limpio en observaciones
+// ✅ FIX NUEVO AHORA:
+// - cambia "Evidencias:" por "Fotos del vehículo:"
+// - permite ver TODAS las fotos del ingreso
+// - agrega visor con navegación anterior / siguiente
+// ✅ FIX FINAL:
+// - ahora busca fotos del vehículo no solo en observaciones
+// - también revisa campos reales del task y objetos anidados
+// - filtra branding, evidencia final y fotos de repuesto
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -89,6 +107,7 @@ function prettyWorkerType(value) {
   }
   if (v === "MECANICO_HIDRAULICO") return "Mecánico hidráulico";
   if (v === "JEFE_TALLER") return "Jefe de taller";
+  if (v === "SUPERVISOR") return "Supervisor taller";
 
   return value || "Sin especialidad";
 }
@@ -157,8 +176,8 @@ function getHelperAssignments(task) {
   return Array.isArray(task?.helpers)
     ? task.helpers
     : Array.isArray(task?.apoyos)
-    ? task.apoyos
-    : [];
+      ? task.apoyos
+      : [];
 }
 
 function getMyRoleInTask(task, userId) {
@@ -228,58 +247,184 @@ function getTaskObservations(task) {
   );
 }
 
-function parseObservation(observations) {
-  const raw = String(observations || "");
+function cleanObservationText(rawText) {
+  let text = String(rawText || "").trim();
+  if (!text) return "";
 
-  const spareImageMatch = raw.match(
-    /(?:^|\n)\s*(?:[^\w\n\r]*\s*)?Foto:\s*(\/uploads\/workshop-parts\/[^\s]+)/i
+  text = text.replace(/\r/g, "");
+
+  // Quitar líneas vacías tipo:
+  // 📸 Foto vehículo:
+  // 📸 Evidencia:
+  // 📸 Foto:
+  text = text.replace(
+    /(?:^|\n)\s*📸\s*(?:Foto vehículo|Fotos del vehículo|Foto|Evidencia)\s*:\s*(?=\n|$)/gi,
+    ""
   );
 
-  const evidenceImageMatch = raw.match(
-    /(?:^|\n)\s*(?:[^\w\n\r]*\s*)?Evidencia:\s*(\/uploads\/workshop-evidence\/[^\s]+)/i
+  // Quitar líneas con rutas de imágenes de ingreso
+  text = text.replace(
+    /(?:^|\n)\s*📸\s*Foto vehículo\s*:\s*\/uploads\/workshop-ingreso\/[^\s]+/gi,
+    ""
   );
 
-  const spareImage = spareImageMatch ? spareImageMatch[1] : null;
-  const evidenceImage = evidenceImageMatch ? evidenceImageMatch[1] : null;
+  // Quitar líneas con rutas de imágenes de evidencia
+  text = text.replace(
+    /(?:^|\n)\s*📸\s*Evidencia\s*:\s*\/uploads\/workshop-evidence\/[^\s]+/gi,
+    ""
+  );
 
-  const cleanText = raw
-    .replace(
-      /(?:^|\n)\s*(?:[^\w\n\r]*\s*)?Foto:\s*\/uploads\/workshop-parts\/[^\s]+/gi,
-      ""
-    )
-    .replace(
-      /(?:^|\n)\s*(?:[^\w\n\r]*\s*)?Evidencia:\s*\/uploads\/workshop-evidence\/[^\s]+/gi,
-      ""
-    )
+  // Quitar líneas con rutas de imágenes de repuestos
+  text = text.replace(
+    /(?:^|\n)\s*📸\s*Foto\s*:\s*\/uploads\/workshop-parts\/[^\s]+/gi,
+    ""
+  );
+
+  // Quitar cualquier ruta suelta /uploads/...
+  text = text.replace(/(?:^|\n)\s*\/uploads\/[^\s]+/gi, "");
+
+  // Limpiar saltos y espacios
+  text = text
     .replace(/\n{2,}/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
     .trim();
 
+  return text;
+}
+
+function uniqueStrings(values) {
+  return [
+    ...new Set(
+      (Array.isArray(values) ? values : [])
+        .map((v) => String(v || "").trim())
+        .filter(Boolean)
+    ),
+  ];
+}
+
+function looksLikeImagePath(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return false;
+
+  if (/^data:image\//i.test(raw)) return true;
+  if (/^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i.test(raw)) return true;
+  if (/^\/?(api\/)?uploads\/.+\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i.test(raw)) {
+    return true;
+  }
+
+  return false;
+}
+
+function isBrandingImage(value) {
+  return /\/uploads\/branding\//i.test(String(value || ""));
+}
+
+function isSparePartImage(value) {
+  return /\/uploads\/workshop-parts\//i.test(String(value || ""));
+}
+
+function isEvidenceImage(value) {
+  return /\/uploads\/workshop-evidence\//i.test(String(value || ""));
+}
+
+function parseObservation(observations) {
+  const raw = String(observations || "").trim();
+
+  if (!raw) {
+    return {
+      text: "",
+      spareImage: "",
+      evidenceImage: "",
+      ingresoImage: "",
+      spareImages: [],
+      evidenceImages: [],
+      ingresoImages: [],
+      allImages: [],
+    };
+  }
+
+  const uploadMatches = raw.match(/\/uploads\/[^\s]+/gi) || [];
+  const imagePaths = uploadMatches.filter((value) =>
+    /\.(jpg|jpeg|png|webp|gif)$/i.test(String(value || ""))
+  );
+
+  const uniqueImages = uniqueStrings(imagePaths);
+
+  const spareImages = uniqueImages.filter((img) => isSparePartImage(img));
+  const evidenceImages = uniqueImages.filter((img) => isEvidenceImage(img));
+  const ingresoImages = uniqueImages.filter(
+    (img) =>
+      !isSparePartImage(img) &&
+      !isEvidenceImage(img) &&
+      !isBrandingImage(img)
+  );
+
   return {
-    text: cleanText,
-    spareImage,
-    evidenceImage,
+    text: cleanObservationText(raw),
+    spareImage: spareImages[0] || "",
+    evidenceImage: evidenceImages[0] || "",
+    ingresoImage: ingresoImages[0] || "",
+    spareImages,
+    evidenceImages,
+    ingresoImages,
+    allImages: uniqueImages,
   };
+}
+
+function isInitialIngresoText(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return false;
+
+  const normalized = raw.toLowerCase().replace(/\s+/g, " ").trim();
+
+  return (
+    normalized.startsWith("vehículo ingresado por:") ||
+    normalized.startsWith("vehiculo ingresado por:") ||
+    normalized === "evidencias:" ||
+    normalized === "fotos del vehículo:" ||
+    (normalized.includes("vehículo ingresado por:") &&
+      normalized.includes("evidencias:")) ||
+    (normalized.includes("vehiculo ingresado por:") &&
+      normalized.includes("evidencias:")) ||
+    (normalized.includes("vehículo ingresado por:") &&
+      normalized.includes("fotos del vehículo:")) ||
+    (normalized.includes("vehiculo ingresado por:") &&
+      normalized.includes("fotos del vehículo:"))
+  );
 }
 
 function getFinalEvidenceData(task) {
   const parsedObservation = parseObservation(getTaskObservations(task));
 
-  const evidenceTextCandidates = [
+  const candidates = [
     task?.trabajoRealizado,
     task?.evidencia,
     task?.evidenciaTexto,
     task?.detalleEvidencia,
     task?.descripcionCierre,
     task?.comentarioCierre,
-  ];
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .filter((value) => !isInitialIngresoText(value));
 
-  const finalText =
-    evidenceTextCandidates.find((value) => String(value || "").trim()) || "";
+  const finalText = candidates[0] || "";
 
   return {
     text: String(finalText || "").trim(),
     image: parsedObservation.evidenceImage || "",
+    images: parsedObservation.evidenceImages || [],
   };
+}
+
+function getIngresoImagesFromTask(task) {
+  const parsedObservation = parseObservation(getTaskObservations(task));
+
+  return uniqueStrings([
+    ...(Array.isArray(parsedObservation.ingresoImages)
+      ? parsedObservation.ingresoImages
+      : []),
+  ]);
 }
 
 function hasSparePartRequest(task) {
@@ -392,6 +537,10 @@ function buildUploadUrl(imagePath) {
   const raw = String(imagePath || "").trim();
   if (!raw) return "";
 
+  if (raw.startsWith("data:image/")) {
+    return raw;
+  }
+
   if (raw.startsWith("http://") || raw.startsWith("https://")) {
     return raw;
   }
@@ -402,6 +551,10 @@ function buildUploadUrl(imagePath) {
 
   if (raw.startsWith("/uploads/")) {
     return `${API_URL}${raw}`;
+  }
+
+  if (raw.startsWith("uploads/")) {
+    return `${API_URL}/${raw}`;
   }
 
   return `${API_URL}/${raw.replace(/^\/+/, "")}`;
@@ -434,6 +587,11 @@ export default function WorkshopMyTasks() {
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
   const [imageViewerSrc, setImageViewerSrc] = useState("");
   const [imageViewerTitle, setImageViewerTitle] = useState("");
+
+  const [galleryViewerOpen, setGalleryViewerOpen] = useState(false);
+  const [galleryViewerTitle, setGalleryViewerTitle] = useState("");
+  const [galleryViewerImages, setGalleryViewerImages] = useState([]);
+  const [galleryViewerIndex, setGalleryViewerIndex] = useState(0);
 
   const [evidenceViewerOpen, setEvidenceViewerOpen] = useState(false);
   const [evidenceViewerTitle, setEvidenceViewerTitle] = useState("");
@@ -469,6 +627,40 @@ export default function WorkshopMyTasks() {
     setImageViewerOpen(false);
     setImageViewerSrc("");
     setImageViewerTitle("");
+  }
+
+  function openGalleryViewer(images, title = "Fotos del vehículo") {
+    const normalized = uniqueStrings(
+      (Array.isArray(images) ? images : []).map((img) => buildUploadUrl(img))
+    ).filter(Boolean);
+
+    if (normalized.length === 0) return;
+
+    setGalleryViewerImages(normalized);
+    setGalleryViewerIndex(0);
+    setGalleryViewerTitle(title);
+    setGalleryViewerOpen(true);
+  }
+
+  function closeGalleryViewer() {
+    setGalleryViewerOpen(false);
+    setGalleryViewerTitle("");
+    setGalleryViewerImages([]);
+    setGalleryViewerIndex(0);
+  }
+
+  function showPrevGalleryImage() {
+    setGalleryViewerIndex((prev) => {
+      if (!galleryViewerImages.length) return 0;
+      return prev === 0 ? galleryViewerImages.length - 1 : prev - 1;
+    });
+  }
+
+  function showNextGalleryImage() {
+    setGalleryViewerIndex((prev) => {
+      if (!galleryViewerImages.length) return 0;
+      return prev === galleryViewerImages.length - 1 ? 0 : prev + 1;
+    });
   }
 
   function openEvidenceViewer(task) {
@@ -833,6 +1025,9 @@ export default function WorkshopMyTasks() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const currentGalleryImage =
+    galleryViewerImages[galleryViewerIndex] || "";
+
   return (
     <div className="wmt-page-shell">
       <div className="wmt-page-card">
@@ -922,6 +1117,7 @@ export default function WorkshopMyTasks() {
               const problemaRepuesto = String(
                 task?.problemaRepuesto || ""
               ).trim();
+              const finalEvidence = getFinalEvidenceData(task);
 
               const isHistoryTask =
                 taskStatus === "TERMINADA" || taskStatus === "CANCELADA";
@@ -949,6 +1145,8 @@ export default function WorkshopMyTasks() {
               const showActions =
                 amResponsible &&
                 (canStartRepair || canRequestSpare || canFinishTask);
+
+              const ingresoImages = getIngresoImagesFromTask(task);
 
               return (
                 <article key={task.id} className="wmt-card">
@@ -1012,8 +1210,8 @@ export default function WorkshopMyTasks() {
                         {myRole === "RESPONSABLE"
                           ? "Responsable"
                           : myRole === "APOYO"
-                          ? "Apoyo"
-                          : "—"}
+                            ? "Apoyo"
+                            : "—"}
                       </div>
                     </div>
 
@@ -1069,7 +1267,12 @@ export default function WorkshopMyTasks() {
                       </div>
                     ) : null}
 
-                    {getTaskObservations(task) ? (
+                    {(parsedObservation.text ||
+                      ingresoImages.length > 0 ||
+                      parsedObservation.spareImage ||
+                      parsedObservation.evidenceImage ||
+                      finalEvidence.image ||
+                      problemaRepuesto) ? (
                       <div className="wmt-field wmt-field--wide">
                         <div className="wmt-field__label">OBSERVACIONES</div>
 
@@ -1098,6 +1301,27 @@ export default function WorkshopMyTasks() {
                           </div>
                         ) : null}
 
+                        {ingresoImages.length > 0 ? (
+                          <div style={{ marginTop: 12 }}>
+                            <div className="wmt-field__label">
+                              FOTOS DEL VEHÍCULO
+                            </div>
+
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={() =>
+                                openGalleryViewer(
+                                  ingresoImages,
+                                  "Fotos del vehículo"
+                                )
+                              }
+                            >
+                              Ver fotos
+                            </button>
+                          </div>
+                        ) : null}
+
                         {parsedObservation.spareImage ? (
                           <div style={{ marginTop: 12 }}>
                             <div className="wmt-field__label">FOTO REPUESTO</div>
@@ -1116,7 +1340,7 @@ export default function WorkshopMyTasks() {
                           </div>
                         ) : null}
 
-                        {parsedObservation.evidenceImage ? (
+                        {(parsedObservation.evidenceImage || finalEvidence.image) ? (
                           <div style={{ marginTop: 12 }}>
                             <div className="wmt-field__label">EVIDENCIA FINAL</div>
                             <button
@@ -1183,8 +1407,8 @@ export default function WorkshopMyTasks() {
                       {isHistoryTask
                         ? "Esta tarea ya está cerrada y se muestra solo como historial."
                         : amResponsible
-                        ? "No hay acciones disponibles para esta tarea."
-                        : "Solo puedes ver esta tarea. El responsable es quien puede iniciar, pedir repuesto o terminarla."}
+                          ? "No hay acciones disponibles para esta tarea."
+                          : "Solo puedes ver esta tarea. El responsable es quien puede iniciar, pedir repuesto o terminarla."}
                     </div>
                   )}
                 </article>
@@ -1554,6 +1778,95 @@ export default function WorkshopMyTasks() {
               objectFit: "contain",
             }}
           />
+        </div>
+      </Modal>
+
+      <Modal
+        open={galleryViewerOpen}
+        onClose={closeGalleryViewer}
+        title={galleryViewerTitle || "Fotos del vehículo"}
+        size="lg"
+      >
+        <div
+          style={{
+            display: "grid",
+            gap: 14,
+            padding: "8px 10px 10px",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <div
+              style={{
+                fontWeight: 700,
+                color: "#334155",
+              }}
+            >
+              {galleryViewerImages.length > 0
+                ? `Foto ${galleryViewerIndex + 1} de ${galleryViewerImages.length}`
+                : "Sin fotos"}
+            </div>
+
+            {galleryViewerImages.length > 1 ? (
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                }}
+              >
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={showPrevGalleryImage}
+                >
+                  ← Anterior
+                </button>
+
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={showNextGalleryImage}
+                >
+                  Siguiente →
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              minHeight: 260,
+              padding: 12,
+              borderRadius: 16,
+              background: "rgba(15, 23, 42, 0.03)",
+              border: "1px solid rgba(15, 23, 42, 0.08)",
+            }}
+          >
+            {currentGalleryImage ? (
+              <img
+                src={currentGalleryImage}
+                alt={`Foto del vehículo ${galleryViewerIndex + 1}`}
+                style={{
+                  maxWidth: "100%",
+                  maxHeight: "70vh",
+                  borderRadius: "12px",
+                  objectFit: "contain",
+                }}
+              />
+            ) : (
+              <div style={{ opacity: 0.7 }}>Sin fotos disponibles.</div>
+            )}
+          </div>
         </div>
       </Modal>
 

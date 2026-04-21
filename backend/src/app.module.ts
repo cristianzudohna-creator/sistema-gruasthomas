@@ -33,6 +33,9 @@ import { ScheduleModule } from "@nestjs/schedule";
 // ✅ FIREBASE
 import { FirebaseModule } from "./firebase/firebase.module";
 
+// ✅ NUEVO: reporte de ingreso de vehículos con fallas
+import { VehicleFailureReportsModule } from "./vehicle-failure-reports/vehicle-failure-reports.module";
+
 @Module({
   imports: [
     ScheduleModule.forRoot(),
@@ -50,6 +53,7 @@ import { FirebaseModule } from "./firebase/firebase.module";
 
     // ✅ NUEVO
     FirebaseModule,
+    VehicleFailureReportsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

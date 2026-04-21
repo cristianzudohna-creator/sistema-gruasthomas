@@ -114,4 +114,13 @@ export class UpdateWorkshopTaskDto {
   @IsString()
   @MaxLength(255)
   fotoNombre?: string;
+
+    @IsOptional()
+  @IsString()
+  fotoIngreso?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  fotoIngresoNombre?: string;
 }

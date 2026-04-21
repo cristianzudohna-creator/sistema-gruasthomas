@@ -17,7 +17,7 @@
 // ✅ NUEVO AHORA:
 // - soporta prop task para editar
 // - carga descripción, vehículo, responsable y apoyos
-// - cambia título y botón según modo crear/editar
+// - cambia título y botón según modo crear/editar/asignar
 // ✅ NUEVO AHORA:
 // - soporta mode="full" y mode="evidence"
 // - mode="full": editar tarea completa
@@ -29,6 +29,25 @@
 // ✅ FIX NUEVO AHORA:
 // - al guardar evidencia manda el texto en varios campos compatibles
 // - así "Ver evidencia" y "Editar evidencia" muestran lo mismo aunque el backend use otro nombre de campo
+// ✅ FIX NUEVO AHORA:
+// - si la tarea existe pero no tiene responsable, el modal entra en modo ASIGNAR
+// - cambia título, botón y texto del selector de responsable
+// ✅ FIX NUEVO AHORA:
+// - limpia nombres de archivos en observaciones/evidencia
+// - detecta múltiples imágenes existentes
+// - si hay varias fotos actuales, las muestra todas en galería
+// - el textarea solo muestra el texto limpio
+// ✅ FIX NUEVO AHORA:
+// - en mode="evidence" NO toma el texto inicial del ingreso
+// - ignora textos como "Vehículo ingresado por..."
+// - si no hay evidencia real, el textarea queda vacío
+// ✅ NUEVO AHORA:
+// - permite adjuntar foto del vehículo / ingreso en mode="full"
+// - envía fotoIngreso y fotoIngresoNombre al backend
+// - muestra vista previa de la foto del vehículo antes de guardar
+// ✅ FIX NUEVO AHORA:
+// - en mode="evidence" SOLO muestra imágenes de "📸 Evidencia:"
+// - ya no mezcla las fotos del ingreso con la evidencia final
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -73,7 +92,7 @@ function prettyWorkerType(value) {
   }
   if (v === "MECANICO_HIDRAULICO") return "Mecánico hidráulico";
   if (v === "JEFE_TALLER") return "Jefe de taller";
-  if (v === "SUPERVISOR") return "Supervisor";
+  if (v === "SUPERVISOR") return "Supervisor taller";
 
   return value || "Sin especialidad";
 }
@@ -171,39 +190,139 @@ function buildUploadUrl(imagePath) {
   return `${backendOrigin}/${raw}`;
 }
 
-function parseObservationWithImage(text) {
+function cleanObservationText(rawText) {
+  let text = String(rawText || "").trim();
+  if (!text) return "";
+
+  text = text.replace(/\r/g, " ");
+
+  text = text.replace(
+    /(?:^|\s|[-•])[\w\u00C0-\u017F().,\- ]+\.(?:jpg|jpeg|png|webp|gif)\s*:\s*\/uploads\/[^\s]+/gi,
+    " "
+  );
+
+  text = text.replace(/\/uploads\/[^\s]+/gi, " ");
+
+  text = text.replace(
+    /Evidencias?\s*:\s*(?:[-•]?\s*[\w\u00C0-\u017F().,\- ]+\.(?:jpg|jpeg|png|webp|gif)\s*)+/gi,
+    "Evidencias: "
+  );
+
+  text = text.replace(
+    /(?:^|\s|[-•])[\w\u00C0-\u017F().,\- ]+\.(?:jpg|jpeg|png|webp|gif)(?=\s|$)/gi,
+    " "
+  );
+
+  text = text
+    .replace(/\s+📸\s*Foto:\s*$/i, "")
+    .replace(/\s+📸\s*Evidencia:\s*$/i, "")
+    .replace(/\s+📸\s*Foto vehículo:\s*$/i, "")
+    .replace(/\s+📸\s*Fotos del vehículo:\s*$/i, "")
+    .replace(/📸\s*Foto:\s*$/i, "")
+    .replace(/📸\s*Evidencia:\s*$/i, "")
+    .replace(/📸\s*Foto vehículo:\s*$/i, "")
+    .replace(/📸\s*Fotos del vehículo:\s*$/i, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([,:;.-])/g, "$1")
+    .replace(/Evidencias:\s*$/i, "Evidencias:")
+    .trim();
+
+  return text;
+}
+
+function isInitialIngresoText(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return false;
+
+  const normalized = raw.toLowerCase().replace(/\s+/g, " ").trim();
+
+  return (
+    normalized.startsWith("vehículo ingresado por:") ||
+    normalized.startsWith("vehiculo ingresado por:") ||
+    normalized === "evidencias:" ||
+    (normalized.startsWith("vehículo ingresado por:") &&
+      normalized.includes("evidencias:")) ||
+    (normalized.startsWith("vehiculo ingresado por:") &&
+      normalized.includes("evidencias:"))
+  );
+}
+
+function extractAllImagePaths(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return [];
+
+  const uploadMatches = raw.match(/\/uploads\/[^\s]+/gi) || [];
+
+  return [
+    ...new Set(
+      uploadMatches
+        .filter((value) => /\.(jpg|jpeg|png|webp|gif)$/i.test(String(value || "")))
+        .map((value) => String(value).trim())
+        .filter(Boolean)
+    ),
+  ];
+}
+
+function extractEvidenceImagePathsFromObservaciones(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return [];
+
+  const matches = [
+    ...raw.matchAll(/📸\s*Evidencia:\s*(\/uploads\/[^\s]+)/gi),
+  ];
+
+  return [
+    ...new Set(
+      matches
+        .map((m) => String(m?.[1] || "").trim())
+        .filter(Boolean)
+        .filter((value) => /\.(jpg|jpeg|png|webp|gif)$/i.test(value))
+    ),
+  ];
+}
+
+function extractIngresoImagePathsFromObservaciones(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return [];
+
+  const matches = [
+    ...raw.matchAll(/📸\s*Foto vehículo:\s*(\/uploads\/[^\s]+)/gi),
+  ];
+
+  return [
+    ...new Set(
+      matches
+        .map((m) => String(m?.[1] || "").trim())
+        .filter(Boolean)
+        .filter((value) => /\.(jpg|jpeg|png|webp|gif)$/i.test(value))
+    ),
+  ];
+}
+
+function parseObservationWithImages(text) {
   const raw = String(text || "").trim();
 
   if (!raw) {
     return {
       cleanText: "",
       imageUrl: "",
+      imageUrls: [],
     };
   }
 
-  const match = raw.match(/(\/uploads\/[^\s]+)/i);
-  const imageUrl = match?.[1] || "";
-
-  let cleanText = raw;
-
-  if (imageUrl) {
-    cleanText = cleanText.replace(imageUrl, "").trim();
-  }
-
-  cleanText = cleanText
-    .replace(/\s+📸\s*Foto:\s*$/i, "")
-    .replace(/\s+📸\s*Evidencia:\s*$/i, "")
-    .replace(/📸\s*Foto:\s*$/i, "")
-    .replace(/📸\s*Evidencia:\s*$/i, "")
-    .trim();
+  const uniqueImages = extractAllImagePaths(raw);
+  const cleanText = cleanObservationText(raw);
 
   return {
     cleanText,
-    imageUrl,
+    imageUrl: uniqueImages[uniqueImages.length - 1] || "",
+    imageUrls: uniqueImages,
   };
 }
 
-function getTaskEvidenceData(task) {
+function getTaskEvidenceData(task, options = {}) {
+  const { evidenceOnly = false } = options;
+
   const observationRaw =
     task?.observaciones ||
     task?.observation ||
@@ -211,37 +330,85 @@ function getTaskEvidenceData(task) {
     task?.notes ||
     "";
 
-  const parsedObservation = parseObservationWithImage(observationRaw);
+  const parsedObservation = parseObservationWithImages(observationRaw);
+
+  const observationText =
+    evidenceOnly && isInitialIngresoText(parsedObservation.cleanText)
+      ? ""
+      : parsedObservation.cleanText;
+
+  const trabajoRealizado =
+    evidenceOnly && isInitialIngresoText(task?.trabajoRealizado)
+      ? ""
+      : String(task?.trabajoRealizado || "").trim();
+
+  const evidencia =
+    evidenceOnly && isInitialIngresoText(task?.evidencia)
+      ? ""
+      : String(task?.evidencia || "").trim();
+
+  const evidenciaTexto =
+    evidenceOnly && isInitialIngresoText(task?.evidenciaTexto)
+      ? ""
+      : String(task?.evidenciaTexto || "").trim();
+
+  const detalleEvidencia =
+    evidenceOnly && isInitialIngresoText(task?.detalleEvidencia)
+      ? ""
+      : String(task?.detalleEvidencia || "").trim();
+
+  const descripcionCierre =
+    evidenceOnly && isInitialIngresoText(task?.descripcionCierre)
+      ? ""
+      : String(task?.descripcionCierre || "").trim();
+
+  const comentarioCierre =
+    evidenceOnly && isInitialIngresoText(task?.comentarioCierre)
+      ? ""
+      : String(task?.comentarioCierre || "").trim();
 
   const textCandidates = [
-  task?.trabajoRealizado, // 🔥 PRIORIDAD REAL
-  parsedObservation.cleanText,
-  task?.evidencia,
-  task?.evidenciaTexto,
-  task?.detalleEvidencia,
-  task?.descripcionCierre,
-  task?.comentarioCierre,
-];
+    trabajoRealizado,
+    evidencia,
+    evidenciaTexto,
+    detalleEvidencia,
+    descripcionCierre,
+    comentarioCierre,
+    observationText,
+  ];
 
   const finalText =
     textCandidates.find((value) => String(value || "").trim()) || "";
 
-  const imageCandidates = [
-    parsedObservation.imageUrl,
-    task?.evidenciaFotoUrl,
-    task?.evidenciaImageUrl,
-    task?.imageUrl,
-    task?.fotoUrl,
-    task?.photoUrl,
-    task?.imagenUrl,
-  ];
+  let imageCandidates = [];
 
-  const imagePath =
-    imageCandidates.find((value) => String(value || "").trim()) || "";
+  if (evidenceOnly) {
+    imageCandidates = [
+      ...extractEvidenceImagePathsFromObservaciones(observationRaw),
+      task?.evidenciaFotoUrl,
+      task?.evidenciaImageUrl,
+    ];
+  } else {
+    imageCandidates = [
+      ...extractIngresoImagePathsFromObservaciones(observationRaw),
+      task?.fotoIngresoUrl,
+      task?.ingresoFotoUrl,
+      task?.vehiclePhotoUrl,
+    ];
+  }
+
+  const uniqueImagePaths = [
+    ...new Set(
+      imageCandidates
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+    ),
+  ];
 
   return {
     text: String(finalText || "").trim(),
-    imageUrl: buildUploadUrl(imagePath),
+    imageUrl: uniqueImagePaths[0] ? buildUploadUrl(uniqueImagePaths[0]) : "",
+    imageUrls: uniqueImagePaths.map((path) => buildUploadUrl(path)),
   };
 }
 
@@ -251,7 +418,7 @@ export default function CreateWorkshopTaskModal({
   onCreated,
   onSaved,
   task = null,
-  mode = "full", // ✅ "full" | "evidence"
+  mode = "full",
 }) {
   const token = useMemo(() => getToken(), []);
   const currentUser = useMemo(() => getUserFromStorage(), []);
@@ -281,6 +448,10 @@ export default function CreateWorkshopTaskModal({
   const [currentPhotoFailed, setCurrentPhotoFailed] = useState(false);
   const [newPhotoFailed, setNewPhotoFailed] = useState(false);
 
+  const [ingresoPhotoFile, setIngresoPhotoFile] = useState(null);
+  const [ingresoPhotoBase64, setIngresoPhotoBase64] = useState("");
+  const [ingresoPhotoPreview, setIngresoPhotoPreview] = useState("");
+
   function authHeaders(extra = {}) {
     return {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -305,6 +476,9 @@ export default function CreateWorkshopTaskModal({
     setRemoveCurrentPhoto(false);
     setCurrentPhotoFailed(false);
     setNewPhotoFailed(false);
+    setIngresoPhotoFile(null);
+    setIngresoPhotoBase64("");
+    setIngresoPhotoPreview("");
     setError("");
     resetInputs();
   }
@@ -359,12 +533,24 @@ export default function CreateWorkshopTaskModal({
   }, [availableVehicles, vehicleQuery]);
 
   const currentTaskEvidence = useMemo(() => {
-    return getTaskEvidenceData(task);
-  }, [task]);
+    return getTaskEvidenceData(task, { evidenceOnly: isEvidenceMode });
+  }, [task, isEvidenceMode]);
 
   const currentObservationImageUrl = useMemo(() => {
     return currentTaskEvidence.imageUrl || "";
   }, [currentTaskEvidence.imageUrl]);
+
+  const currentObservationImageUrls = useMemo(() => {
+    return Array.isArray(currentTaskEvidence.imageUrls)
+      ? currentTaskEvidence.imageUrls
+      : [];
+  }, [currentTaskEvidence.imageUrls]);
+
+  const taskResponsibleId = useMemo(() => getTaskResponsibleId(task), [task]);
+
+  const isAssignMode = useMemo(() => {
+    return isEditMode && !isEvidenceMode && !String(taskResponsibleId || "").trim();
+  }, [isEditMode, isEvidenceMode, taskResponsibleId]);
 
   async function loadOptions() {
     if (isEvidenceMode) {
@@ -409,14 +595,14 @@ export default function CreateWorkshopTaskModal({
       const workersItems = Array.isArray(workersData)
         ? workersData
         : Array.isArray(workersData?.items)
-          ? workersData.items
-          : [];
+        ? workersData.items
+        : [];
 
       const vehiclesItems = Array.isArray(vehiclesData)
         ? vehiclesData
         : Array.isArray(vehiclesData?.items)
-          ? vehiclesData.items
-          : [];
+        ? vehiclesData.items
+        : [];
 
       setWorkers(workersItems);
       setVehicles(vehiclesItems);
@@ -456,6 +642,9 @@ export default function CreateWorkshopTaskModal({
       setRemoveCurrentPhoto(false);
       setCurrentPhotoFailed(false);
       setNewPhotoFailed(false);
+      setIngresoPhotoFile(null);
+      setIngresoPhotoBase64("");
+      setIngresoPhotoPreview("");
       setError("");
       resetInputs();
       return;
@@ -509,6 +698,27 @@ export default function CreateWorkshopTaskModal({
     reader.readAsDataURL(file);
   }
 
+  function handleIngresoPhotoChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      setIngresoPhotoFile(file);
+      setIngresoPhotoBase64(result);
+      setIngresoPhotoPreview(result);
+      setError("");
+    };
+
+    reader.onerror = () => {
+      setError("No se pudo leer la foto del vehículo.");
+    };
+
+    reader.readAsDataURL(file);
+  }
+
   function removePhoto() {
     setPhotoBase64("");
     setPhotoPreview("");
@@ -516,6 +726,12 @@ export default function CreateWorkshopTaskModal({
     setCurrentPhotoFailed(false);
     setNewPhotoFailed(false);
     resetInputs();
+  }
+
+  function removeIngresoPhoto() {
+    setIngresoPhotoFile(null);
+    setIngresoPhotoBase64("");
+    setIngresoPhotoPreview("");
   }
 
   function clearNewPhotoOnly() {
@@ -553,7 +769,6 @@ export default function CreateWorkshopTaskModal({
 
       try {
         const body = {
-  observaciones: cleanObservaciones,
   trabajoRealizado: cleanObservaciones,
   ...(photoBase64
     ? {
@@ -608,7 +823,11 @@ export default function CreateWorkshopTaskModal({
     }
 
     if (!responsableId) {
-      setError("Debes seleccionar un responsable.");
+      setError(
+        isAssignMode
+          ? "Debes seleccionar quién quedará asignado a este ingreso."
+          : "Debes seleccionar un responsable."
+      );
       return;
     }
 
@@ -639,6 +858,12 @@ export default function CreateWorkshopTaskModal({
         helperIds: filteredHelpers,
         empresa,
         createdById,
+        ...(ingresoPhotoBase64
+          ? {
+              fotoIngreso: ingresoPhotoBase64,
+              fotoIngresoNombre: ingresoPhotoFile?.name || "foto_ingreso.jpg",
+            }
+          : {}),
       };
 
       const url = isEditMode
@@ -660,7 +885,9 @@ export default function CreateWorkshopTaskModal({
         const text = await res.text().catch(() => "");
         throw new Error(
           text ||
-            (isEditMode
+            (isAssignMode
+              ? "No se pudo asignar el ingreso"
+              : isEditMode
               ? "No se pudo actualizar la tarea"
               : "No se pudo crear la tarea")
         );
@@ -680,7 +907,9 @@ export default function CreateWorkshopTaskModal({
     } catch (err) {
       setError(
         err?.message ||
-          (isEditMode
+          (isAssignMode
+            ? "No se pudo asignar el ingreso"
+            : isEditMode
             ? "No se pudo actualizar la tarea"
             : "No se pudo crear la tarea")
       );
@@ -710,6 +939,12 @@ export default function CreateWorkshopTaskModal({
     fontWeight: 800,
     fontSize: 14,
     color: "#1f2937",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    textAlign: "center",
+    padding: "0 12px",
+    boxSizing: "border-box",
   };
 
   const hasNewPhoto = Boolean(photoPreview);
@@ -717,23 +952,31 @@ export default function CreateWorkshopTaskModal({
     isEditMode &&
     !removeCurrentPhoto &&
     !hasNewPhoto &&
-    Boolean(currentObservationImageUrl);
+    currentObservationImageUrls.length > 0;
 
   const modalTitle = isEvidenceMode
     ? "Editar evidencia de la tarea"
+    : isAssignMode
+    ? "Asignar ingreso de vehículo"
     : isEditMode
-      ? "Editar tarea de taller"
-      : "Crear tarea de taller";
+    ? "Editar tarea de taller"
+    : "Crear tarea de taller";
 
   const submitLabel = saving
-    ? isEditMode
+    ? isEvidenceMode
+      ? "Guardando..."
+      : isAssignMode
+      ? "Asignando..."
+      : isEditMode
       ? "Guardando..."
       : "Creando..."
     : isEvidenceMode
-      ? "Guardar evidencia"
-      : isEditMode
-        ? "Guardar cambios"
-        : "Crear tarea";
+    ? "Guardar evidencia"
+    : isAssignMode
+    ? "Asignar ingreso"
+    : isEditMode
+    ? "Guardar cambios"
+    : "Crear tarea";
 
   return (
     <Modal open={open} onClose={onClose} title={modalTitle} size="lg">
@@ -766,13 +1009,19 @@ export default function CreateWorkshopTaskModal({
               <>
                 <div className="modal-form">
                   <div style={{ gridColumn: "1 / -1" }}>
-                    <label htmlFor="descripcionTarea">Descripción</label>
+                    <label htmlFor="descripcionTarea">
+                      {isAssignMode ? "Descripción del ingreso" : "Descripción"}
+                    </label>
                     <textarea
                       id="descripcionTarea"
                       rows={4}
                       value={descripcion}
                       onChange={(e) => setDescripcion(e.target.value)}
-                      placeholder="Describe el trabajo que debe realizar el mecánico"
+                      placeholder={
+                        isAssignMode
+                          ? "Describe el ingreso del vehículo"
+                          : "Describe el trabajo que debe realizar el mecánico"
+                      }
                     />
                   </div>
                 </div>
@@ -858,7 +1107,9 @@ export default function CreateWorkshopTaskModal({
 
                 <div className="modal-form">
                   <div>
-                    <label htmlFor="responsableIdTarea">Responsable</label>
+                    <label htmlFor="responsableIdTarea">
+                      {isAssignMode ? "Asignar a" : "Responsable"}
+                    </label>
                     <select
                       id="responsableIdTarea"
                       value={responsableId}
@@ -870,7 +1121,11 @@ export default function CreateWorkshopTaskModal({
                         );
                       }}
                     >
-                      <option value="">Seleccionar responsable</option>
+                      <option value="">
+                        {isAssignMode
+                          ? "Seleccionar persona a asignar"
+                          : "Seleccionar responsable"}
+                      </option>
                       {workshopWorkers.map((worker) => (
                         <option key={worker.id} value={worker.id}>
                           {fmtWorker(worker)}
@@ -945,6 +1200,104 @@ export default function CreateWorkshopTaskModal({
                     </div>
                   )}
                 </div>
+
+                {!isAssignMode ? (
+  <div className="modal-form">
+    <div style={{ gridColumn: "1 / -1" }}>
+      <label>Fotos del vehículo</label>
+
+      <div
+        style={{
+          marginTop: 8,
+          display: "grid",
+          gap: 12,
+        }}
+      >
+        <label style={photoActionBtnStyle}>
+          📸 Tomar foto
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handleIngresoPhotoChange}
+            style={{ display: "none" }}
+            disabled={saving}
+          />
+        </label>
+
+        <label style={photoActionBtnStyle}>
+          🖼️ Elegir desde galería
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleIngresoPhotoChange}
+            style={{ display: "none" }}
+            disabled={saving}
+          />
+        </label>
+
+        <div
+          style={{
+            fontSize: 13,
+            color: "#64748b",
+            lineHeight: 1.45,
+          }}
+        >
+          Puedes adjuntar una foto del vehículo al momento de crear
+          o editar la tarea.
+        </div>
+
+        {ingresoPhotoPreview ? (
+          <div
+            style={{
+              marginTop: 4,
+              border: "1px solid rgba(0,0,0,.08)",
+              borderRadius: 14,
+              padding: 12,
+              background: "#fff",
+              display: "grid",
+              gap: 12,
+            }}
+          >
+            <img
+              src={ingresoPhotoPreview}
+              alt="Vista previa foto vehículo"
+              style={{
+                width: "100%",
+                maxHeight: 260,
+                objectFit: "contain",
+                borderRadius: 12,
+                display: "block",
+                background: "#f8fafc",
+              }}
+            />
+
+            <div
+              style={{
+                fontSize: 13,
+                color: "#475569",
+                wordBreak: "break-word",
+              }}
+            >
+              {ingresoPhotoFile?.name || "Imagen seleccionada"}
+            </div>
+
+            <div>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={removeIngresoPhoto}
+                disabled={saving}
+              >
+                Quitar foto
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  </div>
+) : null}
               </>
             ) : null}
 
@@ -1030,6 +1383,8 @@ export default function CreateWorkshopTaskModal({
                         borderRadius: 14,
                         padding: 12,
                         background: "#fff",
+                        display: "grid",
+                        gap: 12,
                       }}
                     >
                       {hasNewPhoto ? (
@@ -1066,10 +1421,11 @@ export default function CreateWorkshopTaskModal({
                           </div>
                         )
                       ) : hasCurrentPhoto ? (
-                        !currentPhotoFailed ? (
+                        currentObservationImageUrls.map((img, index) => (
                           <img
-                            src={currentObservationImageUrl}
-                            alt="Foto actual de la evidencia"
+                            key={`${img}-${index}`}
+                            src={img}
+                            alt={`Foto actual de la evidencia ${index + 1}`}
                             onError={() => setCurrentPhotoFailed(true)}
                             style={{
                               width: "100%",
@@ -1080,24 +1436,7 @@ export default function CreateWorkshopTaskModal({
                               background: "#f8fafc",
                             }}
                           />
-                        ) : (
-                          <div
-                            style={{
-                              minHeight: 180,
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              borderRadius: 12,
-                              background: "#f8fafc",
-                              color: "#64748b",
-                              fontSize: 14,
-                              textAlign: "center",
-                              padding: 16,
-                            }}
-                          >
-                            No se pudo mostrar la foto actual.
-                          </div>
-                        )
+                        ))
                       ) : (
                         <div
                           style={{
@@ -1118,6 +1457,25 @@ export default function CreateWorkshopTaskModal({
                             : "No hay foto seleccionada."}
                         </div>
                       )}
+
+                      {hasCurrentPhoto && currentPhotoFailed ? (
+                        <div
+                          style={{
+                            minHeight: 180,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            borderRadius: 12,
+                            background: "#f8fafc",
+                            color: "#64748b",
+                            fontSize: 14,
+                            textAlign: "center",
+                            padding: 16,
+                          }}
+                        >
+                          No se pudieron mostrar las fotos actuales.
+                        </div>
+                      ) : null}
 
                       {(hasCurrentPhoto || hasNewPhoto || removeCurrentPhoto) && (
                         <div
@@ -1145,7 +1503,7 @@ export default function CreateWorkshopTaskModal({
                               onClick={clearNewPhotoOnly}
                               disabled={saving}
                             >
-                              Volver a foto actual
+                              Volver a fotos actuales
                             </button>
                           ) : null}
                         </div>

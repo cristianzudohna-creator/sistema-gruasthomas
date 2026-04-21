@@ -8,6 +8,8 @@ import { WorkshopService } from './workshop.service';
   imports: [PrismaModule, FirebaseModule],
   controllers: [WorkshopController],
   providers: [WorkshopService],
-  exports: [WorkshopService],
+
+  // ✅ IMPORTANTE: exportamos para reutilizar en otros módulos
+  exports: [WorkshopService, PrismaModule, FirebaseModule],
 })
 export class WorkshopModule {}

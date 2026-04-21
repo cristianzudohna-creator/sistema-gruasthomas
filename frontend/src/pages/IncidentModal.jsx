@@ -127,20 +127,31 @@ function parseObservationWithImage(text) {
     };
   }
 
-  const match = raw.match(/(\/uploads\/[^\s]+)/i);
-  const imageUrl = match?.[1] || "";
+  const uploadMatches = raw.match(/\/uploads\/[^\s]+/gi) || [];
+
+  const imagePaths = uploadMatches.filter((value) =>
+    /\.(jpg|jpeg|png|webp|gif)$/i.test(String(value || ""))
+  );
+
+  const imageUrl = imagePaths[imagePaths.length - 1] || "";
 
   let cleanText = raw;
 
-  if (imageUrl) {
-    cleanText = cleanText.replace(imageUrl, "").trim();
+  if (imagePaths.length > 0) {
+    imagePaths.forEach((path) => {
+      cleanText = cleanText.replace(path, " ");
+    });
   }
 
   cleanText = cleanText
-    .replace(/\s+📸\s*Foto:\s*$/i, "")
-    .replace(/\s+📸\s*Evidencia:\s*$/i, "")
-    .replace(/📸\s*Foto:\s*$/i, "")
-    .replace(/📸\s*Evidencia:\s*$/i, "")
+    .replace(/📸\s*Foto vehículo:\s*/gi, " ")
+    .replace(/📸\s*Foto:\s*/gi, " ")
+    .replace(/📷\s*Foto:\s*/gi, " ")
+    .replace(/📸\s*Evidencia:\s*/gi, " ")
+    .replace(/📷\s*Evidencia:\s*/gi, " ")
+    .replace(/REQUIERE\s+REPUESTO\s*:\s*.*/gi, " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\n{2,}/g, "\n")
     .trim();
 
   return {
@@ -176,34 +187,34 @@ function getIncidentEvidenceData(incident) {
 
   const parsedObservation = parseObservationWithImage(observationRaw);
 
-  const fallbackTaskTextCandidates = [
-    parsedObservation.cleanText,
+  const cleanTaskTextCandidates = [
     latestTask?.trabajoRealizado,
     latestTask?.evidencia,
     latestTask?.evidenciaTexto,
     latestTask?.detalleEvidencia,
     latestTask?.descripcionCierre,
     latestTask?.comentarioCierre,
-  ];
+    parsedObservation.cleanText,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
 
-  const taskText =
-    fallbackTaskTextCandidates.find((value) => String(value || "").trim()) || "";
+  const taskText = cleanTaskTextCandidates[0] || "";
 
   const taskImageCandidates = [
-    parsedObservation.imageUrl,
     latestTask?.evidenciaFotoUrl,
     latestTask?.evidenciaImageUrl,
+    parsedObservation.imageUrl,
     latestTask?.imageUrl,
     latestTask?.fotoUrl,
     latestTask?.photoUrl,
     latestTask?.imagenUrl,
-  ];
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
 
-  const taskImagePath =
-    taskImageCandidates.find((value) => String(value || "").trim()) || "";
+  const taskImagePath = taskImageCandidates[0] || "";
 
-  // ✅ FIX PRODUCCIÓN:
-  // Si no hay tarea, usar la evidencia directa del incidente
   const incidentText = String(incident?.descripcion || "").trim();
   const incidentImagePath = String(incident?.fotoUrl || "").trim();
 
@@ -545,23 +556,26 @@ export default function IncidentModal({
       const token = getToken();
 
       if (isEditMode && isEvidenceMode) {
-        // ✅ Si existe tarea, guardar en la tarea
-        if (evidenceTask?.id) {
-          const evidencePayload = {
-            observaciones: String(form.descripcion || "").trim(),
-            ...(photoBase64
-              ? {
-                  foto: photoBase64,
-                  fotoNombre: "incidente_evidencia.jpg",
-                }
-              : {}),
-            ...(removeCurrentPhoto
-              ? {
-                  foto: "",
-                  fotoNombre: "",
-                }
-              : {}),
-          };
+  // ✅ Si existe tarea, guardar en la tarea
+  if (evidenceTask?.id) {
+    const cleanEvidenceText = String(form.descripcion || "").trim();
+
+    const evidencePayload = {
+  observaciones: cleanEvidenceText,
+  trabajoRealizado: cleanEvidenceText,
+  ...(photoBase64
+    ? {
+        foto: photoBase64,
+        fotoNombre: "incidente_evidencia.jpg",
+      }
+    : {}),
+  ...(removeCurrentPhoto
+    ? {
+        foto: "",
+        fotoNombre: "",
+      }
+    : {}),
+};
 
 const res = await fetch(`${API_URL}/workshop/tasks/${evidenceTask.id}`, {
   method: "PATCH",

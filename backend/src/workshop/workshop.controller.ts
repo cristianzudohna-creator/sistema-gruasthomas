@@ -9,6 +9,10 @@
 // ✅ NUEVO AHORA:
 // - updateIncident envía userId al service para notificación de resolución
 // - closeIncident envía userId al service para notificación de resolución
+// ✅ NUEVO AHORA:
+// - upload-evidence para subir imágenes base64
+// - upload-ingreso para subir fotos de ingreso de vehículo
+// - accesible con JwtAuthGuard para CONTROL_FLOTA / SUPERADMIN
 
 import {
   Body,
@@ -35,6 +39,45 @@ import { WorkshopAccessGuard } from './workshop-access.guard';
 @UseGuards(JwtAuthGuard, WorkshopAccessGuard)
 export class WorkshopController {
   constructor(private readonly workshopService: WorkshopService) {}
+
+  // ============================
+  // UPLOADS
+  // ============================
+
+  // ✅ FIX:
+  // Este endpoint debe poder usarlo CONTROL_FLOTA y SUPERADMIN
+  // para el módulo de ingreso con fallas, por eso dejamos solo JwtAuthGuard.
+  @UseGuards(JwtAuthGuard)
+  @Post('upload-evidence')
+  uploadEvidence(
+    @Body()
+    dto: {
+      filename?: string;
+      mimeType?: string;
+      base64?: string;
+    },
+    @Req() req: any,
+  ) {
+    const userId = req?.user?.id || req?.user?.sub;
+    return this.workshopService.uploadEvidence(userId, dto);
+  }
+
+  // ✅ NUEVO:
+  // Endpoint separado para fotos de ingreso de vehículo.
+  @UseGuards(JwtAuthGuard)
+  @Post('upload-ingreso')
+  uploadIngreso(
+    @Body()
+    dto: {
+      filename?: string;
+      mimeType?: string;
+      base64?: string;
+    },
+    @Req() req: any,
+  ) {
+    const userId = req?.user?.id || req?.user?.sub;
+    return this.workshopService.uploadIngreso(userId, dto);
+  }
 
   // ============================
   // HORAS EXTRAS

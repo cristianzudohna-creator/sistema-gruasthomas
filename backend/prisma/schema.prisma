@@ -30,6 +30,16 @@
 // - sin relación con WorkshopTask
 // - sin cantidad
 // - con foto
+//
+// ✅ NUEVO AHORA:
+// - VehicleFailureReportStatus
+// - VehicleFailureReport
+// - VehicleFailureReportEvidence
+// - reporte de ingreso de vehículo con fallas
+// - creado por CONTROL_FLOTA o SUPERADMIN
+// - guarda patente, nombre de quien lo trajo, descripción, fecha automática
+// - múltiples fotos de evidencia
+// - preparado para asignación posterior a taller
 
 datasource db {
   provider = "postgresql"
@@ -58,6 +68,7 @@ enum AuditEntity {
 
   VEHICLE_INCIDENT
   WORKSHOP_TASK
+  VEHICLE_FAILURE_REPORT
 }
 
 enum AuditAction {
@@ -204,6 +215,19 @@ enum WorkshopExtraHourStatus {
   RECHAZADO
 }
 
+// =========================
+// ✅ REPORTE INGRESO VEHÍCULO CON FALLAS
+// =========================
+
+enum VehicleFailureReportStatus {
+  PENDIENTE
+  ASIGNADO
+  EN_REVISION
+  EN_REPARACION
+  RESUELTO
+  CANCELADO
+}
+
 model User {
   id       String  @id @default(uuid())
   email    String  @unique
@@ -248,6 +272,11 @@ model User {
 
   extraHourReports       WorkshopExtraHourReport[] @relation("WorkshopExtraHourTrabajador")
   signedExtraHourReports WorkshopExtraHourReport[] @relation("WorkshopExtraHourSignedBy")
+
+  // ✅ NUEVO: reportes de ingreso con fallas
+  vehicleFailureReportsCreated  VehicleFailureReport[]         @relation("VehicleFailureReportCreatedBy")
+  vehicleFailureReportsAssigned VehicleFailureReport[]         @relation("VehicleFailureReportAssignedTo")
+  vehicleFailureReportEvidences VehicleFailureReportEvidence[] @relation("VehicleFailureReportEvidenceUploadedBy")
 
   @@index([empresa])
   @@index([workerType])
@@ -347,8 +376,9 @@ model Vehicle {
   horometerPlan HorometerMaintenancePlan?
   workOrders    WorkOrder[]
 
-  incidents     VehicleIncident[]
-  workshopTasks WorkshopTask[]
+  incidents           VehicleIncident[]
+  workshopTasks       WorkshopTask[]
+  failureReports      VehicleFailureReport[]
 
   @@index([empresa])
   @@index([estadoOperativo])
@@ -916,4 +946,71 @@ model WorkshopExtraHourReport {
   @@index([fecha])
   @@index([estado])
   @@index([firmadoPorId])
+}
+
+// =========================
+// REPORTE DE INGRESO CON FALLAS
+// =========================
+
+model VehicleFailureReport {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  empresa Empresa
+
+  vehicleId String
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  // ✅ guardamos también la patente en el reporte
+  patente String
+
+  // ✅ nombre de quien trajo el vehículo
+  traidoPorNombre String
+
+  descripcion String
+
+  status VehicleFailureReportStatus @default(PENDIENTE)
+
+  createdById String
+  createdBy   User @relation("VehicleFailureReportCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  assignedToId String?
+  assignedTo   User? @relation("VehicleFailureReportAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  assignedAt DateTime?
+  resolvedAt DateTime?
+
+  evidences VehicleFailureReportEvidence[]
+
+  @@index([empresa])
+  @@index([vehicleId])
+  @@index([patente])
+  @@index([status])
+  @@index([createdById])
+  @@index([assignedToId])
+  @@index([createdAt])
+  @@index([assignedAt])
+  @@index([resolvedAt])
+}
+
+model VehicleFailureReportEvidence {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  reportId String
+  report   VehicleFailureReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  uploadedById String
+  uploadedBy   User @relation("VehicleFailureReportEvidenceUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  fileUrl      String
+  filePath     String
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+
+  @@index([reportId])
+  @@index([uploadedById])
+  @@index([createdAt])
 }

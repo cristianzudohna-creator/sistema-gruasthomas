@@ -54,6 +54,34 @@
 // - "Editar evidencia" NO aparece en incidentes recién creados o sin evidencia real
 // - "Ver evidencia" solo aparece cuando el incidente está cerrado Y tiene evidencia real
 // - En tareas independientes, "Editar evidencia" tampoco aparece si aún no existe evidencia real
+// ✅ FIX NUEVO AHORA:
+// - En tareas independientes sin responsable el botón principal dice "Asignar ingreso"
+// - Si ya tiene responsable, sigue diciendo "Editar tarea"
+// - Se mantiene el mismo modal CreateWorkshopTaskModal para asignar/editar
+// ✅ FIX NUEVO AHORA:
+// - Limpia correctamente nombres de archivos en OBSERVACIONES
+// - Si observaciones trae "archivo.jpg: /uploads/..." ya no muestra el nombre crudo
+// - Solo deja visible el texto real
+// - La foto sigue viéndose desde el botón "Ver foto"
+// ✅ FIX NUEVO AHORA:
+// - Si observaciones trae varias imágenes, el modal "Ver foto" muestra TODAS
+// - Ya no se queda solo con una
+// - Se muestra galería limpia dentro del modal
+// ✅ FIX NUEVO AHORA:
+// - "Editar evidencia" NO aparece en ingresos sin asignación
+// - primero debe existir responsable asignado
+// ✅ FIX NUEVO AHORA:
+// - las fotos/texto del ingreso NO cuentan como evidencia real
+// - "Editar evidencia" solo aparece cuando existe evidencia real de cierre/avance
+// ✅ NUEVO AHORA:
+// - diferencia visual clara entre INGRESO DE VEHÍCULO y TAREA DE TALLER
+// - muestra chip de tipo de registro y chip de empresa (GRÚAS THOMAS / INSPROTEL)
+// ✅ FIX FINAL:
+// - en tareas independientes cerradas se ven por separado:
+//   1) observaciones + fotos del vehículo
+//   2) evidencia final
+// - la evidencia final también se detecta desde observaciones cuando viene como "📸 Evidencia: /uploads/..."
+// - elimina líneas vacías tipo "📸 Foto vehículo:"
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -170,7 +198,7 @@ function prettyWorkerType(value) {
   if (v === "MECANICO_HIDRAULICO") return "Mecánico hidráulico";
   if (v === "JEFE_TALLER") return "Jefe de taller";
   if (v === "ADQUISICIONES") return "Adquisiciones";
-  if (v === "SUPERVISOR") return "Supervisor";
+  if (v === "SUPERVISOR") return "Supervisor taller";
 
   return value || "Sin especialidad";
 }
@@ -250,36 +278,161 @@ function getTaskObservations(task) {
   );
 }
 
-function parseObservationWithImage(text) {
+function cleanObservationText(rawText) {
+  let text = String(rawText || "").trim();
+  if (!text) return "";
+
+  text = text.replace(/\r/g, " ");
+
+  text = text.replace(/(?:^|\n)\s*📸\s*Foto vehículo:\s*$/gim, "\n");
+  text = text.replace(/(?:^|\n)\s*📸\s*Evidencia:\s*$/gim, "\n");
+  text = text.replace(/(?:^|\n)\s*📸\s*Foto:\s*$/gim, "\n");
+
+  text = text.replace(
+    /(?:^|\n)\s*📸\s*Foto vehículo:\s*\/uploads\/[^\s]+/gim,
+    "\n"
+  );
+  text = text.replace(
+    /(?:^|\n)\s*📸\s*Evidencia:\s*\/uploads\/[^\s]+/gim,
+    "\n"
+  );
+  text = text.replace(
+    /(?:^|\n)\s*📸\s*Foto:\s*\/uploads\/[^\s]+/gim,
+    "\n"
+  );
+
+  text = text.replace(
+    /(?:^|\s|[-•])[\w\u00C0-\u017F().,\- ]+\.(?:jpg|jpeg|png|webp|gif)\s*:\s*\/uploads\/[^\s]+/gi,
+    " "
+  );
+
+  text = text.replace(/\/uploads\/[^\s]+/gi, " ");
+
+  text = text.replace(
+    /Evidencias?\s*:\s*(?:[-•]?\s*[\w\u00C0-\u017F().,\- ]+\.(?:jpg|jpeg|png|webp|gif)\s*)+/gi,
+    "Evidencias: "
+  );
+
+  text = text.replace(
+    /(?:^|\s|[-•])[\w\u00C0-\u017F().,\- ]+\.(?:jpg|jpeg|png|webp|gif)(?=\s|$)/gi,
+    " "
+  );
+
+  text = text
+    .replace(/\n{2,}/g, "\n")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([,:;.-])/g, "$1")
+    .trim();
+
+  return text;
+}
+
+function parseObservationWithImages(text) {
   const raw = String(text || "").trim();
 
   if (!raw) {
     return {
       cleanText: "",
-      imageUrl: "",
+      ingresoImageUrls: [],
+      evidenceImageUrls: [],
+      otherImageUrls: [],
     };
   }
 
-  const match = raw.match(/(\/uploads\/[^\s]+)/i);
-  const imageUrl = match?.[1] || "";
+  const lines = raw.split("\n");
 
-  let cleanText = raw;
+  const ingresoImageUrls = [];
+  const evidenceImageUrls = [];
+  const otherImageUrls = [];
+  const remainingLines = [];
 
-  if (imageUrl) {
-    cleanText = cleanText.replace(imageUrl, "").trim();
+  for (const line of lines) {
+    const trimmed = String(line || "").trim();
+
+    if (!trimmed) continue;
+
+    let match = trimmed.match(/^📸\s*Foto vehículo:\s*(.*)$/i);
+    if (match) {
+      const path = String(match[1] || "").trim();
+      if (path && /\/uploads\/[^\s]+/i.test(path)) {
+        ingresoImageUrls.push(path);
+      }
+      continue;
+    }
+
+    match = trimmed.match(/^📸\s*Evidencia:\s*(.*)$/i);
+    if (match) {
+      const path = String(match[1] || "").trim();
+      if (path && /\/uploads\/[^\s]+/i.test(path)) {
+        evidenceImageUrls.push(path);
+      }
+      continue;
+    }
+
+    match = trimmed.match(/^📸\s*Foto:\s*(.*)$/i);
+    if (match) {
+      const path = String(match[1] || "").trim();
+      if (path && /\/uploads\/[^\s]+/i.test(path)) {
+        otherImageUrls.push(path);
+      }
+      continue;
+    }
+
+    remainingLines.push(line);
   }
 
-  cleanText = cleanText
-    .replace(/\s+📸\s*Foto:\s*$/i, "")
-    .replace(/\s+📸\s*Evidencia:\s*$/i, "")
-    .replace(/📸\s*Foto:\s*$/i, "")
-    .replace(/📸\s*Evidencia:\s*$/i, "")
-    .trim();
-
   return {
-    cleanText,
-    imageUrl,
+    cleanText: cleanObservationText(remainingLines.join("\n")),
+    ingresoImageUrls: [...new Set(ingresoImageUrls.map((v) => String(v).trim()))],
+    evidenceImageUrls: [...new Set(evidenceImageUrls.map((v) => String(v).trim()))],
+    otherImageUrls: [...new Set(otherImageUrls.map((v) => String(v).trim()))],
   };
+}
+
+function isIngresoInitialText(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return false;
+
+  const normalized = raw.toLowerCase().replace(/\s+/g, " ").trim();
+
+  return (
+    normalized === "evidencias:" ||
+    normalized.startsWith("vehículo ingresado por:") ||
+    normalized.startsWith("vehiculo ingresado por:")
+  );
+}
+
+function getRealEvidenceText(task) {
+  const candidates = [
+    task?.trabajoRealizado,
+    task?.evidencia,
+    task?.evidenciaTexto,
+    task?.detalleEvidencia,
+    task?.descripcionCierre,
+    task?.comentarioCierre,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .filter((value) => !isIngresoInitialText(value));
+
+  return candidates[0] || "";
+}
+
+function getRealEvidenceImagePaths(task) {
+  const observationData = parseObservationWithImages(getTaskObservations(task));
+
+  return [
+    ...observationData.evidenceImageUrls,
+    task?.evidenciaFotoUrl,
+    task?.evidenciaImageUrl,
+    task?.imageUrl,
+    task?.fotoUrl,
+    task?.photoUrl,
+    task?.imagenUrl,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .filter((value, index, arr) => arr.indexOf(value) === index);
 }
 
 function getBackendOrigin() {
@@ -319,6 +472,13 @@ function buildUploadUrl(imagePath) {
   return `${backendOrigin}/${raw}`;
 }
 
+function taskHasRealEvidence(task) {
+  const realText = getRealEvidenceText(task);
+  const realImages = getRealEvidenceImagePaths(task);
+
+  return !!String(realText || "").trim() || realImages.length > 0;
+}
+
 function getIncidentEvidenceTask(incident) {
   const tasks = Array.isArray(incident?.workshopTasks)
     ? incident.workshopTasks
@@ -331,46 +491,7 @@ function getIncidentEvidenceTask(incident) {
       const db = new Date(b?.updatedAt || b?.createdAt || 0).getTime();
       return db - da;
     })
-    .find((task) => {
-      const obs =
-        task?.observaciones ||
-        task?.observation ||
-        task?.comentarios ||
-        task?.notes ||
-        "";
-
-      const parsed = parseObservationWithImage(obs);
-
-      const hasTextCandidates = [
-        parsed.cleanText,
-        task?.trabajoRealizado,
-        task?.evidencia,
-        task?.evidenciaTexto,
-        task?.detalleEvidencia,
-        task?.descripcionCierre,
-        task?.comentarioCierre,
-      ];
-
-      const hasText = hasTextCandidates.some((value) =>
-        Boolean(String(value || "").trim())
-      );
-
-      const hasImageCandidates = [
-        parsed.imageUrl,
-        task?.evidenciaFotoUrl,
-        task?.evidenciaImageUrl,
-        task?.imageUrl,
-        task?.fotoUrl,
-        task?.photoUrl,
-        task?.imagenUrl,
-      ];
-
-      const hasImage = hasImageCandidates.some((value) =>
-        Boolean(String(value || "").trim())
-      );
-
-      return hasText || hasImage;
-    });
+    .find((task) => taskHasRealEvidence(task));
 }
 
 function getIncidentEvidenceData(incident) {
@@ -380,97 +501,90 @@ function getIncidentEvidenceData(incident) {
     return {
       text: "",
       imageUrl: "",
+      imageUrls: [],
       hasEvidence: false,
     };
   }
 
-  const observationRaw =
-    evidenceTask?.observaciones ||
-    evidenceTask?.observation ||
-    evidenceTask?.comentarios ||
-    evidenceTask?.notes ||
-    "";
-
-  const parsedObservation = parseObservationWithImage(observationRaw);
-
-  const fallbackTextCandidates = [
-  evidenceTask?.trabajoRealizado, // 🔥 PRIORIDAD REAL
-  parsedObservation.cleanText,
-  evidenceTask?.evidencia,
-  evidenceTask?.evidenciaTexto,
-  evidenceTask?.detalleEvidencia,
-  evidenceTask?.descripcionCierre,
-  evidenceTask?.comentarioCierre,
-];
-
-  const finalText =
-    fallbackTextCandidates.find((value) => String(value || "").trim()) || "";
-
-  const imageCandidates = [
-    parsedObservation.imageUrl,
-    evidenceTask?.evidenciaFotoUrl,
-    evidenceTask?.evidenciaImageUrl,
-    evidenceTask?.imageUrl,
-    evidenceTask?.fotoUrl,
-    evidenceTask?.photoUrl,
-    evidenceTask?.imagenUrl,
-  ];
-
-  const imagePath =
-    imageCandidates.find((value) => String(value || "").trim()) || "";
+  const finalText = getRealEvidenceText(evidenceTask);
+  const uniqueImagePaths = getRealEvidenceImagePaths(evidenceTask);
 
   return {
     text: String(finalText || "").trim(),
-    imageUrl: buildUploadUrl(imagePath),
+    imageUrl: uniqueImagePaths[0] ? buildUploadUrl(uniqueImagePaths[0]) : "",
+    imageUrls: uniqueImagePaths.map((path) => buildUploadUrl(path)),
     hasEvidence: !!(
-      String(finalText || "").trim() || String(imagePath || "").trim()
+      String(finalText || "").trim() || uniqueImagePaths.length > 0
     ),
   };
 }
 
 function getIndependentTaskEvidenceData(task) {
-  const observationRaw =
-    task?.observaciones ||
-    task?.observation ||
-    task?.comentarios ||
-    task?.notes ||
-    "";
-
-  const parsedObservation = parseObservationWithImage(observationRaw);
-
- const textCandidates = [
-  task?.trabajoRealizado, // 🔥 MISMO FIX
-  parsedObservation.cleanText,
-  task?.evidencia,
-  task?.evidenciaTexto,
-  task?.detalleEvidencia,
-  task?.descripcionCierre,
-  task?.comentarioCierre,
-];
-
-  const finalText =
-    textCandidates.find((value) => String(value || "").trim()) || "";
-
-  const imageCandidates = [
-    parsedObservation.imageUrl,
-    task?.evidenciaFotoUrl,
-    task?.evidenciaImageUrl,
-    task?.imageUrl,
-    task?.fotoUrl,
-    task?.photoUrl,
-    task?.imagenUrl,
-  ];
-
-  const imagePath =
-    imageCandidates.find((value) => String(value || "").trim()) || "";
+  const finalText = getRealEvidenceText(task);
+  const uniqueImagePaths = getRealEvidenceImagePaths(task);
 
   return {
     text: String(finalText || "").trim(),
-    imageUrl: buildUploadUrl(imagePath),
+    imageUrl: uniqueImagePaths[0] ? buildUploadUrl(uniqueImagePaths[0]) : "",
+    imageUrls: uniqueImagePaths.map((path) => buildUploadUrl(path)),
     hasEvidence: !!(
-      String(finalText || "").trim() || String(imagePath || "").trim()
+      String(finalText || "").trim() || uniqueImagePaths.length > 0
     ),
   };
+}
+
+function getTaskCompany(task) {
+  const empresa =
+    task?.empresa ||
+    task?.vehicle?.empresa ||
+    task?.vehiculo?.empresa ||
+    task?.camion?.empresa ||
+    "";
+
+  const v = norm(empresa);
+
+  if (v === "GRUAS_THOMAS") return "GRÚAS THOMAS";
+  if (v === "INSPROTEL") return "INSPROTEL";
+  return "";
+}
+
+function isVehicleIngresoTask(task) {
+  const title = String(getTaskTitle(task) || "").trim().toLowerCase();
+  const desc = String(getTaskDescription(task) || "").trim().toLowerCase();
+  const obs = String(getTaskObservations(task) || "").trim().toLowerCase();
+
+  return (
+    title.includes("ingreso vehículo") ||
+    title.includes("ingreso vehiculo") ||
+    title.includes("ingreso de vehículo") ||
+    title.includes("ingreso de vehiculo") ||
+    obs.includes("vehículo ingresado por:") ||
+    obs.includes("vehiculo ingresado por:") ||
+    desc.includes("ingreso vehículo") ||
+    desc.includes("ingreso vehiculo")
+  );
+}
+
+function getTaskTypeLabel(task) {
+  return isVehicleIngresoTask(task)
+    ? "INGRESO DE VEHÍCULO"
+    : "TAREA DE TALLER";
+}
+
+function getTaskTypeTone(task) {
+  return isVehicleIngresoTask(task) ? "info" : "yellow";
+}
+
+function getTaskSubtitle(task, isHistoryTask) {
+  if (isHistoryTask) {
+    return isVehicleIngresoTask(task)
+      ? "Ingreso de vehículo cerrado, disponible solo como historial"
+      : "Tarea cerrada, disponible solo como historial";
+  }
+
+  return isVehicleIngresoTask(task)
+    ? "Ingreso registrado desde taller para revisión y asignación"
+    : "Trabajo asignado por taller";
 }
 
 function prettifyTaskStatus(value) {
@@ -552,7 +666,7 @@ export default function Incidents() {
   const [incidentToClose, setIncidentToClose] = useState(null);
 
   const [imageModalOpen, setImageModalOpen] = useState(false);
-  const [selectedImage, setSelectedImage] = useState("");
+  const [selectedImages, setSelectedImages] = useState([]);
 
   const [problemModalOpen, setProblemModalOpen] = useState(false);
   const [selectedProblemText, setSelectedProblemText] = useState("");
@@ -563,6 +677,7 @@ export default function Incidents() {
     title: "",
     text: "",
     imageUrl: "",
+    imageUrls: [],
   });
 
   const [taskEvidenceModalOpen, setTaskEvidenceModalOpen] = useState(false);
@@ -570,6 +685,7 @@ export default function Incidents() {
     title: "",
     text: "",
     imageUrl: "",
+    imageUrls: [],
   });
 
   const token = useMemo(() => getToken(), []);
@@ -616,17 +732,30 @@ export default function Incidents() {
     role === "CONTROL_FLOTA" ||
     isJefeTaller;
 
+  const canAssignWorkshopTask =
+    role === "SUPERADMIN" ||
+    role === "CONTROL_FLOTA" ||
+    isJefeTaller;
+
   function goBackToPortal() {
     navigate("/trabajador");
   }
 
-  function openImageModal(url) {
-    setSelectedImage(url);
+  function openImageModal(imagesOrImage) {
+    const images = Array.isArray(imagesOrImage)
+      ? imagesOrImage
+      : [imagesOrImage];
+
+    const clean = images
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+
+    setSelectedImages(clean);
     setImageModalOpen(true);
   }
 
   function closeImageModal() {
-    setSelectedImage("");
+    setSelectedImages([]);
     setImageModalOpen(false);
   }
 
@@ -647,6 +776,7 @@ export default function Incidents() {
       title: getIncidentTitle(incident),
       text: evidence.text || "",
       imageUrl: evidence.imageUrl || "",
+      imageUrls: evidence.imageUrls || [],
     });
     setIncidentEvidenceModalOpen(true);
   }
@@ -657,6 +787,7 @@ export default function Incidents() {
       title: "",
       text: "",
       imageUrl: "",
+      imageUrls: [],
     });
   }
 
@@ -667,6 +798,7 @@ export default function Incidents() {
       title: getTaskTitle(task),
       text: evidence.text || "",
       imageUrl: evidence.imageUrl || "",
+      imageUrls: evidence.imageUrls || [],
     });
     setTaskEvidenceModalOpen(true);
   }
@@ -677,6 +809,7 @@ export default function Incidents() {
       title: "",
       text: "",
       imageUrl: "",
+      imageUrls: [],
     });
   }
 
@@ -1146,7 +1279,8 @@ export default function Incidents() {
 
                     const hasRealEvidence =
                       !!String(incidentEvidence?.text || "").trim() ||
-                      !!String(incidentEvidence?.imageUrl || "").trim();
+                      (Array.isArray(incidentEvidence?.imageUrls) &&
+                        incidentEvidence.imageUrls.length > 0);
 
                     const canShowEditIncident = canManageIncidents;
                     const canShowEditEvidence =
@@ -1196,7 +1330,7 @@ export default function Incidents() {
                               <div style={{ marginTop: 8 }}>
                                 <button
                                   type="button"
-                                  onClick={() => openImageModal(incidentPhotoUrl)}
+                                  onClick={() => openImageModal([incidentPhotoUrl])}
                                   className="btn-secondary inc-action-btn"
                                 >
                                   📷 Ver foto
@@ -1376,22 +1510,38 @@ export default function Incidents() {
                     const isHistoryTask =
                       taskStatus === "TERMINADA" || taskStatus === "CANCELADA";
 
+                    const hasTaskResponsibleAssigned = !!principal;
+
                     const canShowDeleteTask = canDeleteWorkshopTask;
-                    const canShowEditTask = canEditWorkshopTask;
+                    const canShowEditTask =
+                      hasTaskResponsibleAssigned
+                        ? canEditWorkshopTask
+                        : canAssignWorkshopTask;
 
                     const observations = getTaskObservations(task);
-                    const { cleanText, imageUrl } =
-                      parseObservationWithImage(observations);
-                    const finalImageUrl = buildUploadUrl(imageUrl);
+                    const observationData = parseObservationWithImages(observations);
+
+                    const cleanText = observationData.cleanText || "";
+
+                    const ingresoImageUrls = (
+                      Array.isArray(observationData.ingresoImageUrls)
+                        ? observationData.ingresoImageUrls
+                        : []
+                    )
+                      .map((path) => buildUploadUrl(path))
+                      .filter(Boolean);
 
                     const taskEvidence = getIndependentTaskEvidenceData(task);
 
                     const hasRealTaskEvidence =
                       !!String(taskEvidence?.text || "").trim() ||
-                      !!String(taskEvidence?.imageUrl || "").trim();
+                      (Array.isArray(taskEvidence?.imageUrls) &&
+                        taskEvidence.imageUrls.length > 0);
 
                     const canShowEditTaskEvidence =
-                      canEditWorkshopTask && hasRealTaskEvidence;
+                      canEditWorkshopTask &&
+                      hasTaskResponsibleAssigned &&
+                      hasRealTaskEvidence;
 
                     const canShowTaskEvidenceButton =
                       isHistoryTask && hasRealTaskEvidence;
@@ -1400,11 +1550,33 @@ export default function Incidents() {
                       task?.problemaRepuesto || ""
                     ).trim();
 
+                    const taskTypeLabel = getTaskTypeLabel(task);
+                    const taskTypeTone = getTaskTypeTone(task);
+                    const taskCompany = getTaskCompany(task);
+                    const taskSubtitle = getTaskSubtitle(task, isHistoryTask);
+
                     return (
                       <article key={task.id} className="inc-card">
                         <div className="inc-card__top">
-                          <div className="inc-card__title">
-                            {getTaskTitle(task)}
+                          <div style={{ display: "grid", gap: 8 }}>
+                            <div className="inc-card__title">
+                              {getTaskTitle(task)}
+                            </div>
+
+                            <div
+                              style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: 8,
+                                alignItems: "center",
+                              }}
+                            >
+                              <Pill tone={taskTypeTone}>{taskTypeLabel}</Pill>
+
+                              {taskCompany ? (
+                                <Pill tone="default">{taskCompany}</Pill>
+                              ) : null}
+                            </div>
                           </div>
 
                           <Pill tone={statusTone(task.status)}>
@@ -1412,9 +1584,13 @@ export default function Incidents() {
                           </Pill>
                         </div>
 
-                        <div className="inc-card__desc">
-                          {getTaskDescription(task) || "Sin descripción"}
-                        </div>
+                        <div className="inc-card__desc">{taskSubtitle}</div>
+
+                        {getTaskDescription(task) ? (
+                          <div className="inc-card__desc" style={{ marginTop: 6 }}>
+                            {getTaskDescription(task)}
+                          </div>
+                        ) : null}
 
                         <div className="inc-meta">
                           <div className="inc-meta__item">
@@ -1456,6 +1632,39 @@ export default function Incidents() {
                             )}
                           </div>
 
+                          {cleanText || ingresoImageUrls.length > 0 ? (
+  <div className="inc-meta__item">
+    <b>OBSERVACIONES</b>
+
+    <div
+      style={{
+        marginTop: 6,
+        whiteSpace: "pre-line",
+        lineHeight: 1.5,
+      }}
+    >
+      {cleanText
+        ? cleanText
+            .replace(/REQUIERE REPUESTO:/gi, "\nRequiere repuesto:")
+            .replace(/Vehículo ingresado por:/gi, "Vehículo ingresado por:")
+            .replace(/Vehiculo ingresado por:/gi, "Vehículo ingresado por:")
+        : "—"}
+    </div>
+
+    {ingresoImageUrls.length > 0 ? (
+      <div style={{ marginTop: 8 }}>
+        <button
+          type="button"
+          onClick={() => openImageModal(ingresoImageUrls)}
+          className="btn-secondary inc-action-btn"
+        >
+          📷 Ver fotos del vehículo
+        </button>
+      </div>
+    ) : null}
+  </div>
+) : null}
+
                           {canShowTaskEvidenceButton ? (
                             <div className="inc-meta__item">
                               <b>EVIDENCIA</b>
@@ -1468,35 +1677,6 @@ export default function Incidents() {
                                   Ver evidencia
                                 </button>
                               </div>
-
-                              {!taskEvidence.hasEvidence ? (
-                                <div
-                                  style={{
-                                    marginTop: 8,
-                                    fontSize: 13,
-                                    opacity: 0.75,
-                                  }}
-                                >
-                                  Esta tarea no tiene evidencia visible.
-                                </div>
-                              ) : null}
-                            </div>
-                          ) : observations ? (
-                            <div className="inc-meta__item">
-                              <b>OBSERVACIONES</b>{" "}
-                              {cleanText ? <span>{cleanText}</span> : null}
-
-                              {finalImageUrl ? (
-                                <div style={{ marginTop: 8 }}>
-                                  <button
-                                    type="button"
-                                    onClick={() => openImageModal(finalImageUrl)}
-                                    className="btn-secondary inc-action-btn"
-                                  >
-                                    📷 Ver foto
-                                  </button>
-                                </div>
-                              ) : null}
                             </div>
                           ) : null}
 
@@ -1527,7 +1707,11 @@ export default function Incidents() {
                                 disabled={isDeletingTask}
                                 className="btn-primary inc-action-btn"
                               >
-                                Editar tarea
+                                {hasTaskResponsibleAssigned
+                                  ? isVehicleIngresoTask(task)
+                                    ? "Editar ingreso"
+                                    : "Editar tarea"
+                                  : "Asignar ingreso"}
                               </button>
                             ) : null}
 
@@ -1683,29 +1867,52 @@ export default function Incidents() {
       >
         <div
           style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
+            display: "grid",
+            gap: 16,
             minHeight: 240,
           }}
         >
-          {selectedImage ? (
-            <img
-              src={selectedImage}
-              alt="Evidencia"
-              onError={(e) => {
-                e.currentTarget.style.display = "none";
-              }}
-              style={{
-                maxWidth: "100%",
-                maxHeight: "70vh",
-                objectFit: "contain",
-                borderRadius: 12,
-                boxShadow: "0 10px 24px rgba(0,0,0,.12)",
-              }}
-            />
+          {selectedImages.length > 0 ? (
+            selectedImages.map((image, index) => (
+              <div
+                key={`${image}-${index}`}
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  background: "#fff",
+                  borderRadius: 16,
+                  padding: 12,
+                }}
+              >
+                <img
+                  src={image}
+                  alt={`Evidencia ${index + 1}`}
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                  }}
+                  style={{
+                    maxWidth: "100%",
+                    maxHeight: "70vh",
+                    objectFit: "contain",
+                    borderRadius: 12,
+                    boxShadow: "0 10px 24px rgba(0,0,0,.12)",
+                  }}
+                />
+              </div>
+            ))
           ) : (
-            <div style={{ opacity: 0.7 }}>No hay imagen disponible</div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                minHeight: 240,
+                opacity: 0.7,
+              }}
+            >
+              No hay imagen disponible
+            </div>
           )}
         </div>
       </Modal>
@@ -1773,30 +1980,41 @@ export default function Incidents() {
             <div
               style={{
                 minHeight: 220,
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
+                display: "grid",
+                gap: 14,
                 background: "rgba(15, 23, 42, 0.03)",
                 border: "1px solid rgba(15, 23, 42, 0.08)",
                 borderRadius: 16,
                 padding: 14,
               }}
             >
-              {selectedIncidentEvidence?.imageUrl ? (
-                <img
-                  src={selectedIncidentEvidence.imageUrl}
-                  alt="Evidencia final del incidente"
-                  onError={(e) => {
-                    e.currentTarget.style.display = "none";
-                  }}
-                  style={{
-                    maxWidth: "100%",
-                    maxHeight: "70vh",
-                    objectFit: "contain",
-                    borderRadius: 12,
-                    boxShadow: "0 10px 24px rgba(0,0,0,.12)",
-                  }}
-                />
+              {Array.isArray(selectedIncidentEvidence?.imageUrls) &&
+              selectedIncidentEvidence.imageUrls.length > 0 ? (
+                selectedIncidentEvidence.imageUrls.map((img, index) => (
+                  <div
+                    key={`${img}-${index}`}
+                    style={{
+                      display: "flex",
+                      justifyContent: "center",
+                      alignItems: "center",
+                    }}
+                  >
+                    <img
+                      src={img}
+                      alt={`Evidencia final del incidente ${index + 1}`}
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
+                      style={{
+                        maxWidth: "100%",
+                        maxHeight: "70vh",
+                        objectFit: "contain",
+                        borderRadius: 12,
+                        boxShadow: "0 10px 24px rgba(0,0,0,.12)",
+                      }}
+                    />
+                  </div>
+                ))
               ) : (
                 <div style={{ opacity: 0.7 }}>Sin foto de evidencia.</div>
               )}
@@ -1810,12 +2028,11 @@ export default function Incidents() {
               gap: 10,
             }}
           >
-            {selectedIncidentEvidence?.imageUrl ? (
+            {Array.isArray(selectedIncidentEvidence?.imageUrls) &&
+            selectedIncidentEvidence.imageUrls.length > 0 ? (
               <button
                 type="button"
-                onClick={() =>
-                  openImageModal(selectedIncidentEvidence.imageUrl)
-                }
+                onClick={() => openImageModal(selectedIncidentEvidence.imageUrls)}
                 className="btn-secondary"
               >
                 📷 Ver foto grande
@@ -1896,30 +2113,41 @@ export default function Incidents() {
             <div
               style={{
                 minHeight: 220,
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
+                display: "grid",
+                gap: 14,
                 background: "rgba(15, 23, 42, 0.03)",
                 border: "1px solid rgba(15, 23, 42, 0.08)",
                 borderRadius: 16,
                 padding: 14,
               }}
             >
-              {selectedTaskEvidence?.imageUrl ? (
-                <img
-                  src={selectedTaskEvidence.imageUrl}
-                  alt="Evidencia final de la tarea"
-                  onError={(e) => {
-                    e.currentTarget.style.display = "none";
-                  }}
-                  style={{
-                    maxWidth: "100%",
-                    maxHeight: "70vh",
-                    objectFit: "contain",
-                    borderRadius: 12,
-                    boxShadow: "0 10px 24px rgba(0,0,0,.12)",
-                  }}
-                />
+              {Array.isArray(selectedTaskEvidence?.imageUrls) &&
+              selectedTaskEvidence.imageUrls.length > 0 ? (
+                selectedTaskEvidence.imageUrls.map((img, index) => (
+                  <div
+                    key={`${img}-${index}`}
+                    style={{
+                      display: "flex",
+                      justifyContent: "center",
+                      alignItems: "center",
+                    }}
+                  >
+                    <img
+                      src={img}
+                      alt={`Evidencia final de la tarea ${index + 1}`}
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
+                      style={{
+                        maxWidth: "100%",
+                        maxHeight: "70vh",
+                        objectFit: "contain",
+                        borderRadius: 12,
+                        boxShadow: "0 10px 24px rgba(0,0,0,.12)",
+                      }}
+                    />
+                  </div>
+                ))
               ) : (
                 <div style={{ opacity: 0.7 }}>Sin foto de evidencia.</div>
               )}
@@ -1933,10 +2161,11 @@ export default function Incidents() {
               gap: 10,
             }}
           >
-            {selectedTaskEvidence?.imageUrl ? (
+            {Array.isArray(selectedTaskEvidence?.imageUrls) &&
+            selectedTaskEvidence.imageUrls.length > 0 ? (
               <button
                 type="button"
-                onClick={() => openImageModal(selectedTaskEvidence.imageUrl)}
+                onClick={() => openImageModal(selectedTaskEvidence.imageUrls)}
                 className="btn-secondary"
               >
                 📷 Ver foto grande

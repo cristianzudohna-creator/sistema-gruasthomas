@@ -11,6 +11,7 @@
 // ✅ FIX: ADQUISICIONES YA NO VE "Firmar Horas Extras"
 // ✅ NUEVO: "Solicitud de insumos" para SUPERADMIN + JEFE_TALLER + SUPERVISOR
 // ✅ NUEVO: "Compras de insumos" para SUPERADMIN
+// ✅ NUEVO: "Reporte ingreso con fallas" para CONTROL_FLOTA + SUPERADMIN
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useNavigate, useLocation, Link } from "react-router-dom";
@@ -121,6 +122,9 @@ export default function Admin() {
   // ✅ Compras de insumos
   const canSeeComprasInsumos = isSuperadmin;
 
+  // ✅ NUEVO: crear reporte de ingreso con fallas
+  const canSeeVehicleFailureReportsCreate = isSuperadmin || isControlFlota;
+
   const isDashboard = path === "/admin";
 
   const isCamiones = path.startsWith("/admin/camiones");
@@ -136,6 +140,10 @@ export default function Admin() {
 
   const isSolicitudInsumos = path.startsWith("/admin/solicitud-insumos");
   const isComprasInsumos = path.startsWith("/admin/prevencion-insumos");
+
+  const isVehicleFailureReportsCreate = path.startsWith(
+    "/admin/reportes-fallas-vehiculos/nuevo"
+  );
 
   const isExtraHours =
     path === "/admin/horas-extras" ||
@@ -238,6 +246,8 @@ export default function Admin() {
 
     if (isSolicitudInsumos) return "Solicitud de insumos";
     if (isComprasInsumos) return "Compras de insumos";
+    if (isVehicleFailureReportsCreate) return "Reporte ingreso con fallas";
+
     if (isIncidentes) return "Incidentes / Taller";
     if (isRepuestos) return "Repuestos / Solicitudes";
     if (isExtraHoursAdmin) return "Horas Extras (Administración PDF)";
@@ -347,6 +357,21 @@ export default function Admin() {
             >
               <span className="sb-ico" aria-hidden="true">🗑️</span>
               <span>Camiones eliminados</span>
+            </button>
+          ) : null}
+
+          {canSeeVehicleFailureReportsCreate ? (
+            <button
+              className={`sb-item ${isVehicleFailureReportsCreate ? "active" : ""}`}
+              type="button"
+              onClick={() => {
+                setSidebarOpen(false);
+                navigate("/admin/reportes-fallas-vehiculos/nuevo");
+              }}
+              title="Registrar ingreso de vehículo con fallas"
+            >
+              <span className="sb-ico" aria-hidden="true">📝</span>
+              <span>Reporte ingreso con fallas</span>
             </button>
           ) : null}
 

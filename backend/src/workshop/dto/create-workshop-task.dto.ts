@@ -84,4 +84,14 @@ export class CreateWorkshopTaskDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   actualCost?: number;
+
+    @IsOptional()
+  @IsString()
+  fotoIngreso?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  fotoIngresoNombre?: string;
 }
+

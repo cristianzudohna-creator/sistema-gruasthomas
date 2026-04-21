@@ -1890,7 +1890,7 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
         description={<Resumen f={f} photosCount={photos.length} />}
       />
 
-      <Modal open={successOpen} onClose={handleClose} title="✅ Onder de trabajo creada">
+      <Modal open={successOpen} onClose={handleClose} title="✅ Orden de trabajo creada">
         <div style={{ padding: 6 }}>
           <div style={{ fontWeight: 900, marginBottom: 12 }}>
             Se creó correctamente la programación de orden de trabajo.

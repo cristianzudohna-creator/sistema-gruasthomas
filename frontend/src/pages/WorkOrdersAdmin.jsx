@@ -12,6 +12,9 @@
 // ✅ NUEVO: abre automáticamente detalle de OT si viene ?otId=... en la URL
 // ✅ NUEVO: aprobar OT sin comentario
 // ✅ NUEVO: rechazar OT sin motivo
+// ✅ FIX NUEVO AHORA:
+// - en la columna FECHA se usa la primera fecha de diasProgramados
+// - si no existe diasProgramados, hace fallback a createdAt
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -258,9 +261,69 @@ async function apiDownloadExcel({ from, to }) {
 
 function fmtDate(v) {
   if (!v) return "-";
+
+  if (typeof v === "string") {
+    const raw = v.trim();
+
+    const onlyDateMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (onlyDateMatch) {
+      const year = Number(onlyDateMatch[1]);
+      const month = Number(onlyDateMatch[2]);
+      const day = Number(onlyDateMatch[3]);
+
+      const localDate = new Date(year, month - 1, day, 12, 0, 0, 0);
+      if (!Number.isNaN(localDate.getTime())) {
+        return localDate.toLocaleDateString("es-CL");
+      }
+    }
+  }
+
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleString();
+  return d.toLocaleString("es-CL");
+}
+
+function getDisplayWorkOrderDate(workOrder) {
+  const dias = Array.isArray(workOrder?.diasProgramados)
+    ? workOrder.diasProgramados
+    : [];
+
+  const firstValid = dias.find((dia) => {
+    if (!dia) return false;
+
+    if (typeof dia === "string") {
+      return dia.trim() !== "";
+    }
+
+    if (typeof dia === "object") {
+      const value =
+        dia?.fechaProgramada ||
+        dia?.fecha ||
+        dia?.date ||
+        dia?.dia ||
+        dia?.programadoPara ||
+        "";
+      return String(value || "").trim() !== "";
+    }
+
+    return false;
+  });
+
+  let fechaProgramada = "";
+
+  if (typeof firstValid === "string") {
+    fechaProgramada = firstValid;
+  } else if (firstValid && typeof firstValid === "object") {
+    fechaProgramada =
+      firstValid?.fechaProgramada ||
+      firstValid?.fecha ||
+      firstValid?.date ||
+      firstValid?.dia ||
+      firstValid?.programadoPara ||
+      "";
+  }
+
+  return fechaProgramada || workOrder?.createdAt || "";
 }
 
 function pick(...vals) {
@@ -1216,7 +1279,7 @@ export default function WorkOrdersAdmin() {
                   <tr key={x.id} style={isPendienteVB ? { background: "rgba(245,179,1,.06)" } : undefined}>
                     <td style={{ fontWeight: 900 }}>{shortOtId(x.id)}</td>
 
-                    <td style={{ fontWeight: 900 }}>{fmtDate(x.createdAt)}</td>
+                    <td style={{ fontWeight: 900 }}>{fmtDate(getDisplayWorkOrderDate(x))}</td>
 
                     <td>
                       <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-start" }}>

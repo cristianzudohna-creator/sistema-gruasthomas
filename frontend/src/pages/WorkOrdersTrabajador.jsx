@@ -17,6 +17,9 @@
 // ✅ NUEVO RESPONSIVE:
 // - escritorio: tabla
 // - móvil: cards
+// ✅ FIX FECHA:
+// - FECHA muestra diasProgramados[0] si existe
+// - si no existe, fallback a createdAt
 
 import { useEffect, useMemo, useState } from "react";
 import "./Admin.css";
@@ -97,6 +100,17 @@ async function apiGet(path) {
 
 function fmtDate(v) {
   if (!v) return "-";
+
+  if (typeof v === "string") {
+    const raw = v.trim();
+
+    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (match) {
+      const [, yy, mm, dd] = match;
+      return `${dd}/${mm}/${yy}`;
+    }
+  }
+
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return "-";
 
@@ -106,9 +120,19 @@ function fmtDate(v) {
   return `${dd}/${mm}/${yy}`;
 }
 
+// ✅ FIX REAL FECHA
+function getServiceDate(item) {
+  if (Array.isArray(item?.diasProgramados) && item.diasProgramados.length > 0) {
+    return item.diasProgramados[0];
+  }
+  return item?.createdAt || null;
+}
+
 function isNew(v) {
   if (!v) return false;
-  return Date.now() - new Date(v).getTime() < 24 * 60 * 60 * 1000;
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return false;
+  return Date.now() - d.getTime() < 24 * 60 * 60 * 1000;
 }
 
 function otCode(id) {
@@ -226,7 +250,12 @@ export default function WorkOrdersTrabajador() {
       const data = await apiGet("/work-orders/worker?includeFinalizadas=1");
       const list = Array.isArray(data) ? data : data?.items || [];
 
-      list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      list.sort((a, b) => {
+        const dateA = getServiceDate(a);
+        const dateB = getServiceDate(b);
+        return new Date(dateB) - new Date(dateA);
+      });
+
       setItems(list);
     } catch (e) {
       setErr(e.message || "Error cargando OTs");
@@ -414,7 +443,6 @@ export default function WorkOrdersTrabajador() {
 
         {err ? <div className="wot-error">{err}</div> : null}
 
-        {/* ✅ TABLA DESKTOP */}
         <div className="table-wrap wot-table-wrap">
           <table className="table wot-table" style={{ minWidth: isRigger ? 1240 : 1500 }}>
             <thead>
@@ -482,7 +510,9 @@ export default function WorkOrdersTrabajador() {
                     className={nueva ? "wot-row-new" : ""}
                   >
                     <td>
-                      <div className="wot-cell-strong">{fmtDate(x.createdAt)}</div>
+                      <div className="wot-cell-strong">
+                        {fmtDate(getServiceDate(x))}
+                      </div>
                       {nueva ? <span className="wot-new-chip">🆕 Nueva</span> : null}
                     </td>
 
@@ -622,7 +652,6 @@ export default function WorkOrdersTrabajador() {
           </table>
         </div>
 
-        {/* ✅ CARDS MÓVIL */}
         <div className="wot-mobile-list">
           {!loading && filtered.length === 0 ? (
             <div className="wot-mobile-empty">
@@ -666,7 +695,9 @@ export default function WorkOrdersTrabajador() {
                 <div className="wot-mobile-card__head">
                   <div>
                     <div className="wot-mobile-card__ot">{otCode(x.id)}</div>
-                    <div className="wot-mobile-card__date">{fmtDate(x.createdAt)}</div>
+                    <div className="wot-mobile-card__date">
+                      {fmtDate(getServiceDate(x))}
+                    </div>
                   </div>
 
                   <div className="wot-mobile-card__badges">
