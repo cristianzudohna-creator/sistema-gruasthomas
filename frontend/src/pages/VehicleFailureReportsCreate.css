@@ -191,6 +191,59 @@
   font-weight: 700;
 }
 
+/* =========================
+   NUEVO: acciones de fotos
+   ========================= */
+
+.vfrc-photo-actions {
+  display: grid;
+  gap: 14px;
+}
+
+.vfrc-photo-btn {
+  min-height: 58px;
+  border-radius: 18px;
+  border: 1px solid #d7deea;
+  background: #f8fafc;
+  color: #1e293b;
+  font-size: 16px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease,
+    border-color 0.18s ease, background 0.18s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 18px;
+  text-align: center;
+}
+
+.vfrc-photo-btn:hover {
+  transform: translateY(-1px);
+  border-color: #c7d2e5;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+  background: #ffffff;
+}
+
+.vfrc-photo-btn:disabled,
+.vfrc-photo-btn.is-disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.vfrc-photo-btn__icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* =========================
+   LEGACY upload
+   (se mantiene por compatibilidad)
+   ========================= */
+
 .vfrc-upload {
   position: relative;
   border: 1.5px dashed #bfd0ea;
@@ -532,6 +585,12 @@
   .vfrc-actions .btn {
     width: 100%;
   }
+
+  .vfrc-photo-btn {
+    min-height: 56px;
+    font-size: 15px;
+    border-radius: 16px;
+  }
 }
 
 @media (max-width: 520px) {
@@ -554,6 +613,17 @@
   .vfrc-upload {
     border-radius: 18px;
     padding: 18px 14px;
+  }
+
+  .vfrc-photo-actions {
+    gap: 12px;
+  }
+
+  .vfrc-photo-btn {
+    min-height: 54px;
+    font-size: 14px;
+    border-radius: 15px;
+    padding: 0 14px;
   }
 
   .vfrc-thumbs {

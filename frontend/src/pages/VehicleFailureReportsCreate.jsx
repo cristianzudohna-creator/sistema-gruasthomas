@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "./Admin.css";
 import "./VehicleFailureReportsCreate.css";
 
@@ -202,6 +202,9 @@ export default function VehicleFailureReportsCreate() {
   const [saveError, setSaveError] = useState("");
   const [saveOk, setSaveOk] = useState("");
 
+  const cameraInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
+
   const selectedVehicle = useMemo(
     () => vehicles.find((x) => x.id === vehicleId) || null,
     [vehicles, vehicleId]
@@ -252,8 +255,8 @@ export default function VehicleFailureReportsCreate() {
     setSaveError("");
   }
 
-  async function onFilesChange(e) {
-    const selected = Array.from(e.target.files || []);
+  async function handleSelectedFiles(fileList) {
+    const selected = Array.from(fileList || []);
     if (!selected.length) return;
 
     const images = selected.filter((file) =>
@@ -262,7 +265,6 @@ export default function VehicleFailureReportsCreate() {
 
     if (!images.length) {
       setSaveError("Solo puedes subir imágenes.");
-      e.target.value = "";
       return;
     }
 
@@ -270,7 +272,6 @@ export default function VehicleFailureReportsCreate() {
 
     if (availableSlots <= 0) {
       setSaveError(`Solo puedes subir un máximo de ${MAX_FILES} fotos.`);
-      e.target.value = "";
       return;
     }
 
@@ -294,7 +295,32 @@ export default function VehicleFailureReportsCreate() {
     );
 
     setFiles((prev) => [...prev, ...next]);
-    e.target.value = "";
+  }
+
+  async function onCameraChange(e) {
+    try {
+      await handleSelectedFiles(e.target.files);
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  async function onGalleryChange(e) {
+    try {
+      await handleSelectedFiles(e.target.files);
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  function openCameraPicker() {
+    if (saving || !canCreate || files.length >= MAX_FILES) return;
+    cameraInputRef.current?.click();
+  }
+
+  function openGalleryPicker() {
+    if (saving || !canCreate || files.length >= MAX_FILES) return;
+    galleryInputRef.current?.click();
   }
 
   function removeFile(id) {
@@ -505,21 +531,86 @@ export default function VehicleFailureReportsCreate() {
             <div className="vfrc-field">
               <label>Fotos de evidencia</label>
 
-              <label className={`vfrc-upload ${saving || !canCreate ? "is-disabled" : ""}`}>
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  multiple
-                  onChange={onFilesChange}
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                multiple
+                onChange={onCameraChange}
+                disabled={saving || !canCreate || files.length >= MAX_FILES}
+                style={{ display: "none" }}
+              />
+
+              <input
+                ref={galleryInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={onGalleryChange}
+                disabled={saving || !canCreate || files.length >= MAX_FILES}
+                style={{ display: "none" }}
+              />
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: 14,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={openCameraPicker}
                   disabled={saving || !canCreate || files.length >= MAX_FILES}
-                />
-                <span className="vfrc-upload__icon">📷</span>
-                <span className="vfrc-upload__title">Agregar imágenes</span>
-                <span className="vfrc-upload__text">
-                  Puedes tomar fotos desde el teléfono o seleccionar desde galería. Máximo {MAX_FILES}.
-                </span>
-              </label>
+                  style={{
+                    minHeight: 58,
+                    borderRadius: 18,
+                    border: "1px solid #d7dce5",
+                    background: "#f8fafc",
+                    fontWeight: 900,
+                    fontSize: 16,
+                    color: "#1e293b",
+                    cursor:
+                      saving || !canCreate || files.length >= MAX_FILES
+                        ? "not-allowed"
+                        : "pointer",
+                    opacity:
+                      saving || !canCreate || files.length >= MAX_FILES ? 0.65 : 1,
+                  }}
+                >
+                  📸 Tomar foto
+                </button>
+
+                <button
+                  type="button"
+                  onClick={openGalleryPicker}
+                  disabled={saving || !canCreate || files.length >= MAX_FILES}
+                  style={{
+                    minHeight: 58,
+                    borderRadius: 18,
+                    border: "1px solid #d7dce5",
+                    background: "#f8fafc",
+                    fontWeight: 900,
+                    fontSize: 16,
+                    color: "#1e293b",
+                    cursor:
+                      saving || !canCreate || files.length >= MAX_FILES
+                        ? "not-allowed"
+                        : "pointer",
+                    opacity:
+                      saving || !canCreate || files.length >= MAX_FILES ? 0.65 : 1,
+                  }}
+                >
+                  🖼️ Elegir desde galería
+                </button>
+              </div>
+
+              <div
+                className="vfrc-help"
+                style={{ marginTop: 12 }}
+              >
+                Puedes adjuntar fotos del vehículo al momento de crear el reporte. Máximo {MAX_FILES}.
+              </div>
 
               <div className="vfrc-help">
                 {files.length}/{MAX_FILES} fotos seleccionadas
