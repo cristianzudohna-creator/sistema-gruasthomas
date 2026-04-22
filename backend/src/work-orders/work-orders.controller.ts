@@ -1,7 +1,11 @@
 // ✅ Archivo: src/work-orders/work-orders.controller.ts (COMPLETO)
 // ✅ FIX: export-zip ahora llama al método real del service: exportPdfZipByFilters()
-// ✅ FIX: mapeo correcto de filtros -> operatorId / riggerName
+// ✅ FIX: mapeo correcto de filtros -> operatorId / riggerName / clientName
 // ✅ NUEVO: export-excel para OTs APROBADAS
+// ✅ NUEVO AHORA:
+// - export-zip recibe también ?cliente=...
+// - se envía al service como clientName
+
 import {
   Body,
   Controller,
@@ -105,7 +109,7 @@ export class WorkOrdersController {
 
   // =========================================================
   // ✅ EXPORT ZIP PDF MASIVO (ADMIN)
-  // GET /work-orders/export-zip?from=2026-03-01&to=2026-03-31&operadorId=xxx&rigger=juan
+  // GET /work-orders/export-zip?from=2026-03-01&to=2026-03-31&operadorId=xxx&rigger=juan&cliente=gesvial
   // =========================================================
   @Get("export-zip")
   async exportZip(
@@ -113,6 +117,7 @@ export class WorkOrdersController {
     @Query("to") to: string,
     @Query("operadorId") operadorId: string,
     @Query("rigger") rigger: string,
+    @Query("cliente") cliente: string,
     @Req() req: any,
     @Res() res: Response
   ) {
@@ -128,6 +133,7 @@ export class WorkOrdersController {
         to,
         operatorId: operadorId,
         riggerName: rigger,
+        clientName: cliente,
       },
       req.user
     );

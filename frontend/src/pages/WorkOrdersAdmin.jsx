@@ -5,7 +5,7 @@
 // ✅ NUEVO: Auto-refresh (polling) + refresh al volver a la pestaña
 // ✅ FIX: se elimina columna "CREADO POR" del listado
 // ✅ FIX: se elimina botón "Abrir" del listado
-// ✅ NUEVO: filtros para exportar ZIP por fecha / operador / rigger
+// ✅ NUEVO: filtros para exportar ZIP por fecha / operador / rigger / cliente
 // ✅ FIX REAL: autocomplete remoto contra backend /users con q + workerType + limit=50
 // ✅ NUEVO: descarga ZIP de múltiples OT filtradas
 // ✅ NUEVO: descarga EXCEL de OTs aprobadas por rango de fecha
@@ -15,6 +15,13 @@
 // ✅ FIX NUEVO AHORA:
 // - en la columna FECHA se usa la primera fecha de diasProgramados
 // - si no existe diasProgramados, hace fallback a createdAt
+// ✅ NUEVO AHORA:
+// - campo Cliente en Exportar OT
+// - el ZIP ahora envía también ?cliente=...
+// ✅ FIX NUEVO AHORA:
+// - autocomplete real para Cliente
+// - cliente usa dropdown visual igual a operador/rigger
+// - se mejora layout del bloque exportar para que no se corte Cliente/Operador
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -192,13 +199,14 @@ async function apiDownloadPdf(id) {
 // =========================
 // ✅ ZIP helpers
 // =========================
-async function apiDownloadZip({ from, to, operadorId, rigger }) {
+async function apiDownloadZip({ from, to, operadorId, rigger, cliente }) {
   const qs = new URLSearchParams();
 
   if (from) qs.set("from", from);
   if (to) qs.set("to", to);
   if (operadorId) qs.set("operadorId", operadorId);
   if (rigger) qs.set("rigger", rigger);
+  if (cliente) qs.set("cliente", cliente);
 
   const res = await fetch(`${API_URL}/work-orders/export-zip?${qs.toString()}`, {
     method: "GET",
@@ -439,6 +447,9 @@ export default function WorkOrdersAdmin() {
   const [exportFrom, setExportFrom] = useState("");
   const [exportTo, setExportTo] = useState("");
 
+  const [exportClienteText, setExportClienteText] = useState("");
+  const [showClienteSuggestions, setShowClienteSuggestions] = useState(false);
+
   const [exportOperadorText, setExportOperadorText] = useState("");
   const [exportOperadorId, setExportOperadorId] = useState("");
   const [showOperadorSuggestions, setShowOperadorSuggestions] = useState(false);
@@ -456,6 +467,7 @@ export default function WorkOrdersAdmin() {
   const [excelLoading, setExcelLoading] = useState(false);
   const [excelErr, setExcelErr] = useState("");
 
+  const clienteBoxRef = useRef(null);
   const operadorBoxRef = useRef(null);
   const riggerBoxRef = useRef(null);
   const autoOpenedOtRef = useRef("");
@@ -519,6 +531,9 @@ export default function WorkOrdersAdmin() {
 
   useEffect(() => {
     function handleClickOutside(e) {
+      if (clienteBoxRef.current && !clienteBoxRef.current.contains(e.target)) {
+        setShowClienteSuggestions(false);
+      }
       if (operadorBoxRef.current && !operadorBoxRef.current.contains(e.target)) {
         setShowOperadorSuggestions(false);
       }
@@ -645,6 +660,11 @@ export default function WorkOrdersAdmin() {
       return;
     }
 
+    if (!exportClienteText.trim()) {
+      setZipErr("Debes escribir o seleccionar un cliente para descargar el ZIP.");
+      return;
+    }
+
     try {
       setZipLoading(true);
       await apiDownloadZip({
@@ -652,6 +672,7 @@ export default function WorkOrdersAdmin() {
         to: exportTo,
         operadorId: exportOperadorId,
         rigger: exportRiggerText.trim(),
+        cliente: exportClienteText.trim(),
       });
     } catch (e) {
       setZipErr(e.message || "Error descargando ZIP");
@@ -915,6 +936,33 @@ export default function WorkOrdersAdmin() {
     return { total, pendientesVB, abiertas, enProceso, aprobadas };
   }, [items]);
 
+  const exportClientOptions = useMemo(() => {
+    const map = new Map();
+
+    for (const x of items) {
+      const cliente = pick(x?.cliente, x?.razonSocial, x?.clienteNombre);
+      const key = String(cliente || "").trim();
+      if (!key) continue;
+
+      const normalized = key.toLowerCase();
+      if (!map.has(normalized)) {
+        map.set(normalized, key);
+      }
+    }
+
+    return Array.from(map.values()).sort((a, b) => a.localeCompare(b, "es"));
+  }, [items]);
+
+  const filteredClientOptions = useMemo(() => {
+    const qx = exportClienteText.trim().toLowerCase();
+
+    if (!qx) return exportClientOptions.slice(0, 20);
+
+    return exportClientOptions
+      .filter((x) => x.toLowerCase().includes(qx))
+      .slice(0, 20);
+  }, [exportClientOptions, exportClienteText]);
+
   function handleOperadorInputChange(value) {
     setExportOperadorText(value);
     setExportOperadorId("");
@@ -948,6 +996,11 @@ export default function WorkOrdersAdmin() {
     setExportRiggerText("");
     setShowRiggerSuggestions(false);
     setRiggerSuggestions([]);
+  }
+
+  function clearCliente() {
+    setExportClienteText("");
+    setShowClienteSuggestions(false);
   }
 
   return (
@@ -993,8 +1046,16 @@ export default function WorkOrdersAdmin() {
         </div>
 
         <div className="woa-export-box">
-          <div className="woa-export-grid">
-            <div className="woa-field">
+          <div
+            className="woa-export-grid"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: 14,
+              alignItems: "start",
+            }}
+          >
+            <div className="woa-field" style={{ minWidth: 0 }}>
               <div className="woa-field-label">Desde</div>
               <input
                 type="date"
@@ -1004,7 +1065,7 @@ export default function WorkOrdersAdmin() {
               />
             </div>
 
-            <div className="woa-field">
+            <div className="woa-field" style={{ minWidth: 0 }}>
               <div className="woa-field-label">Hasta</div>
               <input
                 type="date"
@@ -1014,7 +1075,66 @@ export default function WorkOrdersAdmin() {
               />
             </div>
 
-            <div ref={operadorBoxRef} className="woa-field woa-autocomplete">
+            <div
+              ref={clienteBoxRef}
+              className="woa-field woa-autocomplete"
+              style={{ minWidth: 0 }}
+            >
+              <div className="woa-field-label">Cliente</div>
+
+              <div className="woa-autocomplete-input-wrap">
+                <input
+                  className="gt-input woa-autocomplete-input"
+                  value={exportClienteText}
+                  onChange={(e) => {
+                    setExportClienteText(e.target.value);
+                    setShowClienteSuggestions(true);
+                  }}
+                  onFocus={() => setShowClienteSuggestions(true)}
+                  placeholder="Nombre cliente"
+                  autoComplete="off"
+                />
+
+                {exportClienteText ? (
+                  <button
+                    type="button"
+                    onClick={clearCliente}
+                    className="woa-autocomplete-clear"
+                    title="Limpiar cliente"
+                  >
+                    ×
+                  </button>
+                ) : null}
+              </div>
+
+              {showClienteSuggestions ? (
+                <div className="woa-suggestions">
+                  {filteredClientOptions.length > 0 ? (
+                    filteredClientOptions.map((cliente) => (
+                      <button
+                        key={cliente}
+                        type="button"
+                        className="woa-suggestion-item"
+                        onClick={() => {
+                          setExportClienteText(cliente);
+                          setShowClienteSuggestions(false);
+                        }}
+                      >
+                        {cliente}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="woa-suggestion-empty">No se encontraron clientes.</div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+
+            <div
+              ref={operadorBoxRef}
+              className="woa-field woa-autocomplete"
+              style={{ minWidth: 0 }}
+            >
               <div className="woa-field-label">Operador</div>
 
               <div className="woa-autocomplete-input-wrap">
@@ -1023,7 +1143,7 @@ export default function WorkOrdersAdmin() {
                   value={exportOperadorText}
                   onChange={(e) => handleOperadorInputChange(e.target.value)}
                   onFocus={() => setShowOperadorSuggestions(true)}
-                  placeholder="Escribe nombre del operador"
+                  placeholder="Nombre operador"
                   autoComplete="off"
                 />
 
@@ -1064,7 +1184,11 @@ export default function WorkOrdersAdmin() {
               ) : null}
             </div>
 
-            <div ref={riggerBoxRef} className="woa-field woa-autocomplete">
+            <div
+              ref={riggerBoxRef}
+              className="woa-field woa-autocomplete"
+              style={{ minWidth: 0 }}
+            >
               <div className="woa-field-label">Rigger</div>
 
               <div className="woa-autocomplete-input-wrap">
@@ -1111,7 +1235,16 @@ export default function WorkOrdersAdmin() {
               ) : null}
             </div>
 
-            <div className="woa-export-action" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <div
+              className="woa-export-action"
+              style={{
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+                alignItems: "flex-end",
+                minWidth: 0,
+              }}
+            >
               <button
                 className="btn woa-zip-btn"
                 type="button"

@@ -1,87 +1,30 @@
 // ✅ Archivo: src/pages/Incidents.jsx
-// ✅ Responsive PC + móvil con CSS separado
+// ✅ COMPLETO + MEJORA VISUAL / PRIORIDADES / FILTROS
+// ✅ Responsive pensado para PC + teléfono
 // ✅ Muestra en la misma pestaña:
 //    1) Incidentes reportados
 //    2) Tareas de taller independientes (sin incidente relacionado)
-// ✅ Botón global Crear tarea de taller
-// ✅ Botón Eliminar incidente
-// ✅ Botón Eliminar tarea de taller independiente
-// ✅ ConfirmModal bonito para eliminar
-// ✅ ConfirmModal bonito para marcar incidente como resuelto
-// ✅ Modal real de creación de tarea
-// ✅ FIX: JEFE_TALLER = TRABAJADOR + workerType JEFE_TALLER
-// ✅ NUEVO:
-// - Incidentes resueltos/cerrados quedan como historial
-// - Tareas terminadas/canceladas quedan como historial
-// - Se ocultan acciones operativas cuando ya están cerradas
-// - PERO se mantiene visible el botón Eliminar incluso en historial
-// - Botón volver al portal
-// ✅ FIX PRODUCCIÓN:
-// - Si observaciones trae /uploads/... ya no muestra la ruta cruda
-// - Muestra botón "📷 Ver foto"
-// - Abre la foto usando la URL real del backend/proxy
-// - La foto se muestra en modal preview
-// - Incidentes ahora también muestran su foto si existe incident.fotoUrl
-// - NO usa localhost en producción
 // ✅ NUEVO AHORA:
-// - Si la tarea independiente tiene problemaRepuesto, muestra bloque "PROBLEMAS CON EL REPUESTO"
-// - Botón "Ver problema"
-// - Modal para ver el problema completo
-// - Si no hay problema, no se muestra nada
-// ✅ NUEVO TAMBIÉN:
-// - En INCIDENTES REPORTADOS toma el problema desde latestTask.problemaRepuesto
-// - Muestra "PROBLEMAS CON EL REPUESTO" + botón "Ver problema"
-// ✅ NUEVO AHORA:
-// - Botón "Editar incidente"
-// - Botón "Editar evidencia"
-// - IncidentModal reutilizado en modo edición normal y modo evidencia
-// - SUPERADMIN / CONTROL_FLOTA / JEFE_TALLER pueden editar incidente/evidencia
-// ✅ NUEVO AHORA:
-// - En tareas independientes existe:
-//   - Botón "Editar tarea"
-//   - Botón "Editar evidencia"
-// - CreateWorkshopTaskModal reutilizado en modo full y mode="evidence"
-// ✅ FIX NUEVO:
-// - Aunque el incidente esté RESUELTO o CERRADO, se puede seguir editando
-//   y también editar/agregar/quitar evidencia.
-// - En historial se ocultan solo las acciones operativas:
-//   "Asignar trabajo" y "Marcar como resuelto"
-// ✅ NUEVO AHORA:
-// - En incidente RESUELTO/CERRADO aparece botón "Evidencia"
-// - Abre modal mostrando la evidencia final subida al terminar el incidente
-// - Toma evidencia desde la tarea que realmente tiene evidencia
-// ✅ FIX NUEVO:
-// - "Editar evidencia" NO aparece en incidentes recién creados o sin evidencia real
-// - "Ver evidencia" solo aparece cuando el incidente está cerrado Y tiene evidencia real
-// - En tareas independientes, "Editar evidencia" tampoco aparece si aún no existe evidencia real
-// ✅ FIX NUEVO AHORA:
-// - En tareas independientes sin responsable el botón principal dice "Asignar ingreso"
-// - Si ya tiene responsable, sigue diciendo "Editar tarea"
-// - Se mantiene el mismo modal CreateWorkshopTaskModal para asignar/editar
-// ✅ FIX NUEVO AHORA:
-// - Limpia correctamente nombres de archivos en OBSERVACIONES
-// - Si observaciones trae "archivo.jpg: /uploads/..." ya no muestra el nombre crudo
-// - Solo deja visible el texto real
-// - La foto sigue viéndose desde el botón "Ver foto"
-// ✅ FIX NUEVO AHORA:
-// - Si observaciones trae varias imágenes, el modal "Ver foto" muestra TODAS
-// - Ya no se queda solo con una
-// - Se muestra galería limpia dentro del modal
-// ✅ FIX NUEVO AHORA:
-// - "Editar evidencia" NO aparece en ingresos sin asignación
-// - primero debe existir responsable asignado
-// ✅ FIX NUEVO AHORA:
-// - las fotos/texto del ingreso NO cuentan como evidencia real
-// - "Editar evidencia" solo aparece cuando existe evidencia real de cierre/avance
-// ✅ NUEVO AHORA:
-// - diferencia visual clara entre INGRESO DE VEHÍCULO y TAREA DE TALLER
-// - muestra chip de tipo de registro y chip de empresa (GRÚAS THOMAS / INSPROTEL)
-// ✅ FIX FINAL:
-// - en tareas independientes cerradas se ven por separado:
-//   1) observaciones + fotos del vehículo
-//   2) evidencia final
-// - la evidencia final también se detecta desde observaciones cuando viene como "📸 Evidencia: /uploads/..."
-// - elimina líneas vacías tipo "📸 Foto vehículo:"
+// - Resumen superior con contadores
+// - Filtros rápidos por pestañas
+// - Orden por prioridad visual:
+//   1) ingresos sin asignar
+//   2) incidentes abiertos
+//   3) tareas pendientes
+//   4) historial
+// - Historial separado
+// - Mejor pensado para teléfono
+// ✅ Mantiene:
+// - Editar incidente
+// - Editar evidencia
+// - Asignar trabajo / ingreso
+// - Crear tarea
+// - Eliminar
+// - Ver evidencia
+// - Ver problema
+// - Ver fotos
+// - ConfirmModal
+// - Modales ya existentes
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -199,6 +142,7 @@ function prettyWorkerType(value) {
   if (v === "JEFE_TALLER") return "Jefe de taller";
   if (v === "ADQUISICIONES") return "Adquisiciones";
   if (v === "SUPERVISOR") return "Supervisor taller";
+  if (v === "SUPERVISOR_TERRENO") return "Supervisor terreno";
 
   return value || "Sin especialidad";
 }
@@ -626,6 +570,40 @@ function statusTone(status) {
   return "default";
 }
 
+function isIncidentClosed(status) {
+  const s = norm(status);
+  return s === "RESUELTO" || s === "CERRADO";
+}
+
+function isTaskHistoryStatus(status) {
+  const s = norm(status);
+  return s === "TERMINADA" || s === "CANCELADA";
+}
+
+function getSortDate(valueA, valueB) {
+  const da = new Date(valueA || 0).getTime();
+  const db = new Date(valueB || 0).getTime();
+  return db - da;
+}
+
+function isRecentDate(value, hours = 24) {
+  if (!value) return false;
+  const date = new Date(value).getTime();
+  if (Number.isNaN(date)) return false;
+  const diff = Date.now() - date;
+  return diff <= hours * 60 * 60 * 1000;
+}
+
+const FILTERS = [
+  { key: "all", label: "Todos" },
+  { key: "new", label: "Nuevos" },
+  { key: "unassigned", label: "Sin asignar" },
+  { key: "incidents", label: "Incidentes" },
+  { key: "ingresos", label: "Ingresos" },
+  { key: "tasks", label: "Tareas" },
+  { key: "history", label: "Historial" },
+];
+
 export default function Incidents() {
   const navigate = useNavigate();
 
@@ -634,6 +612,7 @@ export default function Incidents() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
+  const [activeFilter, setActiveFilter] = useState("all");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
@@ -1103,9 +1082,13 @@ export default function Incidents() {
   const filteredIncidents = useMemo(() => {
     const q = String(query || "").trim().toLowerCase();
 
-    if (!q) return items;
+    const sorted = [...items].sort((a, b) =>
+      getSortDate(a?.reportadoEn || a?.createdAt, b?.reportadoEn || b?.createdAt)
+    );
 
-    return items.filter((it) => {
+    if (!q) return sorted;
+
+    return sorted.filter((it) => {
       const latestTask = getLatestTask(it);
       const principal = getPrincipalAssignment(latestTask);
       const helpers = getHelperAssignments(latestTask);
@@ -1133,9 +1116,9 @@ export default function Incidents() {
   }, [items, query]);
 
   const filteredIndependentTasks = useMemo(() => {
-    const onlyIndependent = (Array.isArray(tasks) ? tasks : []).filter(
-      (task) => !task?.incidentId && !task?.incident
-    );
+    const onlyIndependent = (Array.isArray(tasks) ? tasks : [])
+      .filter((task) => !task?.incidentId && !task?.incident)
+      .sort((a, b) => getSortDate(a?.createdAt, b?.createdAt));
 
     const q = String(query || "").trim().toLowerCase();
 
@@ -1164,6 +1147,294 @@ export default function Incidents() {
     });
   }, [tasks, query]);
 
+  const incidentStats = useMemo(() => {
+    const open = filteredIncidents.filter((it) => !isIncidentClosed(it.status));
+    const history = filteredIncidents.filter((it) => isIncidentClosed(it.status));
+    const unassigned = open.filter((it) => !getPrincipalAssignment(getLatestTask(it)));
+    const recent = open.filter((it) => isRecentDate(it?.reportadoEn || it?.createdAt, 48));
+
+    return {
+      total: filteredIncidents.length,
+      open: open.length,
+      history: history.length,
+      unassigned: unassigned.length,
+      recent: recent.length,
+    };
+  }, [filteredIncidents]);
+
+  const taskStats = useMemo(() => {
+    const pending = filteredIndependentTasks.filter(
+      (task) => !isTaskHistoryStatus(task.status)
+    );
+    const history = filteredIndependentTasks.filter((task) =>
+      isTaskHistoryStatus(task.status)
+    );
+    const ingresos = pending.filter((task) => isVehicleIngresoTask(task));
+    const ingresosUnassigned = ingresos.filter(
+      (task) => !getPrincipalAssignment(task)
+    );
+    const taskPending = pending.filter((task) => !isVehicleIngresoTask(task));
+    const recent = pending.filter((task) => isRecentDate(task?.createdAt, 48));
+
+    return {
+      total: filteredIndependentTasks.length,
+      pending: pending.length,
+      history: history.length,
+      ingresos: ingresos.length,
+      ingresosUnassigned: ingresosUnassigned.length,
+      taskPending: taskPending.length,
+      recent: recent.length,
+    };
+  }, [filteredIndependentTasks]);
+
+  const dashboardCards = useMemo(
+    () => [
+      {
+        key: "inc-open",
+        label: "Incidentes abiertos",
+        value: incidentStats.open,
+        tone: "red",
+        onClick: () => setActiveFilter("incidents"),
+      },
+      {
+        key: "ing-unassigned",
+        label: "Ingresos sin asignar",
+        value: taskStats.ingresosUnassigned,
+        tone: "blue",
+        onClick: () => setActiveFilter("ingresos"),
+      },
+      {
+        key: "task-pending",
+        label: "Tareas pendientes",
+        value: taskStats.taskPending,
+        tone: "yellow",
+        onClick: () => setActiveFilter("tasks"),
+      },
+      {
+        key: "history",
+        label: "Historial",
+        value: incidentStats.history + taskStats.history,
+        tone: "green",
+        onClick: () => setActiveFilter("history"),
+      },
+    ],
+    [incidentStats, taskStats]
+  );
+
+  const incidentOpenList = useMemo(
+    () => filteredIncidents.filter((incident) => !isIncidentClosed(incident.status)),
+    [filteredIncidents]
+  );
+
+  const incidentHistoryList = useMemo(
+    () => filteredIncidents.filter((incident) => isIncidentClosed(incident.status)),
+    [filteredIncidents]
+  );
+
+  const independentTaskPendingList = useMemo(
+    () =>
+      filteredIndependentTasks.filter((task) => !isTaskHistoryStatus(task.status)),
+    [filteredIndependentTasks]
+  );
+
+  const independentTaskHistoryList = useMemo(
+    () =>
+      filteredIndependentTasks.filter((task) => isTaskHistoryStatus(task.status)),
+    [filteredIndependentTasks]
+  );
+
+  const ingresoPendingUnassignedList = useMemo(
+    () =>
+      independentTaskPendingList.filter(
+        (task) => isVehicleIngresoTask(task) && !getPrincipalAssignment(task)
+      ),
+    [independentTaskPendingList]
+  );
+
+  const openIncidentsPrioritizedList = useMemo(() => {
+    return [...incidentOpenList].sort((a, b) => {
+      const aPrincipal = !!getPrincipalAssignment(getLatestTask(a));
+      const bPrincipal = !!getPrincipalAssignment(getLatestTask(b));
+
+      if (aPrincipal !== bPrincipal) {
+        return aPrincipal ? 1 : -1;
+      }
+
+      return getSortDate(a?.reportadoEn || a?.createdAt, b?.reportadoEn || b?.createdAt);
+    });
+  }, [incidentOpenList]);
+
+  const pendingTaskPrioritizedList = useMemo(() => {
+    return [...independentTaskPendingList]
+      .filter((task) => !isVehicleIngresoTask(task))
+      .sort((a, b) => {
+        const aPrincipal = !!getPrincipalAssignment(a);
+        const bPrincipal = !!getPrincipalAssignment(b);
+
+        if (aPrincipal !== bPrincipal) {
+          return aPrincipal ? 1 : -1;
+        }
+
+        return getSortDate(a?.createdAt, b?.createdAt);
+      });
+  }, [independentTaskPendingList]);
+
+  const visibleSections = useMemo(() => {
+    switch (activeFilter) {
+      case "new":
+        return {
+          showSummary: true,
+          showIngresoUnassigned: true,
+          showIncidentsOpen: true,
+          showTasksPending: true,
+          showHistory: false,
+          onlyRecent: true,
+        };
+
+      case "unassigned":
+        return {
+          showSummary: true,
+          showIngresoUnassigned: true,
+          showIncidentsOpen: true,
+          showTasksPending: true,
+          showHistory: false,
+          onlyUnassigned: true,
+        };
+
+      case "incidents":
+        return {
+          showSummary: true,
+          showIngresoUnassigned: false,
+          showIncidentsOpen: true,
+          showTasksPending: false,
+          showHistory: true,
+        };
+
+      case "ingresos":
+        return {
+          showSummary: true,
+          showIngresoUnassigned: true,
+          showIncidentsOpen: false,
+          showTasksPending: false,
+          showHistory: true,
+          historyOnlyIngresos: true,
+        };
+
+      case "tasks":
+        return {
+          showSummary: true,
+          showIngresoUnassigned: false,
+          showIncidentsOpen: false,
+          showTasksPending: true,
+          showHistory: true,
+          historyOnlyTasks: true,
+        };
+
+      case "history":
+        return {
+          showSummary: true,
+          showIngresoUnassigned: false,
+          showIncidentsOpen: false,
+          showTasksPending: false,
+          showHistory: true,
+          historyOnly: true,
+        };
+
+      case "all":
+      default:
+        return {
+          showSummary: true,
+          showIngresoUnassigned: true,
+          showIncidentsOpen: true,
+          showTasksPending: true,
+          showHistory: true,
+        };
+    }
+  }, [activeFilter]);
+
+  const visibleIngresoUnassignedList = useMemo(() => {
+    let list = [...ingresoPendingUnassignedList];
+
+    if (visibleSections.onlyRecent) {
+      list = list.filter((task) => isRecentDate(task?.createdAt, 48));
+    }
+
+    return list;
+  }, [ingresoPendingUnassignedList, visibleSections.onlyRecent]);
+
+  const visibleOpenIncidentsList = useMemo(() => {
+    let list = [...openIncidentsPrioritizedList];
+
+    if (visibleSections.onlyRecent) {
+      list = list.filter((incident) =>
+        isRecentDate(incident?.reportadoEn || incident?.createdAt, 48)
+      );
+    }
+
+    if (visibleSections.onlyUnassigned) {
+      list = list.filter(
+        (incident) => !getPrincipalAssignment(getLatestTask(incident))
+      );
+    }
+
+    return list;
+  }, [
+    openIncidentsPrioritizedList,
+    visibleSections.onlyRecent,
+    visibleSections.onlyUnassigned,
+  ]);
+
+  const visiblePendingTasksList = useMemo(() => {
+    let list = [...pendingTaskPrioritizedList];
+
+    if (visibleSections.onlyRecent) {
+      list = list.filter((task) => isRecentDate(task?.createdAt, 48));
+    }
+
+    if (visibleSections.onlyUnassigned) {
+      list = list.filter((task) => !getPrincipalAssignment(task));
+    }
+
+    return list;
+  }, [
+    pendingTaskPrioritizedList,
+    visibleSections.onlyRecent,
+    visibleSections.onlyUnassigned,
+  ]);
+
+  const visibleIncidentHistoryList = useMemo(() => {
+    if (
+      visibleSections.historyOnlyIngresos ||
+      visibleSections.historyOnlyTasks
+    ) {
+      return [];
+    }
+
+    return incidentHistoryList;
+  }, [
+    incidentHistoryList,
+    visibleSections.historyOnlyIngresos,
+    visibleSections.historyOnlyTasks,
+  ]);
+
+  const visibleTaskHistoryList = useMemo(() => {
+    let list = [...independentTaskHistoryList];
+
+    if (visibleSections.historyOnlyIngresos) {
+      list = list.filter((task) => isVehicleIngresoTask(task));
+    }
+
+    if (visibleSections.historyOnlyTasks) {
+      list = list.filter((task) => !isVehicleIngresoTask(task));
+    }
+
+    return list;
+  }, [
+    independentTaskHistoryList,
+    visibleSections.historyOnlyIngresos,
+    visibleSections.historyOnlyTasks,
+  ]);
+
   return (
     <div className="page-shell">
       <div className="page-card inc-page-card">
@@ -1183,7 +1454,7 @@ export default function Incidents() {
 
             <p className="inc-page-subtitle">
               Registro de incidentes reportados por operación, seguimiento de
-              taller y tareas independientes.
+              taller, ingresos de vehículo y tareas independientes.
             </p>
           </div>
 
@@ -1212,13 +1483,44 @@ export default function Incidents() {
           </div>
         </div>
 
-        <input
-          type="text"
-          placeholder="Buscar por patente, descripción, responsable..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="inc-search"
-        />
+        <div className="inc-dashboard">
+          {dashboardCards.map((card) => (
+            <button
+              key={card.key}
+              type="button"
+              className={`inc-dashboard-card inc-dashboard-card--${card.tone}`}
+              onClick={card.onClick}
+            >
+              <span className="inc-dashboard-card__label">{card.label}</span>
+              <span className="inc-dashboard-card__value">{card.value}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="inc-toolbar">
+          <input
+            type="text"
+            placeholder="Buscar por patente, descripción, responsable..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="inc-search"
+          />
+
+          <div className="inc-filters">
+            {FILTERS.map((filter) => (
+              <button
+                key={filter.key}
+                type="button"
+                className={`inc-filter-chip ${
+                  activeFilter === filter.key ? "is-active" : ""
+                }`}
+                onClick={() => setActiveFilter(filter.key)}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {loading ? (
           <div className="empty-state">
@@ -1233,524 +1535,1282 @@ export default function Incidents() {
           </div>
         ) : (
           <div className="inc-sections">
-            <section className="inc-section">
-              <div className="inc-section__head">
-                <h2 className="inc-section__title">Incidentes reportados</h2>
-                <p className="inc-section__text">
-                  Reportes ingresados por operación y su seguimiento en taller.
-                </p>
-              </div>
-
-              {filteredIncidents.length === 0 ? (
-                <div className="empty-state">
-                  <div className="empty-state__icon">🧰</div>
-                  <div className="empty-state__title">No hay incidentes</div>
-                  <div className="empty-state__text">
-                    Cuando empiecen a reportarse, aparecerán aquí.
-                  </div>
+            {visibleSections.showIngresoUnassigned ? (
+              <section className="inc-section">
+                <div className="inc-section__head">
+                  <h2 className="inc-section__title">
+                    Ingresos nuevos / sin asignar
+                  </h2>
+                  <p className="inc-section__text">
+                    Aquí aparecen primero los ingresos de vehículo pendientes de
+                    asignación.
+                  </p>
                 </div>
-              ) : (
-                <div className="inc-list">
-                  {filteredIncidents.map((incident) => {
-                    const incidentStatus = norm(incident.status);
-                    const isClosed =
-                      incidentStatus === "RESUELTO" ||
-                      incidentStatus === "CERRADO";
 
-                    const latestTask = getLatestTask(incident);
-                    const principal = getPrincipalAssignment(latestTask);
-                    const helpers = getHelperAssignments(latestTask);
-                    const problemaRepuesto = String(
-                      latestTask?.problemaRepuesto || ""
-                    ).trim();
+                {visibleIngresoUnassignedList.length === 0 ? (
+                  <div className="empty-state empty-state--compact">
+                    <div className="empty-state__icon">🚚</div>
+                    <div className="empty-state__title">
+                      No hay ingresos sin asignar
+                    </div>
+                  </div>
+                ) : (
+                  <div className="inc-list">
+                    {visibleIngresoUnassignedList.map((task) => {
+                      const principal = getPrincipalAssignment(task);
+                      const helpers = getHelperAssignments(task);
+                      const isDeletingTask = deletingTaskId === task.id;
 
-                    const incidentEvidence = getIncidentEvidenceData(incident);
+                      const observations = getTaskObservations(task);
+                      const observationData =
+                        parseObservationWithImages(observations);
 
-                    const isClosing = closingId === incident.id;
-                    const isDeleting = deletingIncidentId === incident.id;
+                      const cleanText = observationData.cleanText || "";
 
-                    const canShowAssignAction =
-                      canManageIncidents && !isClosed;
+                      const ingresoImageUrls = (
+                        Array.isArray(observationData.ingresoImageUrls)
+                          ? observationData.ingresoImageUrls
+                          : []
+                      )
+                        .map((path) => buildUploadUrl(path))
+                        .filter(Boolean);
 
-                    const hasResponsibleAssigned = !!principal;
+                      const taskEvidence =
+                        getIndependentTaskEvidenceData(task);
 
-                    const canShowCloseAction =
-                      canManageIncidents && !isClosed && hasResponsibleAssigned;
+                      const hasRealTaskEvidence =
+                        !!String(taskEvidence?.text || "").trim() ||
+                        (Array.isArray(taskEvidence?.imageUrls) &&
+                          taskEvidence.imageUrls.length > 0);
 
-                    const hasRealEvidence =
-                      !!String(incidentEvidence?.text || "").trim() ||
-                      (Array.isArray(incidentEvidence?.imageUrls) &&
-                        incidentEvidence.imageUrls.length > 0);
+                      const canShowEditTaskEvidence =
+                        canEditWorkshopTask &&
+                        !!principal &&
+                        hasRealTaskEvidence;
 
-                    const canShowEditIncident = canManageIncidents;
-                    const canShowEditEvidence =
-                      canManageIncidents && hasRealEvidence;
-                    const canShowDeleteIncident = canManageIncidents;
-                    const canShowEvidenceButton = isClosed && hasRealEvidence;
+                      const problemaRepuesto = String(
+                        task?.problemaRepuesto || ""
+                      ).trim();
 
-                    const incidentPhotoUrl = buildUploadUrl(incident?.fotoUrl);
+                      const taskTypeLabel = getTaskTypeLabel(task);
+                      const taskTypeTone = getTaskTypeTone(task);
+                      const taskCompany = getTaskCompany(task);
 
-                    return (
-                      <article key={incident.id} className="inc-card">
-                        <div className="inc-card__top">
-                          <div className="inc-card__title">
-                            {getIncidentTitle(incident)}
-                          </div>
-
-                          <Pill tone={statusTone(incident.status)}>
-                            {incident.status || "—"}
-                          </Pill>
-                        </div>
-
-                        <div className="inc-card__desc">
-                          {incident.descripcion || "Sin descripción"}
-                        </div>
-
-                        <div className="inc-meta">
-                          <div className="inc-meta__item">
-                            <b>VEHÍCULO</b> {fmtVehicle(incident)}
-                          </div>
-
-                          <div className="inc-meta__item">
-                            <b>REPORTADO POR</b> {fmtReporter(incident)}
-                          </div>
-
-                          <div className="inc-meta__item">
-                            <b>UBICACIÓN</b> {incident.ubicacionTexto || "—"}
-                          </div>
-
-                          <div className="inc-meta__item">
-                            <b>FECHA</b>{" "}
-                            {fmtDate(incident.reportadoEn || incident.createdAt)}
-                          </div>
-
-                          {incident?.fotoUrl ? (
-                            <div className="inc-meta__item">
-                              <b>FOTO</b>
-                              <div style={{ marginTop: 8 }}>
-                                <button
-                                  type="button"
-                                  onClick={() => openImageModal([incidentPhotoUrl])}
-                                  className="btn-secondary inc-action-btn"
-                                >
-                                  📷 Ver foto
-                                </button>
+                      return (
+                        <article key={task.id} className="inc-card inc-card--priority">
+                          <div className="inc-card__top">
+                            <div style={{ display: "grid", gap: 8 }}>
+                              <div className="inc-card__title">
+                                {getTaskTitle(task)}
                               </div>
+
+                              <div className="inc-card__badges">
+                                <Pill tone={taskTypeTone}>{taskTypeLabel}</Pill>
+                                {taskCompany ? (
+                                  <Pill tone="default">{taskCompany}</Pill>
+                                ) : null}
+                                {isRecentDate(task?.createdAt, 48) ? (
+                                  <Pill tone="blue">Nuevo</Pill>
+                                ) : null}
+                                {!principal ? (
+                                  <Pill tone="yellow">Sin asignar</Pill>
+                                ) : null}
+                              </div>
+                            </div>
+
+                            <Pill tone={statusTone(task.status)}>
+                              {prettifyTaskStatus(task.status)}
+                            </Pill>
+                          </div>
+
+                          <div className="inc-card__desc">
+                            {getTaskSubtitle(task, false)}
+                          </div>
+
+                          {getTaskDescription(task) ? (
+                            <div className="inc-card__desc" style={{ marginTop: 6 }}>
+                              {getTaskDescription(task)}
                             </div>
                           ) : null}
 
-                          <div className="inc-meta__item">
-                            <b>RESPONSABLE</b>{" "}
-                            {principal ? fmtPerson(principal) : "Sin asignar"}
-                            {principal?.workerType ? (
-                              <span className="inc-muted-inline">
-                                {" "}
-                                · {prettyWorkerType(principal.workerType)}
-                              </span>
-                            ) : null}
-                          </div>
+                          <div className="inc-meta">
+                            <div className="inc-meta__item">
+                              <b>VEHÍCULO</b> {fmtVehicleFromTask(task)}
+                            </div>
 
-                          <div className="inc-meta__item">
-                            <b>APOYOS</b>{" "}
-                            {helpers.length > 0 ? (
-                              helpers.map((helper, idx) => (
-                                <span key={helper.id || `${helper.email}-${idx}`}>
-                                  {idx > 0 ? ", " : ""}
-                                  {fmtPerson(helper)}
-                                  {helper?.workerType ? (
-                                    <span className="inc-muted-inline">
-                                      {" "}
-                                      · {prettyWorkerType(helper.workerType)}
-                                    </span>
-                                  ) : null}
+                            <div className="inc-meta__item">
+                              <b>FECHA</b> {fmtDate(task.createdAt)}
+                            </div>
+
+                            <div className="inc-meta__item">
+                              <b>RESPONSABLE</b>{" "}
+                              {principal ? fmtPerson(principal) : "Sin asignar"}
+                              {principal?.workerType ? (
+                                <span className="inc-muted-inline">
+                                  {" "}
+                                  · {prettyWorkerType(principal.workerType)}
                                 </span>
-                              ))
-                            ) : (
-                              <span>Sin apoyos</span>
-                            )}
-                          </div>
-
-                          {canShowEvidenceButton ? (
-                            <div className="inc-meta__item">
-                              <b>EVIDENCIA</b>
-                              <div style={{ marginTop: 8 }}>
-                                <button
-                                  type="button"
-                                  onClick={() => openIncidentEvidenceModal(incident)}
-                                  className="btn-secondary inc-action-btn"
-                                >
-                                  Ver evidencia
-                                </button>
-                              </div>
-                            </div>
-                          ) : null}
-
-                          {problemaRepuesto ? (
-                            <div className="inc-meta__item">
-                              <b>PROBLEMAS CON EL REPUESTO</b>
-                              <div style={{ marginTop: 8 }}>
-                                <button
-                                  type="button"
-                                  onClick={() => openProblemModal(problemaRepuesto)}
-                                  className="btn-secondary inc-action-btn"
-                                >
-                                  Ver problema
-                                </button>
-                              </div>
-                            </div>
-                          ) : null}
-                        </div>
-
-                        {(canShowEditIncident ||
-                          canShowEditEvidence ||
-                          canShowAssignAction ||
-                          canShowCloseAction ||
-                          canShowDeleteIncident) && (
-                          <div className="inc-actions">
-                            {canShowEditIncident && (
-                              <button
-                                type="button"
-                                className="btn-primary inc-action-btn"
-                                onClick={() => openEditIncidentModal(incident)}
-                                disabled={isDeleting || isClosing}
-                              >
-                                Editar incidente
-                              </button>
-                            )}
-
-                            {canShowEditEvidence && (
-                              <button
-                                type="button"
-                                className="btn-secondary inc-action-btn"
-                                onClick={() => openEditEvidenceModal(incident)}
-                                disabled={isDeleting || isClosing}
-                              >
-                                Editar evidencia
-                              </button>
-                            )}
-
-                            {canShowAssignAction && (
-                              <button
-                                className="btn-primary inc-action-btn"
-                                onClick={() => openAssignModal(incident)}
-                                disabled={isDeleting}
-                              >
-                                {principal || helpers.length > 0
-                                  ? "Editar asignación"
-                                  : "Asignar trabajo"}
-                              </button>
-                            )}
-
-                            {canShowCloseAction && (
-                              <button
-                                className="btn-secondary inc-action-btn"
-                                onClick={() => openCloseIncidentModal(incident)}
-                                disabled={isClosing || isDeleting}
-                              >
-                                {isClosing
-                                  ? "Cerrando..."
-                                  : "Marcar como resuelto"}
-                              </button>
-                            )}
-
-                            {canShowDeleteIncident && (
-                              <button
-                                type="button"
-                                onClick={() => openDeleteIncidentModal(incident)}
-                                disabled={isDeleting || isClosing}
-                                className="inc-danger-btn inc-action-btn"
-                              >
-                                {isDeleting ? "Eliminando..." : "Eliminar"}
-                              </button>
-                            )}
-                          </div>
-                        )}
-
-                        {canManageIncidents && isClosed ? (
-                          <div className="inc-history-box">
-                            Este incidente ya está cerrado y se muestra solo como
-                            historial.
-                          </div>
-                        ) : null}
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
-            <section className="inc-section">
-              <div className="inc-section__head">
-                <h2 className="inc-section__title">
-                  Tareas de taller independientes
-                </h2>
-                <p className="inc-section__text">
-                  Trabajos creados directamente por taller, sin incidente
-                  relacionado.
-                </p>
-              </div>
-
-              {filteredIndependentTasks.length === 0 ? (
-                <div className="empty-state">
-                  <div className="empty-state__icon">🔧</div>
-                  <div className="empty-state__title">
-                    No hay tareas independientes
-                  </div>
-                  <div className="empty-state__text">
-                    Las tareas creadas manualmente desde taller aparecerán aquí.
-                  </div>
-                </div>
-              ) : (
-                <div className="inc-list">
-                  {filteredIndependentTasks.map((task) => {
-                    const principal = getPrincipalAssignment(task);
-                    const helpers = getHelperAssignments(task);
-                    const isDeletingTask = deletingTaskId === task.id;
-                    const taskStatus = norm(task?.status);
-                    const isHistoryTask =
-                      taskStatus === "TERMINADA" || taskStatus === "CANCELADA";
-
-                    const hasTaskResponsibleAssigned = !!principal;
-
-                    const canShowDeleteTask = canDeleteWorkshopTask;
-                    const canShowEditTask =
-                      hasTaskResponsibleAssigned
-                        ? canEditWorkshopTask
-                        : canAssignWorkshopTask;
-
-                    const observations = getTaskObservations(task);
-                    const observationData = parseObservationWithImages(observations);
-
-                    const cleanText = observationData.cleanText || "";
-
-                    const ingresoImageUrls = (
-                      Array.isArray(observationData.ingresoImageUrls)
-                        ? observationData.ingresoImageUrls
-                        : []
-                    )
-                      .map((path) => buildUploadUrl(path))
-                      .filter(Boolean);
-
-                    const taskEvidence = getIndependentTaskEvidenceData(task);
-
-                    const hasRealTaskEvidence =
-                      !!String(taskEvidence?.text || "").trim() ||
-                      (Array.isArray(taskEvidence?.imageUrls) &&
-                        taskEvidence.imageUrls.length > 0);
-
-                    const canShowEditTaskEvidence =
-                      canEditWorkshopTask &&
-                      hasTaskResponsibleAssigned &&
-                      hasRealTaskEvidence;
-
-                    const canShowTaskEvidenceButton =
-                      isHistoryTask && hasRealTaskEvidence;
-
-                    const problemaRepuesto = String(
-                      task?.problemaRepuesto || ""
-                    ).trim();
-
-                    const taskTypeLabel = getTaskTypeLabel(task);
-                    const taskTypeTone = getTaskTypeTone(task);
-                    const taskCompany = getTaskCompany(task);
-                    const taskSubtitle = getTaskSubtitle(task, isHistoryTask);
-
-                    return (
-                      <article key={task.id} className="inc-card">
-                        <div className="inc-card__top">
-                          <div style={{ display: "grid", gap: 8 }}>
-                            <div className="inc-card__title">
-                              {getTaskTitle(task)}
-                            </div>
-
-                            <div
-                              style={{
-                                display: "flex",
-                                flexWrap: "wrap",
-                                gap: 8,
-                                alignItems: "center",
-                              }}
-                            >
-                              <Pill tone={taskTypeTone}>{taskTypeLabel}</Pill>
-
-                              {taskCompany ? (
-                                <Pill tone="default">{taskCompany}</Pill>
                               ) : null}
                             </div>
-                          </div>
 
-                          <Pill tone={statusTone(task.status)}>
-                            {prettifyTaskStatus(task.status)}
-                          </Pill>
-                        </div>
+                            <div className="inc-meta__item">
+                              <b>APOYOS</b>{" "}
+                              {helpers.length > 0 ? (
+                                helpers.map((helper, idx) => (
+                                  <span
+                                    key={helper.id || `${helper.email}-${idx}`}
+                                  >
+                                    {idx > 0 ? ", " : ""}
+                                    {fmtPerson(helper)}
+                                    {helper?.workerType ? (
+                                      <span className="inc-muted-inline">
+                                        {" "}
+                                        · {prettyWorkerType(helper.workerType)}
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                ))
+                              ) : (
+                                <span>Sin apoyos</span>
+                              )}
+                            </div>
 
-                        <div className="inc-card__desc">{taskSubtitle}</div>
+                            {cleanText || ingresoImageUrls.length > 0 ? (
+                              <div className="inc-meta__item">
+                                <b>OBSERVACIONES</b>
 
-                        {getTaskDescription(task) ? (
-                          <div className="inc-card__desc" style={{ marginTop: 6 }}>
-                            {getTaskDescription(task)}
-                          </div>
-                        ) : null}
+                                <div
+                                  style={{
+                                    marginTop: 6,
+                                    whiteSpace: "pre-line",
+                                    lineHeight: 1.5,
+                                  }}
+                                >
+                                  {cleanText
+                                    ? cleanText
+                                        .replace(
+                                          /REQUIERE REPUESTO:/gi,
+                                          "\nRequiere repuesto:"
+                                        )
+                                        .replace(
+                                          /Vehículo ingresado por:/gi,
+                                          "Vehículo ingresado por:"
+                                        )
+                                        .replace(
+                                          /Vehiculo ingresado por:/gi,
+                                          "Vehículo ingresado por:"
+                                        )
+                                    : "—"}
+                                </div>
 
-                        <div className="inc-meta">
-                          <div className="inc-meta__item">
-                            <b>VEHÍCULO</b> {fmtVehicleFromTask(task)}
-                          </div>
+                                {ingresoImageUrls.length > 0 ? (
+                                  <div style={{ marginTop: 8 }}>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        openImageModal(ingresoImageUrls)
+                                      }
+                                      className="btn-secondary inc-action-btn"
+                                    >
+                                      📷 Ver fotos del vehículo
+                                    </button>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
 
-                          <div className="inc-meta__item">
-                            <b>FECHA</b> {fmtDate(task.createdAt)}
-                          </div>
-
-                          <div className="inc-meta__item">
-                            <b>RESPONSABLE</b>{" "}
-                            {principal ? fmtPerson(principal) : "Sin asignar"}
-                            {principal?.workerType ? (
-                              <span className="inc-muted-inline">
-                                {" "}
-                                · {prettyWorkerType(principal.workerType)}
-                              </span>
+                            {problemaRepuesto ? (
+                              <div className="inc-meta__item">
+                                <b>PROBLEMAS CON EL REPUESTO</b>
+                                <div style={{ marginTop: 8 }}>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openProblemModal(problemaRepuesto)
+                                    }
+                                    className="btn-secondary inc-action-btn"
+                                  >
+                                    Ver problema
+                                  </button>
+                                </div>
+                              </div>
                             ) : null}
                           </div>
 
-                          <div className="inc-meta__item">
-                            <b>APOYOS</b>{" "}
-                            {helpers.length > 0 ? (
-                              helpers.map((helper, idx) => (
-                                <span key={helper.id || `${helper.email}-${idx}`}>
-                                  {idx > 0 ? ", " : ""}
-                                  {fmtPerson(helper)}
-                                  {helper?.workerType ? (
-                                    <span className="inc-muted-inline">
-                                      {" "}
-                                      · {prettyWorkerType(helper.workerType)}
-                                    </span>
-                                  ) : null}
-                                </span>
-                              ))
-                            ) : (
-                              <span>Sin apoyos</span>
-                            )}
-                          </div>
-
-                          {cleanText || ingresoImageUrls.length > 0 ? (
-  <div className="inc-meta__item">
-    <b>OBSERVACIONES</b>
-
-    <div
-      style={{
-        marginTop: 6,
-        whiteSpace: "pre-line",
-        lineHeight: 1.5,
-      }}
-    >
-      {cleanText
-        ? cleanText
-            .replace(/REQUIERE REPUESTO:/gi, "\nRequiere repuesto:")
-            .replace(/Vehículo ingresado por:/gi, "Vehículo ingresado por:")
-            .replace(/Vehiculo ingresado por:/gi, "Vehículo ingresado por:")
-        : "—"}
-    </div>
-
-    {ingresoImageUrls.length > 0 ? (
-      <div style={{ marginTop: 8 }}>
-        <button
-          type="button"
-          onClick={() => openImageModal(ingresoImageUrls)}
-          className="btn-secondary inc-action-btn"
-        >
-          📷 Ver fotos del vehículo
-        </button>
-      </div>
-    ) : null}
-  </div>
-) : null}
-
-                          {canShowTaskEvidenceButton ? (
-                            <div className="inc-meta__item">
-                              <b>EVIDENCIA</b>
-                              <div style={{ marginTop: 8 }}>
+                          {(canAssignWorkshopTask ||
+                            canEditWorkshopTask ||
+                            canDeleteWorkshopTask ||
+                            canShowEditTaskEvidence) && (
+                            <div className="inc-actions">
+                              {canAssignWorkshopTask ? (
                                 <button
                                   type="button"
-                                  onClick={() => openTaskEvidenceModal(task)}
-                                  className="btn-secondary inc-action-btn"
+                                  onClick={() => openEditTaskModal(task)}
+                                  disabled={isDeletingTask}
+                                  className="btn-primary inc-action-btn"
                                 >
-                                  Ver evidencia
+                                  Asignar ingreso
                                 </button>
-                              </div>
-                            </div>
-                          ) : null}
+                              ) : null}
 
-                          {problemaRepuesto ? (
-                            <div className="inc-meta__item">
-                              <b>PROBLEMAS CON EL REPUESTO</b>
-                              <div style={{ marginTop: 8 }}>
+                              {canShowEditTaskEvidence ? (
                                 <button
                                   type="button"
-                                  onClick={() => openProblemModal(problemaRepuesto)}
+                                  onClick={() =>
+                                    openEditTaskEvidenceModal(task)
+                                  }
+                                  disabled={isDeletingTask}
                                   className="btn-secondary inc-action-btn"
                                 >
-                                  Ver problema
+                                  Editar evidencia
                                 </button>
-                              </div>
+                              ) : null}
+
+                              {canDeleteWorkshopTask ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openDeleteTaskModal(task)}
+                                  disabled={isDeletingTask}
+                                  className="inc-danger-btn inc-action-btn"
+                                >
+                                  {isDeletingTask ? "Eliminando..." : "Eliminar"}
+                                </button>
+                              ) : null}
                             </div>
-                          ) : null}
-                        </div>
+                          )}
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            ) : null}
 
-                        {canShowEditTask ||
-                        canShowEditTaskEvidence ||
-                        canShowDeleteTask ? (
-                          <div className="inc-actions">
-                            {canShowEditTask ? (
-                              <button
-                                type="button"
-                                onClick={() => openEditTaskModal(task)}
-                                disabled={isDeletingTask}
-                                className="btn-primary inc-action-btn"
-                              >
-                                {hasTaskResponsibleAssigned
-                                  ? isVehicleIngresoTask(task)
-                                    ? "Editar ingreso"
-                                    : "Editar tarea"
-                                  : "Asignar ingreso"}
-                              </button>
-                            ) : null}
-
-                            {canShowEditTaskEvidence ? (
-                              <button
-                                type="button"
-                                onClick={() => openEditTaskEvidenceModal(task)}
-                                disabled={isDeletingTask}
-                                className="btn-secondary inc-action-btn"
-                              >
-                                Editar evidencia
-                              </button>
-                            ) : null}
-
-                            {canShowDeleteTask ? (
-                              <button
-                                type="button"
-                                onClick={() => openDeleteTaskModal(task)}
-                                disabled={isDeletingTask}
-                                className="inc-danger-btn inc-action-btn"
-                              >
-                                {isDeletingTask ? "Eliminando..." : "Eliminar"}
-                              </button>
-                            ) : null}
-                          </div>
-                        ) : null}
-
-                        {canDeleteWorkshopTask && isHistoryTask ? (
-                          <div className="inc-history-box">
-                            Esta tarea ya está cerrada y se muestra solo como
-                            historial.
-                          </div>
-                        ) : null}
-                      </article>
-                    );
-                  })}
+            {visibleSections.showIncidentsOpen ? (
+              <section className="inc-section">
+                <div className="inc-section__head">
+                  <h2 className="inc-section__title">Incidentes abiertos</h2>
+                  <p className="inc-section__text">
+                    Incidentes activos priorizados por recencia y por asignación.
+                  </p>
                 </div>
-              )}
-            </section>
+
+                {visibleOpenIncidentsList.length === 0 ? (
+                  <div className="empty-state empty-state--compact">
+                    <div className="empty-state__icon">🧰</div>
+                    <div className="empty-state__title">
+                      No hay incidentes abiertos
+                    </div>
+                  </div>
+                ) : (
+                  <div className="inc-list">
+                    {visibleOpenIncidentsList.map((incident) => {
+                      const latestTask = getLatestTask(incident);
+                      const principal = getPrincipalAssignment(latestTask);
+                      const helpers = getHelperAssignments(latestTask);
+                      const problemaRepuesto = String(
+                        latestTask?.problemaRepuesto || ""
+                      ).trim();
+
+                      const incidentEvidence = getIncidentEvidenceData(incident);
+
+                      const isClosing = closingId === incident.id;
+                      const isDeleting = deletingIncidentId === incident.id;
+
+                      const hasResponsibleAssigned = !!principal;
+
+                      const canShowAssignAction = canManageIncidents;
+                      const canShowCloseAction =
+                        canManageIncidents && hasResponsibleAssigned;
+
+                      const hasRealEvidence =
+                        !!String(incidentEvidence?.text || "").trim() ||
+                        (Array.isArray(incidentEvidence?.imageUrls) &&
+                          incidentEvidence.imageUrls.length > 0);
+
+                      const canShowEditIncident = canManageIncidents;
+                      const canShowEditEvidence =
+                        canManageIncidents && hasRealEvidence;
+                      const canShowDeleteIncident = canManageIncidents;
+
+                      const incidentPhotoUrl = buildUploadUrl(incident?.fotoUrl);
+
+                      return (
+                        <article key={incident.id} className="inc-card">
+                          <div className="inc-card__top">
+                            <div style={{ display: "grid", gap: 8 }}>
+                              <div className="inc-card__title">
+                                {getIncidentTitle(incident)}
+                              </div>
+
+                              <div className="inc-card__badges">
+                                {isRecentDate(
+                                  incident?.reportadoEn || incident?.createdAt,
+                                  48
+                                ) ? (
+                                  <Pill tone="blue">Nuevo</Pill>
+                                ) : null}
+                                {!principal ? (
+                                  <Pill tone="yellow">Sin asignar</Pill>
+                                ) : null}
+                              </div>
+                            </div>
+
+                            <Pill tone={statusTone(incident.status)}>
+                              {incident.status || "—"}
+                            </Pill>
+                          </div>
+
+                          <div className="inc-card__desc">
+                            {incident.descripcion || "Sin descripción"}
+                          </div>
+
+                          <div className="inc-meta">
+                            <div className="inc-meta__item">
+                              <b>VEHÍCULO</b> {fmtVehicle(incident)}
+                            </div>
+
+                            <div className="inc-meta__item">
+                              <b>REPORTADO POR</b> {fmtReporter(incident)}
+                            </div>
+
+                            <div className="inc-meta__item">
+                              <b>UBICACIÓN</b> {incident.ubicacionTexto || "—"}
+                            </div>
+
+                            <div className="inc-meta__item">
+                              <b>FECHA</b>{" "}
+                              {fmtDate(
+                                incident.reportadoEn || incident.createdAt
+                              )}
+                            </div>
+
+                            {incident?.fotoUrl ? (
+                              <div className="inc-meta__item">
+                                <b>FOTO</b>
+                                <div style={{ marginTop: 8 }}>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openImageModal([incidentPhotoUrl])
+                                    }
+                                    className="btn-secondary inc-action-btn"
+                                  >
+                                    📷 Ver foto
+                                  </button>
+                                </div>
+                              </div>
+                            ) : null}
+
+                            <div className="inc-meta__item">
+                              <b>RESPONSABLE</b>{" "}
+                              {principal ? fmtPerson(principal) : "Sin asignar"}
+                              {principal?.workerType ? (
+                                <span className="inc-muted-inline">
+                                  {" "}
+                                  · {prettyWorkerType(principal.workerType)}
+                                </span>
+                              ) : null}
+                            </div>
+
+                            <div className="inc-meta__item">
+                              <b>APOYOS</b>{" "}
+                              {helpers.length > 0 ? (
+                                helpers.map((helper, idx) => (
+                                  <span
+                                    key={helper.id || `${helper.email}-${idx}`}
+                                  >
+                                    {idx > 0 ? ", " : ""}
+                                    {fmtPerson(helper)}
+                                    {helper?.workerType ? (
+                                      <span className="inc-muted-inline">
+                                        {" "}
+                                        · {prettyWorkerType(helper.workerType)}
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                ))
+                              ) : (
+                                <span>Sin apoyos</span>
+                              )}
+                            </div>
+
+                            {problemaRepuesto ? (
+                              <div className="inc-meta__item">
+                                <b>PROBLEMAS CON EL REPUESTO</b>
+                                <div style={{ marginTop: 8 }}>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openProblemModal(problemaRepuesto)
+                                    }
+                                    className="btn-secondary inc-action-btn"
+                                  >
+                                    Ver problema
+                                  </button>
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+
+                          {(canShowEditIncident ||
+                            canShowEditEvidence ||
+                            canShowAssignAction ||
+                            canShowCloseAction ||
+                            canShowDeleteIncident) && (
+                            <div className="inc-actions">
+                              {canShowEditIncident && (
+                                <button
+                                  type="button"
+                                  className="btn-primary inc-action-btn"
+                                  onClick={() => openEditIncidentModal(incident)}
+                                  disabled={isDeleting || isClosing}
+                                >
+                                  Editar incidente
+                                </button>
+                              )}
+
+                              {canShowEditEvidence && (
+                                <button
+                                  type="button"
+                                  className="btn-secondary inc-action-btn"
+                                  onClick={() =>
+                                    openEditEvidenceModal(incident)
+                                  }
+                                  disabled={isDeleting || isClosing}
+                                >
+                                  Editar evidencia
+                                </button>
+                              )}
+
+                              {canShowAssignAction && (
+                                <button
+                                  className="btn-primary inc-action-btn"
+                                  onClick={() => openAssignModal(incident)}
+                                  disabled={isDeleting}
+                                >
+                                  {principal || helpers.length > 0
+                                    ? "Editar asignación"
+                                    : "Asignar trabajo"}
+                                </button>
+                              )}
+
+                              {canShowCloseAction && (
+                                <button
+                                  className="btn-secondary inc-action-btn"
+                                  onClick={() =>
+                                    openCloseIncidentModal(incident)
+                                  }
+                                  disabled={isClosing || isDeleting}
+                                >
+                                  {isClosing
+                                    ? "Cerrando..."
+                                    : "Marcar como resuelto"}
+                                </button>
+                              )}
+
+                              {canShowDeleteIncident && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openDeleteIncidentModal(incident)
+                                  }
+                                  disabled={isDeleting || isClosing}
+                                  className="inc-danger-btn inc-action-btn"
+                                >
+                                  {isDeleting ? "Eliminando..." : "Eliminar"}
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            ) : null}
+
+            {visibleSections.showTasksPending ? (
+              <section className="inc-section">
+                <div className="inc-section__head">
+                  <h2 className="inc-section__title">Tareas pendientes</h2>
+                  <p className="inc-section__text">
+                    Tareas activas de taller independientes, ordenadas para que
+                    lo urgente se vea arriba.
+                  </p>
+                </div>
+
+                {visiblePendingTasksList.length === 0 ? (
+                  <div className="empty-state empty-state--compact">
+                    <div className="empty-state__icon">🔧</div>
+                    <div className="empty-state__title">
+                      No hay tareas pendientes
+                    </div>
+                  </div>
+                ) : (
+                  <div className="inc-list">
+                    {visiblePendingTasksList.map((task) => {
+                      const principal = getPrincipalAssignment(task);
+                      const helpers = getHelperAssignments(task);
+                      const isDeletingTask = deletingTaskId === task.id;
+
+                      const observations = getTaskObservations(task);
+                      const observationData =
+                        parseObservationWithImages(observations);
+
+                      const cleanText = observationData.cleanText || "";
+
+                      const ingresoImageUrls = (
+                        Array.isArray(observationData.ingresoImageUrls)
+                          ? observationData.ingresoImageUrls
+                          : []
+                      )
+                        .map((path) => buildUploadUrl(path))
+                        .filter(Boolean);
+
+                      const taskEvidence =
+                        getIndependentTaskEvidenceData(task);
+
+                      const hasRealTaskEvidence =
+                        !!String(taskEvidence?.text || "").trim() ||
+                        (Array.isArray(taskEvidence?.imageUrls) &&
+                          taskEvidence.imageUrls.length > 0);
+
+                      const canShowEditTaskEvidence =
+                        canEditWorkshopTask &&
+                        !!principal &&
+                        hasRealTaskEvidence;
+
+                      const problemaRepuesto = String(
+                        task?.problemaRepuesto || ""
+                      ).trim();
+
+                      const taskTypeLabel = getTaskTypeLabel(task);
+                      const taskTypeTone = getTaskTypeTone(task);
+                      const taskCompany = getTaskCompany(task);
+                      const taskSubtitle = getTaskSubtitle(task, false);
+
+                      return (
+                        <article key={task.id} className="inc-card">
+                          <div className="inc-card__top">
+                            <div style={{ display: "grid", gap: 8 }}>
+                              <div className="inc-card__title">
+                                {getTaskTitle(task)}
+                              </div>
+
+                              <div className="inc-card__badges">
+                                <Pill tone={taskTypeTone}>{taskTypeLabel}</Pill>
+
+                                {taskCompany ? (
+                                  <Pill tone="default">{taskCompany}</Pill>
+                                ) : null}
+
+                                {isRecentDate(task?.createdAt, 48) ? (
+                                  <Pill tone="blue">Nuevo</Pill>
+                                ) : null}
+
+                                {!principal ? (
+                                  <Pill tone="yellow">Sin asignar</Pill>
+                                ) : null}
+                              </div>
+                            </div>
+
+                            <Pill tone={statusTone(task.status)}>
+                              {prettifyTaskStatus(task.status)}
+                            </Pill>
+                          </div>
+
+                          <div className="inc-card__desc">{taskSubtitle}</div>
+
+                          {getTaskDescription(task) ? (
+                            <div className="inc-card__desc" style={{ marginTop: 6 }}>
+                              {getTaskDescription(task)}
+                            </div>
+                          ) : null}
+
+                          <div className="inc-meta">
+                            <div className="inc-meta__item">
+                              <b>VEHÍCULO</b> {fmtVehicleFromTask(task)}
+                            </div>
+
+                            <div className="inc-meta__item">
+                              <b>FECHA</b> {fmtDate(task.createdAt)}
+                            </div>
+
+                            <div className="inc-meta__item">
+                              <b>RESPONSABLE</b>{" "}
+                              {principal ? fmtPerson(principal) : "Sin asignar"}
+                              {principal?.workerType ? (
+                                <span className="inc-muted-inline">
+                                  {" "}
+                                  · {prettyWorkerType(principal.workerType)}
+                                </span>
+                              ) : null}
+                            </div>
+
+                            <div className="inc-meta__item">
+                              <b>APOYOS</b>{" "}
+                              {helpers.length > 0 ? (
+                                helpers.map((helper, idx) => (
+                                  <span
+                                    key={helper.id || `${helper.email}-${idx}`}
+                                  >
+                                    {idx > 0 ? ", " : ""}
+                                    {fmtPerson(helper)}
+                                    {helper?.workerType ? (
+                                      <span className="inc-muted-inline">
+                                        {" "}
+                                        · {prettyWorkerType(helper.workerType)}
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                ))
+                              ) : (
+                                <span>Sin apoyos</span>
+                              )}
+                            </div>
+
+                            {cleanText || ingresoImageUrls.length > 0 ? (
+                              <div className="inc-meta__item">
+                                <b>OBSERVACIONES</b>
+
+                                <div
+                                  style={{
+                                    marginTop: 6,
+                                    whiteSpace: "pre-line",
+                                    lineHeight: 1.5,
+                                  }}
+                                >
+                                  {cleanText
+                                    ? cleanText
+                                        .replace(
+                                          /REQUIERE REPUESTO:/gi,
+                                          "\nRequiere repuesto:"
+                                        )
+                                        .replace(
+                                          /Vehículo ingresado por:/gi,
+                                          "Vehículo ingresado por:"
+                                        )
+                                        .replace(
+                                          /Vehiculo ingresado por:/gi,
+                                          "Vehículo ingresado por:"
+                                        )
+                                    : "—"}
+                                </div>
+
+                                {ingresoImageUrls.length > 0 ? (
+                                  <div style={{ marginTop: 8 }}>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        openImageModal(ingresoImageUrls)
+                                      }
+                                      className="btn-secondary inc-action-btn"
+                                    >
+                                      📷 Ver fotos del vehículo
+                                    </button>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
+
+                            {problemaRepuesto ? (
+                              <div className="inc-meta__item">
+                                <b>PROBLEMAS CON EL REPUESTO</b>
+                                <div style={{ marginTop: 8 }}>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openProblemModal(problemaRepuesto)
+                                    }
+                                    className="btn-secondary inc-action-btn"
+                                  >
+                                    Ver problema
+                                  </button>
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+
+                          {canShowEditTaskEvidence || canEditWorkshopTask || canDeleteWorkshopTask ? (
+                            <div className="inc-actions">
+                              {canEditWorkshopTask ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openEditTaskModal(task)}
+                                  disabled={isDeletingTask}
+                                  className="btn-primary inc-action-btn"
+                                >
+                                  {principal
+                                    ? isVehicleIngresoTask(task)
+                                      ? "Editar ingreso"
+                                      : "Editar tarea"
+                                    : "Asignar ingreso"}
+                                </button>
+                              ) : null}
+
+                              {canShowEditTaskEvidence ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openEditTaskEvidenceModal(task)
+                                  }
+                                  disabled={isDeletingTask}
+                                  className="btn-secondary inc-action-btn"
+                                >
+                                  Editar evidencia
+                                </button>
+                              ) : null}
+
+                              {canDeleteWorkshopTask ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openDeleteTaskModal(task)}
+                                  disabled={isDeletingTask}
+                                  className="inc-danger-btn inc-action-btn"
+                                >
+                                  {isDeletingTask ? "Eliminando..." : "Eliminar"}
+                                </button>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            ) : null}
+
+            {visibleSections.showHistory ? (
+              <section className="inc-section">
+                <div className="inc-section__head">
+                  <h2 className="inc-section__title">Historial</h2>
+                  <p className="inc-section__text">
+                    Registros cerrados, resueltos, terminados o cancelados.
+                  </p>
+                </div>
+
+                {visibleIncidentHistoryList.length === 0 &&
+                visibleTaskHistoryList.length === 0 ? (
+                  <div className="empty-state empty-state--compact">
+                    <div className="empty-state__icon">🗂️</div>
+                    <div className="empty-state__title">
+                      No hay historial para mostrar
+                    </div>
+                  </div>
+                ) : (
+                  <div className="inc-history-layout">
+                    {visibleIncidentHistoryList.length > 0 ? (
+                      <div className="inc-history-group">
+                        <div className="inc-history-group__title">
+                          Incidentes cerrados
+                        </div>
+
+                        <div className="inc-list">
+                          {visibleIncidentHistoryList.map((incident) => {
+                            const latestTask = getLatestTask(incident);
+                            const principal = getPrincipalAssignment(latestTask);
+                            const helpers = getHelperAssignments(latestTask);
+                            const problemaRepuesto = String(
+                              latestTask?.problemaRepuesto || ""
+                            ).trim();
+
+                            const incidentEvidence =
+                              getIncidentEvidenceData(incident);
+
+                            const hasRealEvidence =
+                              !!String(incidentEvidence?.text || "").trim() ||
+                              (Array.isArray(incidentEvidence?.imageUrls) &&
+                                incidentEvidence.imageUrls.length > 0);
+
+                            const canShowEditIncident = canManageIncidents;
+                            const canShowEditEvidence =
+                              canManageIncidents && hasRealEvidence;
+                            const canShowDeleteIncident = canManageIncidents;
+                            const canShowEvidenceButton = hasRealEvidence;
+
+                            const isDeleting = deletingIncidentId === incident.id;
+                            const incidentPhotoUrl = buildUploadUrl(
+                              incident?.fotoUrl
+                            );
+
+                            return (
+                              <article key={incident.id} className="inc-card inc-card--history">
+                                <div className="inc-card__top">
+                                  <div style={{ display: "grid", gap: 8 }}>
+                                    <div className="inc-card__title">
+                                      {getIncidentTitle(incident)}
+                                    </div>
+
+                                    <div className="inc-card__badges">
+                                      <Pill tone="green">Historial</Pill>
+                                    </div>
+                                  </div>
+
+                                  <Pill tone={statusTone(incident.status)}>
+                                    {incident.status || "—"}
+                                  </Pill>
+                                </div>
+
+                                <div className="inc-card__desc">
+                                  {incident.descripcion || "Sin descripción"}
+                                </div>
+
+                                <div className="inc-meta">
+                                  <div className="inc-meta__item">
+                                    <b>VEHÍCULO</b> {fmtVehicle(incident)}
+                                  </div>
+
+                                  <div className="inc-meta__item">
+                                    <b>REPORTADO POR</b> {fmtReporter(incident)}
+                                  </div>
+
+                                  <div className="inc-meta__item">
+                                    <b>UBICACIÓN</b>{" "}
+                                    {incident.ubicacionTexto || "—"}
+                                  </div>
+
+                                  <div className="inc-meta__item">
+                                    <b>FECHA</b>{" "}
+                                    {fmtDate(
+                                      incident.reportadoEn || incident.createdAt
+                                    )}
+                                  </div>
+
+                                  {incident?.fotoUrl ? (
+                                    <div className="inc-meta__item">
+                                      <b>FOTO</b>
+                                      <div style={{ marginTop: 8 }}>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            openImageModal([incidentPhotoUrl])
+                                          }
+                                          className="btn-secondary inc-action-btn"
+                                        >
+                                          📷 Ver foto
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : null}
+
+                                  <div className="inc-meta__item">
+                                    <b>RESPONSABLE</b>{" "}
+                                    {principal
+                                      ? fmtPerson(principal)
+                                      : "Sin asignar"}
+                                    {principal?.workerType ? (
+                                      <span className="inc-muted-inline">
+                                        {" "}
+                                        ·{" "}
+                                        {prettyWorkerType(principal.workerType)}
+                                      </span>
+                                    ) : null}
+                                  </div>
+
+                                  <div className="inc-meta__item">
+                                    <b>APOYOS</b>{" "}
+                                    {helpers.length > 0 ? (
+                                      helpers.map((helper, idx) => (
+                                        <span
+                                          key={
+                                            helper.id ||
+                                            `${helper.email}-${idx}`
+                                          }
+                                        >
+                                          {idx > 0 ? ", " : ""}
+                                          {fmtPerson(helper)}
+                                          {helper?.workerType ? (
+                                            <span className="inc-muted-inline">
+                                              {" "}
+                                              ·{" "}
+                                              {prettyWorkerType(
+                                                helper.workerType
+                                              )}
+                                            </span>
+                                          ) : null}
+                                        </span>
+                                      ))
+                                    ) : (
+                                      <span>Sin apoyos</span>
+                                    )}
+                                  </div>
+
+                                  {canShowEvidenceButton ? (
+                                    <div className="inc-meta__item">
+                                      <b>EVIDENCIA</b>
+                                      <div style={{ marginTop: 8 }}>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            openIncidentEvidenceModal(incident)
+                                          }
+                                          className="btn-secondary inc-action-btn"
+                                        >
+                                          Ver evidencia
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : null}
+
+                                  {problemaRepuesto ? (
+                                    <div className="inc-meta__item">
+                                      <b>PROBLEMAS CON EL REPUESTO</b>
+                                      <div style={{ marginTop: 8 }}>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            openProblemModal(problemaRepuesto)
+                                          }
+                                          className="btn-secondary inc-action-btn"
+                                        >
+                                          Ver problema
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : null}
+                                </div>
+
+                                {(canShowEditIncident ||
+                                  canShowEditEvidence ||
+                                  canShowDeleteIncident) && (
+                                  <div className="inc-actions">
+                                    {canShowEditIncident ? (
+                                      <button
+                                        type="button"
+                                        className="btn-primary inc-action-btn"
+                                        onClick={() =>
+                                          openEditIncidentModal(incident)
+                                        }
+                                        disabled={isDeleting}
+                                      >
+                                        Editar incidente
+                                      </button>
+                                    ) : null}
+
+                                    {canShowEditEvidence ? (
+                                      <button
+                                        type="button"
+                                        className="btn-secondary inc-action-btn"
+                                        onClick={() =>
+                                          openEditEvidenceModal(incident)
+                                        }
+                                        disabled={isDeleting}
+                                      >
+                                        Editar evidencia
+                                      </button>
+                                    ) : null}
+
+                                    {canShowDeleteIncident ? (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          openDeleteIncidentModal(incident)
+                                        }
+                                        disabled={isDeleting}
+                                        className="inc-danger-btn inc-action-btn"
+                                      >
+                                        {isDeleting
+                                          ? "Eliminando..."
+                                          : "Eliminar"}
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                )}
+
+                                <div className="inc-history-box">
+                                  Este incidente ya está cerrado y se muestra solo
+                                  como historial.
+                                </div>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {visibleTaskHistoryList.length > 0 ? (
+                      <div className="inc-history-group">
+                        <div className="inc-history-group__title">
+                          Tareas / ingresos cerrados
+                        </div>
+
+                        <div className="inc-list">
+                          {visibleTaskHistoryList.map((task) => {
+                            const principal = getPrincipalAssignment(task);
+                            const helpers = getHelperAssignments(task);
+                            const isDeletingTask = deletingTaskId === task.id;
+
+                            const observations = getTaskObservations(task);
+                            const observationData =
+                              parseObservationWithImages(observations);
+
+                            const cleanText = observationData.cleanText || "";
+
+                            const ingresoImageUrls = (
+                              Array.isArray(observationData.ingresoImageUrls)
+                                ? observationData.ingresoImageUrls
+                                : []
+                            )
+                              .map((path) => buildUploadUrl(path))
+                              .filter(Boolean);
+
+                            const taskEvidence =
+                              getIndependentTaskEvidenceData(task);
+
+                            const hasRealTaskEvidence =
+                              !!String(taskEvidence?.text || "").trim() ||
+                              (Array.isArray(taskEvidence?.imageUrls) &&
+                                taskEvidence.imageUrls.length > 0);
+
+                            const canShowEditTaskEvidence =
+                              canEditWorkshopTask &&
+                              !!principal &&
+                              hasRealTaskEvidence;
+
+                            const canShowTaskEvidenceButton =
+                              hasRealTaskEvidence;
+
+                            const problemaRepuesto = String(
+                              task?.problemaRepuesto || ""
+                            ).trim();
+
+                            const taskTypeLabel = getTaskTypeLabel(task);
+                            const taskTypeTone = getTaskTypeTone(task);
+                            const taskCompany = getTaskCompany(task);
+
+                            return (
+                              <article key={task.id} className="inc-card inc-card--history">
+                                <div className="inc-card__top">
+                                  <div style={{ display: "grid", gap: 8 }}>
+                                    <div className="inc-card__title">
+                                      {getTaskTitle(task)}
+                                    </div>
+
+                                    <div className="inc-card__badges">
+                                      <Pill tone={taskTypeTone}>
+                                        {taskTypeLabel}
+                                      </Pill>
+
+                                      {taskCompany ? (
+                                        <Pill tone="default">
+                                          {taskCompany}
+                                        </Pill>
+                                      ) : null}
+
+                                      <Pill tone="green">Historial</Pill>
+                                    </div>
+                                  </div>
+
+                                  <Pill tone={statusTone(task.status)}>
+                                    {prettifyTaskStatus(task.status)}
+                                  </Pill>
+                                </div>
+
+                                <div className="inc-card__desc">
+                                  {getTaskSubtitle(task, true)}
+                                </div>
+
+                                {getTaskDescription(task) ? (
+                                  <div
+                                    className="inc-card__desc"
+                                    style={{ marginTop: 6 }}
+                                  >
+                                    {getTaskDescription(task)}
+                                  </div>
+                                ) : null}
+
+                                <div className="inc-meta">
+                                  <div className="inc-meta__item">
+                                    <b>VEHÍCULO</b> {fmtVehicleFromTask(task)}
+                                  </div>
+
+                                  <div className="inc-meta__item">
+                                    <b>FECHA</b> {fmtDate(task.createdAt)}
+                                  </div>
+
+                                  <div className="inc-meta__item">
+                                    <b>RESPONSABLE</b>{" "}
+                                    {principal
+                                      ? fmtPerson(principal)
+                                      : "Sin asignar"}
+                                    {principal?.workerType ? (
+                                      <span className="inc-muted-inline">
+                                        {" "}
+                                        ·{" "}
+                                        {prettyWorkerType(principal.workerType)}
+                                      </span>
+                                    ) : null}
+                                  </div>
+
+                                  <div className="inc-meta__item">
+                                    <b>APOYOS</b>{" "}
+                                    {helpers.length > 0 ? (
+                                      helpers.map((helper, idx) => (
+                                        <span
+                                          key={
+                                            helper.id ||
+                                            `${helper.email}-${idx}`
+                                          }
+                                        >
+                                          {idx > 0 ? ", " : ""}
+                                          {fmtPerson(helper)}
+                                          {helper?.workerType ? (
+                                            <span className="inc-muted-inline">
+                                              {" "}
+                                              ·{" "}
+                                              {prettyWorkerType(
+                                                helper.workerType
+                                              )}
+                                            </span>
+                                          ) : null}
+                                        </span>
+                                      ))
+                                    ) : (
+                                      <span>Sin apoyos</span>
+                                    )}
+                                  </div>
+
+                                  {cleanText || ingresoImageUrls.length > 0 ? (
+                                    <div className="inc-meta__item">
+                                      <b>OBSERVACIONES</b>
+
+                                      <div
+                                        style={{
+                                          marginTop: 6,
+                                          whiteSpace: "pre-line",
+                                          lineHeight: 1.5,
+                                        }}
+                                      >
+                                        {cleanText
+                                          ? cleanText
+                                              .replace(
+                                                /REQUIERE REPUESTO:/gi,
+                                                "\nRequiere repuesto:"
+                                              )
+                                              .replace(
+                                                /Vehículo ingresado por:/gi,
+                                                "Vehículo ingresado por:"
+                                              )
+                                              .replace(
+                                                /Vehiculo ingresado por:/gi,
+                                                "Vehículo ingresado por:"
+                                              )
+                                          : "—"}
+                                      </div>
+
+                                      {ingresoImageUrls.length > 0 ? (
+                                        <div style={{ marginTop: 8 }}>
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              openImageModal(ingresoImageUrls)
+                                            }
+                                            className="btn-secondary inc-action-btn"
+                                          >
+                                            📷 Ver fotos del vehículo
+                                          </button>
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  ) : null}
+
+                                  {canShowTaskEvidenceButton ? (
+                                    <div className="inc-meta__item">
+                                      <b>EVIDENCIA</b>
+                                      <div style={{ marginTop: 8 }}>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            openTaskEvidenceModal(task)
+                                          }
+                                          className="btn-secondary inc-action-btn"
+                                        >
+                                          Ver evidencia
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : null}
+
+                                  {problemaRepuesto ? (
+                                    <div className="inc-meta__item">
+                                      <b>PROBLEMAS CON EL REPUESTO</b>
+                                      <div style={{ marginTop: 8 }}>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            openProblemModal(problemaRepuesto)
+                                          }
+                                          className="btn-secondary inc-action-btn"
+                                        >
+                                          Ver problema
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : null}
+                                </div>
+
+                                {canEditWorkshopTask ||
+                                canShowEditTaskEvidence ||
+                                canDeleteWorkshopTask ? (
+                                  <div className="inc-actions">
+                                    {canEditWorkshopTask ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => openEditTaskModal(task)}
+                                        disabled={isDeletingTask}
+                                        className="btn-primary inc-action-btn"
+                                      >
+                                        {isVehicleIngresoTask(task)
+                                          ? "Editar ingreso"
+                                          : "Editar tarea"}
+                                      </button>
+                                    ) : null}
+
+                                    {canShowEditTaskEvidence ? (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          openEditTaskEvidenceModal(task)
+                                        }
+                                        disabled={isDeletingTask}
+                                        className="btn-secondary inc-action-btn"
+                                      >
+                                        Editar evidencia
+                                      </button>
+                                    ) : null}
+
+                                    {canDeleteWorkshopTask ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => openDeleteTaskModal(task)}
+                                        disabled={isDeletingTask}
+                                        className="inc-danger-btn inc-action-btn"
+                                      >
+                                        {isDeletingTask
+                                          ? "Eliminando..."
+                                          : "Eliminar"}
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                ) : null}
+
+                                <div className="inc-history-box">
+                                  Esta tarea ya está cerrada y se muestra solo
+                                  como historial.
+                                </div>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </section>
+            ) : null}
           </div>
         )}
       </div>

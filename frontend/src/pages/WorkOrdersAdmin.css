@@ -3,6 +3,11 @@
    ✅ CSS propio de la vista WorkOrdersAdmin
    ✅ Mantiene el look del sistema
    ✅ Sin romper Admin.css
+   ✅ FIX NUEVO:
+   - export grid más flexible
+   - cliente / operador / rigger no se cortan
+   - mejor layout del bloque exportar
+   - autocomplete más limpio y consistente
    ========================================= */
 
 .woa-page {
@@ -55,16 +60,21 @@
 
 .woa-export-box {
   padding: 14px;
-  background: linear-gradient(180deg, rgba(245, 184, 0, 0.06), rgba(245, 184, 0, 0.02));
+  background: linear-gradient(
+    180deg,
+    rgba(245, 184, 0, 0.06),
+    rgba(245, 184, 0, 0.02)
+  );
   border-top: 1px solid rgba(0, 0, 0, 0.04);
   border-radius: 0 0 14px 14px;
+  overflow: visible;
 }
 
 .woa-export-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-  align-items: end;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  align-items: start;
 }
 
 .woa-field {
@@ -78,13 +88,34 @@
   margin-bottom: 6px;
 }
 
+.woa-field .gt-input,
+.woa-field .gt-select,
+.woa-autocomplete-input-wrap,
+.woa-autocomplete-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
 .woa-export-action {
   display: flex;
-  align-items: end;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.woa-export-action .btn {
+  min-width: 210px;
+  height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .woa-zip-btn {
-  width: 100%;
+  min-width: 210px;
   height: 46px;
   display: inline-flex;
   align-items: center;
@@ -105,6 +136,7 @@
 
 .woa-autocomplete {
   position: relative;
+  min-width: 0;
 }
 
 .woa-autocomplete-input-wrap {
@@ -113,6 +145,7 @@
 
 .woa-autocomplete-input {
   padding-right: 38px !important;
+  min-width: 0;
 }
 
 .woa-autocomplete-clear {
@@ -130,6 +163,7 @@
   height: 24px;
   border-radius: 999px;
   line-height: 1;
+  z-index: 2;
 }
 
 .woa-autocomplete-clear:hover {
@@ -142,7 +176,7 @@
   top: calc(100% + 6px);
   left: 0;
   right: 0;
-  z-index: 30;
+  z-index: 40;
   border: 1px solid rgba(15, 23, 42, 0.12);
   border-radius: 14px;
   background: #fff;
@@ -211,6 +245,16 @@
    Responsive
    ========================= */
 
+@media (max-width: 1400px) {
+  .woa-export-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .woa-export-action {
+    grid-column: 1 / -1;
+  }
+}
+
 @media (max-width: 1280px) {
   .woa-export-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -218,11 +262,6 @@
 
   .woa-export-action {
     grid-column: 1 / -1;
-  }
-
-  .woa-zip-btn {
-    width: auto;
-    min-width: 220px;
   }
 }
 
@@ -246,9 +285,16 @@
     gap: 10px;
   }
 
-  .woa-export-action,
+  .woa-export-action {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .woa-export-action .btn,
   .woa-zip-btn {
     width: 100%;
+    min-width: 0;
   }
 
   .woa-list-actions {

@@ -39,11 +39,11 @@
 //
 // ✅ NUEVO (EXPORT MASIVO):
 // - exportPdfZipByFilters()
-// - filtra OT por fecha, operador y rigger
+// - filtra OT por fecha, operador, rigger y cliente
 // - ✅ SOLO exporta OTs APROBADAS
 // - ordena por fecha ASC
 // - genera ZIP con PDFs individuales
-// - nombre de ZIP automático
+// - nombre de ZIP automático incluyendo cliente
 //
 // ✅ NUEVO (EXCEL):
 // - exportApprovedExcel()
@@ -72,6 +72,12 @@
 // ✅ FIX EXCEL FECHA:
 // - FECHA usa diasProgramados[0] si existe
 // - si no existe, fallback a createdAt
+//
+// ✅ NUEVO AHORA (ZIP CLIENTE):
+// - exportPdfZipByFilters ahora acepta clientName
+// - filtra por cliente usando workOrder.cliente y client.nombre
+// - el nombre del ZIP también incluye el cliente
+// - el rango de fecha usa diasProgramados cuando corresponde
 
 import {
   BadRequestException,
@@ -579,12 +585,14 @@ export class WorkOrdersService {
     operatorId?: string | null;
     operatorName?: string | null;
     riggerName?: string | null;
+    clientName?: string | null;
   }) {
-    const parts: string[] = ["OT"];
+    const parts: string[] = ["OT_APROBADAS"];
 
     const operatorId = cleanStr(params.operatorId);
     const operatorName = cleanStr(params.operatorName);
     const riggerName = cleanStr(params.riggerName);
+    const clientName = cleanStr(params.clientName);
     const from = cleanStr(params.from);
     const to = cleanStr(params.to);
 
@@ -601,6 +609,7 @@ export class WorkOrdersService {
         cleanStr(operator?.email);
     }
 
+    if (clientName) parts.push(safeFilePart(clientName));
     if (operatorLabel) parts.push("OPERADOR", safeFilePart(operatorLabel));
     if (riggerName) parts.push("RIGGER", safeFilePart(riggerName));
 
@@ -1095,6 +1104,7 @@ export class WorkOrdersService {
       operatorId?: string;
       operatorName?: string;
       riggerName?: string;
+      clientName?: string;
     },
     actor?: any
   ): Promise<{ buffer: Buffer; filename: string; total: number }> {
@@ -1107,22 +1117,22 @@ export class WorkOrdersService {
     const operatorId = cleanStr(filters?.operatorId);
     const operatorName = cleanStr(filters?.operatorName);
     const riggerName = cleanStr(filters?.riggerName);
+    const clientName = cleanStr(filters?.clientName);
 
-    const createdAt: any = {};
-    const gte = this.parseStartDate(from);
-    const lt = this.parseEndExclusiveDate(to);
+    const fromIso = from ? this.parseISODateOnly(from) : null;
+    const toIso = to ? this.parseISODateOnly(to) : null;
 
-    if (from && !gte) {
+    if (from && !fromIso) {
       throw new BadRequestException("Fecha desde inválida. Usa YYYY-MM-DD.");
     }
-    if (to && !lt) {
+    if (to && !toIso) {
       throw new BadRequestException("Fecha hasta inválida. Usa YYYY-MM-DD.");
     }
 
-    if (gte) createdAt.gte = gte;
-    if (lt) createdAt.lt = lt;
+    const rangeFrom = fromIso || toIso;
+    const rangeTo = toIso || fromIso;
 
-    if (gte && lt && gte >= lt) {
+    if (rangeFrom && rangeTo && rangeFrom > rangeTo) {
       throw new BadRequestException("El rango de fechas es inválido.");
     }
 
@@ -1134,8 +1144,11 @@ export class WorkOrdersService {
       { status: WorkOrderStatus.APROBADA },
     ];
 
-    if (Object.keys(createdAt).length > 0) {
-      andWhere.push({ createdAt });
+    if (rangeFrom && rangeTo) {
+      const days = this.listIsoDaysBetween(rangeFrom, rangeTo);
+      andWhere.push({
+        diasProgramados: { hasSome: days },
+      });
     }
 
     if (operatorId) {
@@ -1159,6 +1172,21 @@ export class WorkOrdersService {
       });
     }
 
+    if (clientName) {
+      andWhere.push({
+        OR: [
+          { cliente: { contains: clientName, mode: "insensitive" } },
+          {
+            client: {
+              is: {
+                nombre: { contains: clientName, mode: "insensitive" },
+              },
+            },
+          },
+        ],
+      });
+    }
+
     const items = await this.prisma.workOrder.findMany({
       where: {
         AND: andWhere,
@@ -1168,11 +1196,15 @@ export class WorkOrdersService {
         id: true,
         createdAt: true,
         status: true,
+        cliente: true,
+        diasProgramados: true,
       },
     });
 
     if (!items.length) {
-      throw new NotFoundException("No se encontraron OTs APROBADAS con esos filtros.");
+      throw new NotFoundException(
+        "No se encontraron OTs APROBADAS con esos filtros."
+      );
     }
 
     const zipName = await this.buildZipFileName({
@@ -1181,6 +1213,7 @@ export class WorkOrdersService {
       operatorId,
       operatorName,
       riggerName,
+      clientName,
     });
 
     const archive = archiver("zip", { zlib: { level: 9 } });
@@ -1190,9 +1223,19 @@ export class WorkOrdersService {
     for (const item of items) {
       const { buffer } = await this.generatePdf(item.id, actor);
       const seq = String(index).padStart(3, "0");
-      const datePart = fmtIsoDateOnly(item.createdAt) || "SIN_FECHA";
+
+      const fechaProgramada =
+        Array.isArray(item.diasProgramados) && item.diasProgramados.length > 0
+          ? item.diasProgramados[0]
+          : null;
+
+      const datePart = fechaProgramada || fmtIsoDateOnly(item.createdAt) || "SIN_FECHA";
       const otNum = `OT-${String(item.id).slice(0, 6).toUpperCase()}`;
-      const entryName = `${seq}_${safeFilePart(otNum)}_${datePart}.pdf`;
+      const clientePart = safeFilePart(item.cliente || clientName || "");
+      const entryName = `${seq}_${safeFilePart(otNum)}${
+        clientePart ? `_${clientePart}` : ""
+      }_${datePart}.pdf`;
+
       archive.append(buffer, { name: entryName });
       index += 1;
     }
@@ -2528,7 +2571,7 @@ export class WorkOrdersService {
       : cleanStr((wo as any).createdBy?.email) || null;
     const solicitadoPor = solicitadoPorManual || solicitadoPorAuto || "—";
 
-        const operador =
+    const operador =
       cleanStr((wo as any).operador) || cleanStr((wo as any).conductor) || "—";
 
     const detalleServicio =
@@ -2739,7 +2782,7 @@ export class WorkOrdersService {
     fullLine(y);
     y += 10;
 
-        y = twoColRow(y, "Operador", operador, "Patente", equipo);
+    y = twoColRow(y, "Operador", operador, "Patente", equipo);
     y = twoColRow(y, "Obra/Tramo", obraTramo, "Rigger Thomas", rigger);
     y = oneColFull(y, "Detalle del servicio", detalleServicio);
     y += 4;
@@ -2762,7 +2805,7 @@ export class WorkOrdersService {
     const movPadX = 10;
     const movPadTop = 10;
     doc.font("Helvetica").fontSize(9).fillColor("#111");
-        doc.text(movimientos || "—", left + movPadX, y + movPadTop, {
+    doc.text(movimientos || "—", left + movPadX, y + movPadTop, {
       width: w - movPadX * 2,
       height: movH - movPadTop * 2,
       ellipsis: true,
@@ -2858,33 +2901,31 @@ export class WorkOrdersService {
     );
 
     const sigBuf = getSignatureBuffer(wo as any, id);
-if (sigBuf) {
-  try {
-    const sigMaxW = 160;
-    const sigMaxH = 50;
+    if (sigBuf) {
+      try {
+        const sigMaxW = 160;
+        const sigMaxH = 50;
 
-    const firmaBoxW = firmaX2 - firmaX1;
+        const firmaBoxW = firmaX2 - firmaX1;
 
-    // 👉 calcular tamaño proporcional real
-    const img = doc.openImage(sigBuf);
+        const img = doc.openImage(sigBuf);
 
-    let drawW = img.width;
-    let drawH = img.height;
+        let drawW = img.width;
+        let drawH = img.height;
 
-    const ratio = Math.min(sigMaxW / drawW, sigMaxH / drawH, 1);
-    drawW = drawW * ratio;
-    drawH = drawH * ratio;
+        const ratio = Math.min(sigMaxW / drawW, sigMaxH / drawH, 1);
+        drawW = drawW * ratio;
+        drawH = drawH * ratio;
 
-    // 👉 CENTRADO REAL
-    const sigX = firmaX1 + (firmaBoxW - drawW) / 2;
-    const sigY = lineY - drawH - 5;
+        const sigX = firmaX1 + (firmaBoxW - drawW) / 2;
+        const sigY = lineY - drawH - 5;
 
-    doc.image(sigBuf, sigX, sigY, {
-      width: drawW,
-      height: drawH,
-    });
-  } catch {}
-}
+        doc.image(sigBuf, sigX, sigY, {
+          width: drawW,
+          height: drawH,
+        });
+      } catch {}
+    }
 
     doc.end();
 
@@ -2893,7 +2934,6 @@ if (sigBuf) {
     return { buffer, filename };
   }
 }
-
 
 
 

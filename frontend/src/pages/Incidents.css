@@ -16,12 +16,16 @@
   box-sizing: border-box;
 }
 
+/* =========================================
+   Header
+   ========================================= */
+
 .inc-header {
   display: flex;
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 
 .inc-header__intro {
@@ -54,10 +58,83 @@
   min-width: 140px;
 }
 
+/* =========================================
+   Dashboard summary
+   ========================================= */
+
+.inc-dashboard {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.inc-dashboard-card {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 18px;
+  padding: 14px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 100ms ease, box-shadow 140ms ease, border-color 140ms ease;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.inc-dashboard-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.08);
+}
+
+.inc-dashboard-card__label {
+  display: block;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.3;
+  margin-bottom: 8px;
+  color: #334155;
+}
+
+.inc-dashboard-card__value {
+  display: block;
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1;
+  color: #0f172a;
+}
+
+.inc-dashboard-card--red {
+  border-color: rgba(220, 38, 38, 0.15);
+  background: linear-gradient(180deg, rgba(220, 38, 38, 0.05), #fff);
+}
+
+.inc-dashboard-card--yellow {
+  border-color: rgba(245, 158, 11, 0.16);
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.06), #fff);
+}
+
+.inc-dashboard-card--blue {
+  border-color: rgba(37, 99, 235, 0.16);
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.06), #fff);
+}
+
+.inc-dashboard-card--green {
+  border-color: rgba(22, 163, 74, 0.16);
+  background: linear-gradient(180deg, rgba(22, 163, 74, 0.06), #fff);
+}
+
+/* =========================================
+   Search + filters
+   ========================================= */
+
+.inc-toolbar {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
 .inc-search {
   width: 100%;
-  margin-bottom: 24px;
-  min-height: 44px;
+  min-height: 46px;
   border-radius: 12px;
   border: 1px solid rgba(15, 23, 42, 0.12);
   padding: 0 14px;
@@ -70,6 +147,44 @@
   border-color: rgba(245, 184, 0, 0.55);
   box-shadow: 0 0 0 3px rgba(245, 184, 0, 0.18);
 }
+
+.inc-filters {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+
+.inc-filter-chip {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: #fff;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 120ms ease;
+  white-space: nowrap;
+}
+
+.inc-filter-chip:hover {
+  background: rgba(15, 23, 42, 0.04);
+}
+
+.inc-filter-chip.is-active {
+  background: #f5b800;
+  border-color: #f5b800;
+  color: #111827;
+  box-shadow: 0 8px 18px rgba(245, 184, 0, 0.28);
+}
+
+/* =========================================
+   Sections
+   ========================================= */
 
 .inc-sections {
   display: grid;
@@ -106,12 +221,25 @@
   gap: 12px;
 }
 
+/* =========================================
+   Cards
+   ========================================= */
+
 .inc-card {
   border: 1px solid rgba(15, 23, 42, 0.1);
   border-radius: 18px;
   padding: 16px;
   background: #fff;
   box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
+}
+
+.inc-card--priority {
+  border-color: rgba(245, 184, 0, 0.22);
+  box-shadow: 0 12px 28px rgba(245, 184, 0, 0.08);
+}
+
+.inc-card--history {
+  background: linear-gradient(180deg, rgba(148, 163, 184, 0.04), #fff);
 }
 
 .inc-card__top {
@@ -129,6 +257,13 @@
   color: #0f172a;
   line-height: 1.2;
   word-break: break-word;
+}
+
+.inc-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
 }
 
 .inc-card__desc {
@@ -159,6 +294,10 @@
 .inc-muted-inline {
   color: #64748b;
 }
+
+/* =========================================
+   Actions
+   ========================================= */
 
 .inc-actions {
   margin-top: 14px;
@@ -195,6 +334,10 @@
   opacity: 0.7;
   cursor: not-allowed;
 }
+
+/* =========================================
+   Pills
+   ========================================= */
 
 .inc-pill {
   display: inline-flex;
@@ -237,6 +380,10 @@
   border: 1px solid rgba(22, 163, 74, 0.18);
 }
 
+/* =========================================
+   Confirm / history
+   ========================================= */
+
 .inc-confirm-box {
   display: grid;
   gap: 10px;
@@ -269,6 +416,22 @@
   overflow-wrap: anywhere;
 }
 
+.inc-history-layout {
+  display: grid;
+  gap: 20px;
+}
+
+.inc-history-group {
+  display: grid;
+  gap: 12px;
+}
+
+.inc-history-group__title {
+  font-size: 16px;
+  font-weight: 900;
+  color: #0f172a;
+}
+
 /* =========================================
    Empty state
    ========================================= */
@@ -279,6 +442,10 @@
   background: rgba(0, 0, 0, 0.02);
   padding: 22px 16px;
   text-align: center;
+}
+
+.empty-state--compact {
+  padding: 18px 14px;
 }
 
 .empty-state__icon {
@@ -303,6 +470,12 @@
 /* =========================================
    Tablet
    ========================================= */
+
+@media (max-width: 1100px) {
+  .inc-dashboard {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 
 @media (max-width: 900px) {
   .inc-page-card {
@@ -354,8 +527,37 @@
     font-size: 14px;
   }
 
+  .inc-dashboard {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .inc-dashboard-card {
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .inc-dashboard-card__label {
+    font-size: 12px;
+  }
+
+  .inc-dashboard-card__value {
+    font-size: 24px;
+  }
+
   .inc-search {
     font-size: 16px;
+  }
+
+  .inc-filters {
+    gap: 8px;
+    padding-bottom: 6px;
+  }
+
+  .inc-filter-chip {
+    min-height: 40px;
+    font-size: 13px;
+    padding: 0 13px;
   }
 
   .inc-section__title {
@@ -434,6 +636,14 @@
 
   .inc-section__title {
     font-size: 17px;
+  }
+
+  .inc-dashboard {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .inc-dashboard-card__value {
+    font-size: 22px;
   }
 
   .inc-card {
