@@ -1,4 +1,5 @@
 // ✅ Archivo: src/pages/CreateWorkshopTaskModal.jsx
+// ✅ COMPLETO
 // ✅ Crear tarea de taller independiente del incidente
 // ✅ Editar tarea de taller independiente
 // ✅ Permite asignar responsable y apoyos
@@ -21,14 +22,11 @@
 // ✅ NUEVO AHORA:
 // - soporta mode="full" y mode="evidence"
 // - mode="full": editar tarea completa
-// - mode="evidence": editar observaciones/evidencia + foto
+// - mode="evidence": editar observaciones/evidencia + fotos
 // ✅ FIX NUEVO:
 // - la evidencia actual se obtiene con lógica robusta
 // - usa los mismos campos posibles que la vista "Ver evidencia"
 // - así coincide mejor al editar y luego visualizar
-// ✅ FIX NUEVO AHORA:
-// - al guardar evidencia manda el texto en varios campos compatibles
-// - así "Ver evidencia" y "Editar evidencia" muestran lo mismo aunque el backend use otro nombre de campo
 // ✅ FIX NUEVO AHORA:
 // - si la tarea existe pero no tiene responsable, el modal entra en modo ASIGNAR
 // - cambia título, botón y texto del selector de responsable
@@ -42,18 +40,35 @@
 // - ignora textos como "Vehículo ingresado por..."
 // - si no hay evidencia real, el textarea queda vacío
 // ✅ NUEVO AHORA:
-// - permite adjuntar foto del vehículo / ingreso en mode="full"
-// - envía fotoIngreso y fotoIngresoNombre al backend
-// - muestra vista previa de la foto del vehículo antes de guardar
+// - permite adjuntar hasta 10 fotos del vehículo / ingreso en mode="full"
+// - envía fotosIngreso y fotosIngresoNombres al backend
+// - mantiene compatibilidad con fotoIngreso y fotoIngresoNombre
+// - muestra vista previa múltiple antes de guardar
 // ✅ FIX NUEVO AHORA:
 // - en mode="evidence" SOLO muestra imágenes de "📸 Evidencia:"
 // - ya no mezcla las fotos del ingreso con la evidencia final
+// ✅ NUEVO AHORA:
+// - en mode="evidence" muestra todas las fotos actuales
+// - cada foto tiene X para quitar una por una
+// - permite agregar nuevas fotos además de conservar fotos actuales
+// - envía fotosExistentes + fotos / fotosNombres
+// - mantiene compatibilidad enviando también foto / fotoNombre
+// ✅ NUEVO AHORA:
+// - en mode="full" también carga las fotos actuales del vehículo
+// - permite quitarlas una por una con X
+// - permite agregar nuevas además de las existentes
+// - visualmente conserva las fotos existentes en el modal
+// ✅ FIX FINAL REAL:
+// - en edición vuelve a enviar fotosIngresoExistentes
+// - así el backend conserva las fotos del vehículo que no fueron quitadas
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
 import "./Admin.css";
 
 const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
+const MAX_TASK_INGRESO_PHOTOS = 10;
+const MAX_EVIDENCE_PHOTOS = 10;
 
 function getToken() {
   return (
@@ -111,7 +126,9 @@ function fmtVehicle(vehicle) {
   if (!vehicle) return "—";
 
   const patente = vehicle?.patente || "Sin patente";
-  const marcaModelo = vehicle?.marcaModelo || "";
+  const marcaModelo =
+    vehicle?.marcaModelo ||
+    [vehicle?.marca, vehicle?.modelo].filter(Boolean).join(" ").trim();
 
   return marcaModelo ? `${patente} · ${marcaModelo}` : patente;
 }
@@ -173,13 +190,8 @@ function buildUploadUrl(imagePath) {
   const raw = String(imagePath || "").trim();
   if (!raw) return "";
 
-  if (raw.startsWith("data:image/")) {
-    return raw;
-  }
-
-  if (raw.startsWith("http://") || raw.startsWith("https://")) {
-    return raw;
-  }
+  if (raw.startsWith("data:image/")) return raw;
+  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
 
   const backendOrigin = getBackendOrigin();
 
@@ -240,10 +252,15 @@ function isInitialIngresoText(value) {
     normalized.startsWith("vehículo ingresado por:") ||
     normalized.startsWith("vehiculo ingresado por:") ||
     normalized === "evidencias:" ||
+    normalized === "fotos del vehículo:" ||
     (normalized.startsWith("vehículo ingresado por:") &&
       normalized.includes("evidencias:")) ||
     (normalized.startsWith("vehiculo ingresado por:") &&
-      normalized.includes("evidencias:"))
+      normalized.includes("evidencias:")) ||
+    (normalized.startsWith("vehículo ingresado por:") &&
+      normalized.includes("fotos del vehículo:")) ||
+    (normalized.startsWith("vehiculo ingresado por:") &&
+      normalized.includes("fotos del vehículo:"))
   );
 }
 
@@ -256,7 +273,9 @@ function extractAllImagePaths(text) {
   return [
     ...new Set(
       uploadMatches
-        .filter((value) => /\.(jpg|jpeg|png|webp|gif)$/i.test(String(value || "")))
+        .filter((value) =>
+          /\.(jpg|jpeg|png|webp|gif)$/i.test(String(value || ""))
+        )
         .map((value) => String(value).trim())
         .filter(Boolean)
     ),
@@ -267,9 +286,7 @@ function extractEvidenceImagePathsFromObservaciones(text) {
   const raw = String(text || "").trim();
   if (!raw) return [];
 
-  const matches = [
-    ...raw.matchAll(/📸\s*Evidencia:\s*(\/uploads\/[^\s]+)/gi),
-  ];
+  const matches = [...raw.matchAll(/📸\s*Evidencia:\s*(\/uploads\/[^\s]+)/gi)];
 
   return [
     ...new Set(
@@ -285,9 +302,7 @@ function extractIngresoImagePathsFromObservaciones(text) {
   const raw = String(text || "").trim();
   if (!raw) return [];
 
-  const matches = [
-    ...raw.matchAll(/📸\s*Foto vehículo:\s*(\/uploads\/[^\s]+)/gi),
-  ];
+  const matches = [...raw.matchAll(/📸\s*Foto vehículo:\s*(\/uploads\/[^\s]+)/gi)];
 
   return [
     ...new Set(
@@ -394,6 +409,9 @@ function getTaskEvidenceData(task, options = {}) {
       task?.fotoIngresoUrl,
       task?.ingresoFotoUrl,
       task?.vehiclePhotoUrl,
+      ...(Array.isArray(task?.fotosIngreso) ? task.fotosIngreso : []),
+      ...(Array.isArray(task?.ingresoFotos) ? task.ingresoFotos : []),
+      ...(Array.isArray(task?.vehiclePhotos) ? task.vehiclePhotos : []),
     ];
   }
 
@@ -409,7 +427,81 @@ function getTaskEvidenceData(task, options = {}) {
     text: String(finalText || "").trim(),
     imageUrl: uniqueImagePaths[0] ? buildUploadUrl(uniqueImagePaths[0]) : "",
     imageUrls: uniqueImagePaths.map((path) => buildUploadUrl(path)),
+    rawImagePaths: uniqueImagePaths,
   };
+}
+
+function createIngresoPhotoItem(file, dataUrl) {
+  return {
+    id: `ingreso_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    name: String(file?.name || "foto_ingreso.jpg"),
+    base64: dataUrl,
+    preview: dataUrl,
+    failed: false,
+    type: "new",
+  };
+}
+
+function createExistingIngresoPhotoItem(rawPath) {
+  const safePath = String(rawPath || "").trim();
+
+  return {
+    id: `existing_ingreso_${Date.now()}_${Math.random()
+      .toString(36)
+      .slice(2)}`,
+    rawPath: safePath,
+    preview: buildUploadUrl(safePath),
+    name: safePath.split("/").pop() || "foto_actual",
+    failed: false,
+    type: "existing",
+  };
+}
+
+function createExistingEvidencePhotoItem(rawPath) {
+  const safePath = String(rawPath || "").trim();
+
+  return {
+    id: `existing_evidence_${Date.now()}_${Math.random()
+      .toString(36)
+      .slice(2)}`,
+    rawPath: safePath,
+    preview: buildUploadUrl(safePath),
+    name: safePath.split("/").pop() || "foto_actual",
+    failed: false,
+    type: "existing",
+  };
+}
+
+function createNewEvidencePhotoItem(file, dataUrl) {
+  return {
+    id: `new_evidence_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    name: String(file?.name || "evidencia.jpg"),
+    base64: dataUrl,
+    preview: dataUrl,
+    failed: false,
+    type: "new",
+  };
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) {
+      resolve("");
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      resolve(String(reader.result || ""));
+    };
+
+    reader.onerror = () => {
+      reject(new Error("No se pudo leer la foto seleccionada."));
+    };
+
+    reader.readAsDataURL(file);
+  });
 }
 
 export default function CreateWorkshopTaskModal({
@@ -442,15 +534,8 @@ export default function CreateWorkshopTaskModal({
   const [helperIds, setHelperIds] = useState([]);
 
   const [observaciones, setObservaciones] = useState("");
-  const [photoBase64, setPhotoBase64] = useState("");
-  const [photoPreview, setPhotoPreview] = useState("");
-  const [removeCurrentPhoto, setRemoveCurrentPhoto] = useState(false);
-  const [currentPhotoFailed, setCurrentPhotoFailed] = useState(false);
-  const [newPhotoFailed, setNewPhotoFailed] = useState(false);
-
-  const [ingresoPhotoFile, setIngresoPhotoFile] = useState(null);
-  const [ingresoPhotoBase64, setIngresoPhotoBase64] = useState("");
-  const [ingresoPhotoPreview, setIngresoPhotoPreview] = useState("");
+  const [ingresoPhotoItems, setIngresoPhotoItems] = useState([]);
+  const [evidencePhotoItems, setEvidencePhotoItems] = useState([]);
 
   function authHeaders(extra = {}) {
     return {
@@ -471,14 +556,8 @@ export default function CreateWorkshopTaskModal({
     setResponsableId("");
     setHelperIds([]);
     setObservaciones("");
-    setPhotoBase64("");
-    setPhotoPreview("");
-    setRemoveCurrentPhoto(false);
-    setCurrentPhotoFailed(false);
-    setNewPhotoFailed(false);
-    setIngresoPhotoFile(null);
-    setIngresoPhotoBase64("");
-    setIngresoPhotoPreview("");
+    setIngresoPhotoItems([]);
+    setEvidencePhotoItems([]);
     setError("");
     resetInputs();
   }
@@ -520,7 +599,10 @@ export default function CreateWorkshopTaskModal({
     return availableVehicles
       .filter((vehicle) => {
         const patente = String(vehicle?.patente || "").toLowerCase();
-        const marcaModelo = String(vehicle?.marcaModelo || "").toLowerCase();
+        const marcaModelo = String(
+          vehicle?.marcaModelo ||
+            [vehicle?.marca, vehicle?.modelo].filter(Boolean).join(" ")
+        ).toLowerCase();
         const empresa = String(vehicle?.empresa || "").toLowerCase();
 
         return (
@@ -536,15 +618,9 @@ export default function CreateWorkshopTaskModal({
     return getTaskEvidenceData(task, { evidenceOnly: isEvidenceMode });
   }, [task, isEvidenceMode]);
 
-  const currentObservationImageUrl = useMemo(() => {
-    return currentTaskEvidence.imageUrl || "";
-  }, [currentTaskEvidence.imageUrl]);
-
-  const currentObservationImageUrls = useMemo(() => {
-    return Array.isArray(currentTaskEvidence.imageUrls)
-      ? currentTaskEvidence.imageUrls
-      : [];
-  }, [currentTaskEvidence.imageUrls]);
+  const currentTaskIngreso = useMemo(() => {
+    return getTaskEvidenceData(task, { evidenceOnly: false });
+  }, [task]);
 
   const taskResponsibleId = useMemo(() => getTaskResponsibleId(task), [task]);
 
@@ -628,23 +704,39 @@ export default function CreateWorkshopTaskModal({
       const taskVehicle =
         task?.vehicle && task?.vehicle?.id
           ? task.vehicle
-          : availableVehicles.find((v) => String(v?.id) === String(task?.vehicleId));
+          : availableVehicles.find(
+              (v) => String(v?.id) === String(task?.vehicleId)
+            );
 
       setDescripcion(String(task?.descripcion || "").trim());
       setVehicleId(String(taskVehicle?.id || task?.vehicleId || ""));
       setVehicleQuery(taskVehicle ? fmtVehicle(taskVehicle) : "");
       setResponsableId(getTaskResponsibleId(task));
       setHelperIds(getTaskHelperIds(task));
-
       setObservaciones(String(currentTaskEvidence.text || "").trim());
-      setPhotoBase64("");
-      setPhotoPreview("");
-      setRemoveCurrentPhoto(false);
-      setCurrentPhotoFailed(false);
-      setNewPhotoFailed(false);
-      setIngresoPhotoFile(null);
-      setIngresoPhotoBase64("");
-      setIngresoPhotoPreview("");
+
+      const initialEvidencePhotos = (
+        Array.isArray(currentTaskEvidence.rawImagePaths)
+          ? currentTaskEvidence.rawImagePaths
+          : []
+      )
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .filter((value, index, arr) => arr.indexOf(value) === index)
+        .map((rawPath) => createExistingEvidencePhotoItem(rawPath));
+
+      const initialIngresoPhotos = (
+        Array.isArray(currentTaskIngreso.rawImagePaths)
+          ? currentTaskIngreso.rawImagePaths
+          : []
+      )
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .filter((value, index, arr) => arr.indexOf(value) === index)
+        .map((rawPath) => createExistingIngresoPhotoItem(rawPath));
+
+      setEvidencePhotoItems(initialEvidencePhotos);
+      setIngresoPhotoItems(initialIngresoPhotos);
       setError("");
       resetInputs();
       return;
@@ -652,7 +744,15 @@ export default function CreateWorkshopTaskModal({
 
     resetForm();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, isEditMode, task, availableVehicles.length, currentTaskEvidence.text]);
+  }, [
+    open,
+    isEditMode,
+    task,
+    availableVehicles.length,
+    currentTaskEvidence.text,
+    JSON.stringify(currentTaskEvidence.rawImagePaths || []),
+    JSON.stringify(currentTaskIngreso.rawImagePaths || []),
+  ]);
 
   useEffect(() => {
     if (isEvidenceMode) return;
@@ -676,71 +776,120 @@ export default function CreateWorkshopTaskModal({
     setVehicleQuery(fmtVehicle(vehicle));
   }
 
-  function handlePhotoChange(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  async function handleEvidencePhotoChange(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
 
-    const reader = new FileReader();
+    try {
+      const remainingSlots = MAX_EVIDENCE_PHOTOS - evidencePhotoItems.length;
 
-    reader.onload = () => {
-      const result = String(reader.result || "");
-      setPhotoBase64(result);
-      setPhotoPreview(result);
-      setRemoveCurrentPhoto(false);
-      setNewPhotoFailed(false);
-      setCurrentPhotoFailed(false);
-    };
+      if (remainingSlots <= 0) {
+        setError(`Solo puedes subir hasta ${MAX_EVIDENCE_PHOTOS} fotos.`);
+        resetInputs();
+        return;
+      }
 
-    reader.onerror = () => {
-      setError("No se pudo leer la foto seleccionada.");
-    };
+      const filesToProcess = files.slice(0, remainingSlots);
 
-    reader.readAsDataURL(file);
+      if (files.length > remainingSlots) {
+        setError(
+          `Solo se tomarán las primeras ${remainingSlots} fotos disponibles.`
+        );
+      } else {
+        setError("");
+      }
+
+      const loadedItems = [];
+
+      for (const file of filesToProcess) {
+        const result = await readFileAsDataUrl(file);
+        loadedItems.push(createNewEvidencePhotoItem(file, result));
+      }
+
+      setEvidencePhotoItems((prev) => {
+        const next = [...prev, ...loadedItems];
+        return next.slice(0, MAX_EVIDENCE_PHOTOS);
+      });
+    } catch (err) {
+      setError(err?.message || "No se pudo leer una de las fotos seleccionadas.");
+    } finally {
+      resetInputs();
+    }
   }
 
-  function handleIngresoPhotoChange(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  async function handleIngresoPhotoChange(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
 
-    const reader = new FileReader();
+    try {
+      const remainingSlots = MAX_TASK_INGRESO_PHOTOS - ingresoPhotoItems.length;
 
-    reader.onload = () => {
-      const result = String(reader.result || "");
-      setIngresoPhotoFile(file);
-      setIngresoPhotoBase64(result);
-      setIngresoPhotoPreview(result);
-      setError("");
-    };
+      if (remainingSlots <= 0) {
+        setError(`Solo puedes subir hasta ${MAX_TASK_INGRESO_PHOTOS} fotos.`);
+        resetInputs();
+        return;
+      }
 
-    reader.onerror = () => {
-      setError("No se pudo leer la foto del vehículo.");
-    };
+      const filesToProcess = files.slice(0, remainingSlots);
 
-    reader.readAsDataURL(file);
+      if (files.length > remainingSlots) {
+        setError(
+          `Solo se tomarán las primeras ${remainingSlots} fotos disponibles.`
+        );
+      } else {
+        setError("");
+      }
+
+      const loadedItems = [];
+
+      for (const file of filesToProcess) {
+        const result = await readFileAsDataUrl(file);
+        loadedItems.push(createIngresoPhotoItem(file, result));
+      }
+
+      setIngresoPhotoItems((prev) => {
+        const next = [...prev, ...loadedItems];
+        return next.slice(0, MAX_TASK_INGRESO_PHOTOS);
+      });
+    } catch (err) {
+      setError(err?.message || "No se pudo leer una de las fotos del vehículo.");
+    } finally {
+      resetInputs();
+    }
   }
 
-  function removePhoto() {
-    setPhotoBase64("");
-    setPhotoPreview("");
-    setRemoveCurrentPhoto(true);
-    setCurrentPhotoFailed(false);
-    setNewPhotoFailed(false);
+  function removeEvidencePhoto(photoId) {
+    setEvidencePhotoItems((prev) => prev.filter((item) => item.id !== photoId));
+  }
+
+  function removeAllEvidencePhotos() {
+    setEvidencePhotoItems([]);
     resetInputs();
   }
 
-  function removeIngresoPhoto() {
-    setIngresoPhotoFile(null);
-    setIngresoPhotoBase64("");
-    setIngresoPhotoPreview("");
+  function markEvidencePhotoFailed(photoId) {
+    setEvidencePhotoItems((prev) =>
+      prev.map((item) =>
+        item.id === photoId ? { ...item, failed: true } : item
+      )
+    );
   }
 
-  function clearNewPhotoOnly() {
-    setPhotoBase64("");
-    setPhotoPreview("");
-    setNewPhotoFailed(false);
-    setRemoveCurrentPhoto(false);
-    setCurrentPhotoFailed(false);
+  function removeIngresoPhoto(photoId) {
+    setIngresoPhotoItems((prev) => prev.filter((item) => item.id !== photoId));
+  }
+
+  function removeAllIngresoPhotos() {
+    setIngresoPhotoItems([]);
     resetInputs();
+  }
+
+  function markIngresoPhotoFailed(photoId) {
+    setIngresoPhotoItems((prev) =>
+      prev.map((item) =>
+        item.id === photoId ? { ...item, failed: true } : item
+      )
+    );
   }
 
   async function handleSubmit(e) {
@@ -768,21 +917,36 @@ export default function CreateWorkshopTaskModal({
       setError("");
 
       try {
+        const existingEvidenceItems = evidencePhotoItems.filter(
+          (item) => item.type === "existing"
+        );
+        const newEvidenceItems = evidencePhotoItems.filter(
+          (item) => item.type === "new"
+        );
+
+        const fotosExistentes = existingEvidenceItems
+          .map((item) => String(item?.rawPath || "").trim())
+          .filter(Boolean);
+
+        const newEvidencePayload = newEvidenceItems
+          .map((item, index) => ({
+            base64: String(item?.base64 || "").trim(),
+            name: String(item?.name || `evidencia_${index + 1}.jpg`).trim(),
+          }))
+          .filter((item) => item.base64);
+
+        const firstPhotoBase64 = newEvidencePayload[0]?.base64 || "";
+        const firstPhotoName = newEvidencePayload[0]?.name || "";
+
         const body = {
-  trabajoRealizado: cleanObservaciones,
-  ...(photoBase64
-    ? {
-        foto: photoBase64,
-        fotoNombre: "tarea_evidencia.jpg",
-      }
-    : {}),
-  ...(removeCurrentPhoto
-    ? {
-        foto: "",
-        fotoNombre: "",
-      }
-    : {}),
-};
+          observaciones: cleanObservaciones,
+          trabajoRealizado: cleanObservaciones,
+          fotosExistentes,
+          fotos: newEvidencePayload.map((item) => item.base64),
+          fotosNombres: newEvidencePayload.map((item) => item.name),
+          foto: firstPhotoBase64,
+          fotoNombre: firstPhotoName || "tarea_evidencia_1.jpg",
+        };
 
         const res = await fetch(`${API_URL}/workshop/tasks/${task.id}`, {
           method: "PATCH",
@@ -849,7 +1013,29 @@ export default function CreateWorkshopTaskModal({
     setError("");
 
     try {
-      const body = {
+      const existingIngresoItems = ingresoPhotoItems.filter(
+        (item) => item.type === "existing"
+      );
+
+      const newIngresoItems = ingresoPhotoItems.filter(
+        (item) => item.type === "new"
+      );
+
+      const fotosIngresoExistentes = existingIngresoItems
+        .map((item) => String(item?.rawPath || "").trim())
+        .filter(Boolean);
+
+      const ingresoPhotoBase64List = newIngresoItems
+        .map((item, index) => ({
+          base64: String(item?.base64 || "").trim(),
+          name: String(item?.name || `foto_ingreso_${index + 1}.jpg`).trim(),
+        }))
+        .filter((item) => item.base64);
+
+      const firstIngresoPhotoBase64 = ingresoPhotoBase64List[0]?.base64 || "";
+      const firstIngresoPhotoName = ingresoPhotoBase64List[0]?.name || "";
+
+            const body = {
         titulo: "",
         descripcion: cleanDescripcion,
         status: task?.status || "PENDIENTE",
@@ -858,13 +1044,15 @@ export default function CreateWorkshopTaskModal({
         helperIds: filteredHelpers,
         empresa,
         createdById,
-        ...(ingresoPhotoBase64
-          ? {
-              fotoIngreso: ingresoPhotoBase64,
-              fotoIngresoNombre: ingresoPhotoFile?.name || "foto_ingreso.jpg",
-            }
-          : {}),
+        fotosIngreso: ingresoPhotoBase64List.map((item) => item.base64),
+        fotosIngresoNombres: ingresoPhotoBase64List.map((item) => item.name),
+        fotoIngreso: firstIngresoPhotoBase64,
+        fotoIngresoNombre: firstIngresoPhotoName || "foto_ingreso_1.jpg",
       };
+
+      if (isEditMode) {
+        body.fotosIngresoExistentes = fotosIngresoExistentes;
+      }
 
       const url = isEditMode
         ? `${API_URL}/workshop/tasks/${task.id}`
@@ -946,13 +1134,6 @@ export default function CreateWorkshopTaskModal({
     padding: "0 12px",
     boxSizing: "border-box",
   };
-
-  const hasNewPhoto = Boolean(photoPreview);
-  const hasCurrentPhoto =
-    isEditMode &&
-    !removeCurrentPhoto &&
-    !hasNewPhoto &&
-    currentObservationImageUrls.length > 0;
 
   const modalTitle = isEvidenceMode
     ? "Editar evidencia de la tarea"
@@ -1202,102 +1383,215 @@ export default function CreateWorkshopTaskModal({
                 </div>
 
                 {!isAssignMode ? (
-  <div className="modal-form">
-    <div style={{ gridColumn: "1 / -1" }}>
-      <label>Fotos del vehículo</label>
+                  <div className="modal-form">
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <label>Fotos del vehículo</label>
 
-      <div
-        style={{
-          marginTop: 8,
-          display: "grid",
-          gap: 12,
-        }}
-      >
-        <label style={photoActionBtnStyle}>
-          📸 Tomar foto
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handleIngresoPhotoChange}
-            style={{ display: "none" }}
-            disabled={saving}
-          />
-        </label>
+                      <div
+                        style={{
+                          marginTop: 8,
+                          display: "grid",
+                          gap: 12,
+                        }}
+                      >
+                        <label style={photoActionBtnStyle}>
+                          📸 Tomar foto
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            multiple
+                            onChange={handleIngresoPhotoChange}
+                            style={{ display: "none" }}
+                            disabled={
+                              saving ||
+                              ingresoPhotoItems.length >= MAX_TASK_INGRESO_PHOTOS
+                            }
+                          />
+                        </label>
 
-        <label style={photoActionBtnStyle}>
-          🖼️ Elegir desde galería
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleIngresoPhotoChange}
-            style={{ display: "none" }}
-            disabled={saving}
-          />
-        </label>
+                        <label style={photoActionBtnStyle}>
+                          🖼️ Elegir desde galería
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={handleIngresoPhotoChange}
+                            style={{ display: "none" }}
+                            disabled={
+                              saving ||
+                              ingresoPhotoItems.length >= MAX_TASK_INGRESO_PHOTOS
+                            }
+                          />
+                        </label>
 
-        <div
-          style={{
-            fontSize: 13,
-            color: "#64748b",
-            lineHeight: 1.45,
-          }}
-        >
-          Puedes adjuntar una foto del vehículo al momento de crear
-          o editar la tarea.
-        </div>
+                        <div
+                          style={{
+                            fontSize: 13,
+                            color: "#64748b",
+                            lineHeight: 1.45,
+                          }}
+                        >
+                          Puedes adjuntar hasta {MAX_TASK_INGRESO_PHOTOS} fotos del
+                          vehículo al momento de crear o editar la tarea. Ahora
+                          mismo: <strong>{ingresoPhotoItems.length}</strong>{" "}
+                          seleccionada(s).
+                        </div>
 
-        {ingresoPhotoPreview ? (
-          <div
-            style={{
-              marginTop: 4,
-              border: "1px solid rgba(0,0,0,.08)",
-              borderRadius: 14,
-              padding: 12,
-              background: "#fff",
-              display: "grid",
-              gap: 12,
-            }}
-          >
-            <img
-              src={ingresoPhotoPreview}
-              alt="Vista previa foto vehículo"
-              style={{
-                width: "100%",
-                maxHeight: 260,
-                objectFit: "contain",
-                borderRadius: 12,
-                display: "block",
-                background: "#f8fafc",
-              }}
-            />
+                        <div
+                          style={{
+                            marginTop: 4,
+                            border: "1px solid rgba(0,0,0,.08)",
+                            borderRadius: 14,
+                            padding: 12,
+                            background: "#fff",
+                          }}
+                        >
+                          {ingresoPhotoItems.length > 0 ? (
+                            <div
+                              style={{
+                                display: "grid",
+                                gridTemplateColumns:
+                                  "repeat(auto-fit, minmax(140px, 1fr))",
+                                gap: 12,
+                              }}
+                            >
+                              {ingresoPhotoItems.map((item, index) => (
+                                <div
+                                  key={item.id}
+                                  style={{
+                                    position: "relative",
+                                    border: "1px solid rgba(15,23,42,.08)",
+                                    borderRadius: 12,
+                                    overflow: "hidden",
+                                    background: "#f8fafc",
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => removeIngresoPhoto(item.id)}
+                                    disabled={saving}
+                                    style={{
+                                      position: "absolute",
+                                      top: 8,
+                                      right: 8,
+                                      width: 28,
+                                      height: 28,
+                                      borderRadius: "50%",
+                                      border: "none",
+                                      background: "rgba(15,23,42,.9)",
+                                      color: "#fff",
+                                      fontWeight: 900,
+                                      fontSize: 18,
+                                      lineHeight: 1,
+                                      cursor: "pointer",
+                                      zIndex: 2,
+                                    }}
+                                    title="Quitar foto"
+                                  >
+                                    ×
+                                  </button>
 
-            <div
-              style={{
-                fontSize: 13,
-                color: "#475569",
-                wordBreak: "break-word",
-              }}
-            >
-              {ingresoPhotoFile?.name || "Imagen seleccionada"}
-            </div>
+                                  {!item.failed ? (
+                                    <img
+                                      src={item.preview}
+                                      alt={`Foto vehículo ${index + 1}`}
+                                      onError={() =>
+                                        markIngresoPhotoFailed(item.id)
+                                      }
+                                      style={{
+                                        width: "100%",
+                                        height: 140,
+                                        objectFit: "cover",
+                                        display: "block",
+                                        background: "#e5e7eb",
+                                      }}
+                                    />
+                                  ) : (
+                                    <div
+                                      style={{
+                                        height: 140,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        textAlign: "center",
+                                        padding: 12,
+                                        color: "#64748b",
+                                        fontSize: 13,
+                                        background: "#f8fafc",
+                                      }}
+                                    >
+                                      No se pudo mostrar esta foto.
+                                    </div>
+                                  )}
 
-            <div>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={removeIngresoPhoto}
-                disabled={saving}
-              >
-                Quitar foto
-              </button>
-            </div>
-          </div>
-        ) : null}
-      </div>
-    </div>
-  </div>
-) : null}
+                                  <div
+                                    style={{
+                                      padding: 10,
+                                      display: "grid",
+                                      gap: 8,
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        fontSize: 12,
+                                        fontWeight: 800,
+                                        color: "#334155",
+                                        wordBreak: "break-word",
+                                      }}
+                                    >
+                                      {item.type === "existing"
+                                        ? `Actual ${index + 1}`
+                                        : item.name || `Foto ${index + 1}`}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div
+                              style={{
+                                minHeight: 180,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                borderRadius: 12,
+                                background: "#f8fafc",
+                                color: "#64748b",
+                                fontSize: 14,
+                                textAlign: "center",
+                                padding: 16,
+                              }}
+                            >
+                              No hay fotos seleccionadas.
+                            </div>
+                          )}
+
+                          {ingresoPhotoItems.length > 0 ? (
+                            <div
+                              style={{
+                                marginTop: 10,
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: 10,
+                                justifyContent: "flex-start",
+                              }}
+                            >
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                onClick={removeAllIngresoPhotos}
+                                disabled={saving}
+                              >
+                                Quitar todas
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </>
             ) : null}
 
@@ -1335,7 +1629,8 @@ export default function CreateWorkshopTaskModal({
                       type="file"
                       accept="image/*"
                       capture="environment"
-                      onChange={handlePhotoChange}
+                      multiple
+                      onChange={handleEvidencePhotoChange}
                       style={{ display: "none" }}
                     />
 
@@ -1343,14 +1638,17 @@ export default function CreateWorkshopTaskModal({
                       ref={galleryInputRef}
                       type="file"
                       accept="image/*"
-                      onChange={handlePhotoChange}
+                      multiple
+                      onChange={handleEvidencePhotoChange}
                       style={{ display: "none" }}
                     />
 
                     <button
                       type="button"
                       onClick={() => takePhotoInputRef.current?.click()}
-                      disabled={saving}
+                      disabled={
+                        saving || evidencePhotoItems.length >= MAX_EVIDENCE_PHOTOS
+                      }
                       style={photoActionBtnStyle}
                     >
                       📸 Tomar foto
@@ -1359,7 +1657,9 @@ export default function CreateWorkshopTaskModal({
                     <button
                       type="button"
                       onClick={() => galleryInputRef.current?.click()}
-                      disabled={saving}
+                      disabled={
+                        saving || evidencePhotoItems.length >= MAX_EVIDENCE_PHOTOS
+                      }
                       style={photoActionBtnStyle}
                     >
                       🖼️ Elegir desde galería
@@ -1372,8 +1672,9 @@ export default function CreateWorkshopTaskModal({
                         lineHeight: 1.45,
                       }}
                     >
-                      En celular puedes tomar la foto directamente o elegir una
-                      imagen guardada.
+                      Puedes adjuntar hasta {MAX_EVIDENCE_PHOTOS} fotos de evidencia.
+                      Ahora mismo: <strong>{evidencePhotoItems.length}</strong>{" "}
+                      seleccionada(s).
                     </div>
 
                     <div
@@ -1383,60 +1684,107 @@ export default function CreateWorkshopTaskModal({
                         borderRadius: 14,
                         padding: 12,
                         background: "#fff",
-                        display: "grid",
-                        gap: 12,
                       }}
                     >
-                      {hasNewPhoto ? (
-                        !newPhotoFailed ? (
-                          <img
-                            src={photoPreview}
-                            alt="Vista previa nueva"
-                            onError={() => setNewPhotoFailed(true)}
-                            style={{
-                              width: "100%",
-                              maxHeight: 260,
-                              objectFit: "contain",
-                              borderRadius: 12,
-                              display: "block",
-                              background: "#f8fafc",
-                            }}
-                          />
-                        ) : (
-                          <div
-                            style={{
-                              minHeight: 180,
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              borderRadius: 12,
-                              background: "#f8fafc",
-                              color: "#64748b",
-                              fontSize: 14,
-                              textAlign: "center",
-                              padding: 16,
-                            }}
-                          >
-                            No se pudo mostrar la nueva foto seleccionada.
-                          </div>
-                        )
-                      ) : hasCurrentPhoto ? (
-                        currentObservationImageUrls.map((img, index) => (
-                          <img
-                            key={`${img}-${index}`}
-                            src={img}
-                            alt={`Foto actual de la evidencia ${index + 1}`}
-                            onError={() => setCurrentPhotoFailed(true)}
-                            style={{
-                              width: "100%",
-                              maxHeight: 260,
-                              objectFit: "contain",
-                              borderRadius: 12,
-                              display: "block",
-                              background: "#f8fafc",
-                            }}
-                          />
-                        ))
+                      {evidencePhotoItems.length > 0 ? (
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns:
+                              "repeat(auto-fit, minmax(140px, 1fr))",
+                            gap: 12,
+                          }}
+                        >
+                          {evidencePhotoItems.map((item, index) => (
+                            <div
+                              key={item.id}
+                              style={{
+                                position: "relative",
+                                border: "1px solid rgba(15,23,42,.08)",
+                                borderRadius: 12,
+                                overflow: "hidden",
+                                background: "#f8fafc",
+                              }}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => removeEvidencePhoto(item.id)}
+                                disabled={saving}
+                                style={{
+                                  position: "absolute",
+                                  top: 8,
+                                  right: 8,
+                                  width: 28,
+                                  height: 28,
+                                  borderRadius: "50%",
+                                  border: "none",
+                                  background: "rgba(15,23,42,.9)",
+                                  color: "#fff",
+                                  fontWeight: 900,
+                                  fontSize: 18,
+                                  lineHeight: 1,
+                                  cursor: "pointer",
+                                  zIndex: 2,
+                                }}
+                                title="Quitar foto"
+                              >
+                                ×
+                              </button>
+
+                              {!item.failed ? (
+                                <img
+                                  src={item.preview}
+                                  alt={`Foto evidencia ${index + 1}`}
+                                  onError={() => markEvidencePhotoFailed(item.id)}
+                                  style={{
+                                    width: "100%",
+                                    height: 140,
+                                    objectFit: "cover",
+                                    display: "block",
+                                    background: "#e5e7eb",
+                                  }}
+                                />
+                              ) : (
+                                <div
+                                  style={{
+                                    height: 140,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    textAlign: "center",
+                                    padding: 12,
+                                    color: "#64748b",
+                                    fontSize: 13,
+                                    background: "#f8fafc",
+                                  }}
+                                >
+                                  No se pudo mostrar esta foto.
+                                </div>
+                              )}
+
+                              <div
+                                style={{
+                                  padding: 10,
+                                  display: "grid",
+                                  gap: 8,
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    fontSize: 12,
+                                    fontWeight: 800,
+                                    color: "#334155",
+                                    wordBreak: "break-word",
+                                  }}
+                                >
+                                  {item.type === "existing"
+                                    ? `Actual ${index + 1}`
+                                    : item.name || `Foto ${index + 1}`}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       ) : (
                         <div
                           style={{
@@ -1452,32 +1800,11 @@ export default function CreateWorkshopTaskModal({
                             padding: 16,
                           }}
                         >
-                          {removeCurrentPhoto
-                            ? "La foto fue quitada."
-                            : "No hay foto seleccionada."}
+                          No hay fotos seleccionadas.
                         </div>
                       )}
 
-                      {hasCurrentPhoto && currentPhotoFailed ? (
-                        <div
-                          style={{
-                            minHeight: 180,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            borderRadius: 12,
-                            background: "#f8fafc",
-                            color: "#64748b",
-                            fontSize: 14,
-                            textAlign: "center",
-                            padding: 16,
-                          }}
-                        >
-                          No se pudieron mostrar las fotos actuales.
-                        </div>
-                      ) : null}
-
-                      {(hasCurrentPhoto || hasNewPhoto || removeCurrentPhoto) && (
+                      {evidencePhotoItems.length > 0 ? (
                         <div
                           style={{
                             marginTop: 10,
@@ -1490,24 +1817,13 @@ export default function CreateWorkshopTaskModal({
                           <button
                             type="button"
                             className="btn-secondary"
-                            onClick={removePhoto}
+                            onClick={removeAllEvidencePhotos}
                             disabled={saving}
                           >
-                            Quitar foto
+                            Quitar todas
                           </button>
-
-                          {hasNewPhoto && isEditMode && currentObservationImageUrl ? (
-                            <button
-                              type="button"
-                              className="btn-secondary"
-                              onClick={clearNewPhotoOnly}
-                              disabled={saving}
-                            >
-                              Volver a fotos actuales
-                            </button>
-                          ) : null}
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 </div>

@@ -38,7 +38,6 @@ export class UpdateWorkshopTaskDto {
   @IsUUID()
   assignedToId?: string;
 
-  // ✅ SOPORTE APOYOS
   @IsOptional()
   @IsArray()
   @IsUUID("all", { each: true })
@@ -81,7 +80,6 @@ export class UpdateWorkshopTaskDto {
   @MaxLength(4000)
   observaciones?: string;
 
-  // ✅ problema libre del repuesto
   @IsOptional()
   @IsString()
   @MaxLength(2000)
@@ -99,23 +97,35 @@ export class UpdateWorkshopTaskDto {
   @Min(0)
   actualCost?: number;
 
-  // ✅ compatibilidad anterior
   @IsOptional()
   @IsString()
   fotoEvidencia?: string;
 
-  // ✅ NUEVO: foto base64 para editar evidencia desde frontend actual
   @IsOptional()
   @IsString()
   foto?: string;
 
-  // ✅ NUEVO: nombre original/virtual del archivo
   @IsOptional()
   @IsString()
   @MaxLength(255)
   fotoNombre?: string;
 
-    @IsOptional()
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  fotos?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  fotosNombres?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  fotosExistentes?: string[];
+
+  @IsOptional()
   @IsString()
   fotoIngreso?: string;
 
@@ -123,4 +133,20 @@ export class UpdateWorkshopTaskDto {
   @IsString()
   @MaxLength(255)
   fotoIngresoNombre?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  fotosIngreso?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  fotosIngresoNombres?: string[];
+
+  // ✅ NUEVO: fotos de ingreso/vehículo que se mantienen al editar
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  fotosIngresoExistentes?: string[];
 }

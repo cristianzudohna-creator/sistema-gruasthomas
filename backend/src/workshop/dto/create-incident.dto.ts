@@ -4,8 +4,12 @@
 // - soporte de foto base64
 // - nombre de archivo
 // - listo para edición posterior
+// ✅ NUEVO AHORA:
+// - soporte para múltiples fotos
+// - mantiene compatibilidad total con foto/fotoNombre
 
 import {
+  IsArray,
   IsEnum,
   IsOptional,
   IsString,
@@ -34,14 +38,30 @@ export class CreateIncidentDto {
   @MaxLength(255)
   ubicacionTexto?: string;
 
-  // ✅ FOTO BASE64 (igual que update)
+  // ✅ COMPATIBILIDAD ACTUAL:
+  // foto principal en base64
   @IsOptional()
   @IsString()
   foto?: string;
 
-  // ✅ NUEVO: nombre del archivo (para guardar mejor)
+  // ✅ COMPATIBILIDAD ACTUAL:
+  // nombre archivo principal
   @IsOptional()
   @IsString()
   @MaxLength(255)
   fotoNombre?: string;
+
+  // ✅ NUEVO:
+  // múltiples fotos base64
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  fotos?: string[];
+
+  // ✅ NUEVO:
+  // nombres múltiples
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  fotosNombres?: string[];
 }

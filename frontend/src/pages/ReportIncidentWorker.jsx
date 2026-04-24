@@ -1,4 +1,12 @@
-// ✅ Archivo: src/pages/ReportIncidentWorker.jsx (PRO + TOAST BONITO)
+// ✅ Archivo: src/pages/ReportIncidentWorker.jsx
+// ✅ PRO + TOAST BONITO
+// ✅ NUEVO:
+// - permite subir hasta 10 fotos
+// - tomar foto o elegir desde galería
+// - previews múltiples
+// - quitar una foto o quitar todas
+// - envía fotos + fotosNombres al backend
+// - mantiene compatibilidad enviando también foto + fotoNombre
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -7,6 +15,7 @@ import "./Admin.css";
 import "./ReportIncidentWorker.css";
 
 const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
+const MAX_INCIDENT_PHOTOS = 10;
 
 function getToken() {
   return (
@@ -41,9 +50,28 @@ function normalizePlate(v) {
 }
 
 function vehicleLabel(v) {
-  return v?.marcaModelo
-    ? `${v.patente} · ${v.marcaModelo}`
-    : v.patente;
+  return v?.marcaModelo ? `${v.patente} · ${v.marcaModelo}` : v.patente;
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) {
+      resolve("");
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      resolve(typeof reader.result === "string" ? reader.result : "");
+    };
+
+    reader.onerror = () => {
+      reject(new Error("No se pudo leer la imagen seleccionada."));
+    };
+
+    reader.readAsDataURL(file);
+  });
 }
 
 export default function ReportIncidentWorker() {
@@ -60,8 +88,8 @@ export default function ReportIncidentWorker() {
 
   const [showSuggestions, setShowSuggestions] = useState(false);
 
-  const [fotoBase64, setFotoBase64] = useState("");
-  const [fotoPreview, setFotoPreview] = useState("");
+  const [photoFiles, setPhotoFiles] = useState([]);
+  const [photoPreviews, setPhotoPreviews] = useState([]);
 
   const [toast, setToast] = useState(null);
 
@@ -93,7 +121,9 @@ export default function ReportIncidentWorker() {
       window.location.href = "/login";
       return;
     }
+
     loadVehicles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadVehicles() {
@@ -135,24 +165,65 @@ export default function ReportIncidentWorker() {
     setShowSuggestions(false);
   }
 
-  function handleFoto(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  async function handleFotos(e) {
+    const selectedFiles = Array.from(e.target.files || []);
 
-    const reader = new FileReader();
+    if (!selectedFiles.length) return;
 
-    reader.onload = () => {
-      const base64 = String(reader.result || "");
-      setFotoBase64(base64);
-      setFotoPreview(base64);
-    };
+    const availableSlots = MAX_INCIDENT_PHOTOS - photoFiles.length;
 
-    reader.readAsDataURL(file);
+    if (availableSlots <= 0) {
+      showToast(`Solo puedes subir hasta ${MAX_INCIDENT_PHOTOS} fotos`, "error");
+      e.target.value = "";
+      return;
+    }
+
+    const imageFiles = selectedFiles.filter((file) =>
+      String(file?.type || "").startsWith("image/")
+    );
+
+    const validFiles = imageFiles.slice(0, availableSlots);
+
+    if (!validFiles.length) {
+      showToast("Debes seleccionar imágenes válidas", "error");
+      e.target.value = "";
+      return;
+    }
+
+    try {
+      const previews = await Promise.all(
+        validFiles.map((file) => fileToDataUrl(file))
+      );
+
+      setPhotoFiles((prev) => [...prev, ...validFiles]);
+      setPhotoPreviews((prev) => [...prev, ...previews]);
+
+      if (imageFiles.length > availableSlots) {
+        showToast(
+          `Solo se agregaron ${availableSlots} fotos. El máximo es ${MAX_INCIDENT_PHOTOS}.`,
+          "error"
+        );
+      }
+    } catch (error) {
+      showToast(error?.message || "No se pudieron cargar las imágenes", "error");
+    } finally {
+      e.target.value = "";
+    }
   }
 
-  function removeFoto() {
-    setFotoBase64("");
-    setFotoPreview("");
+  function removeFoto(indexToRemove) {
+    setPhotoFiles((prev) =>
+      prev.filter((_, index) => index !== indexToRemove)
+    );
+
+    setPhotoPreviews((prev) =>
+      prev.filter((_, index) => index !== indexToRemove)
+    );
+  }
+
+  function removeAllFotos() {
+    setPhotoFiles([]);
+    setPhotoPreviews([]);
   }
 
   async function submit(e) {
@@ -169,7 +240,15 @@ export default function ReportIncidentWorker() {
     try {
       setSaving(true);
 
-      await fetch(`${API_URL}/workshop/incidents`, {
+      const fotos = await Promise.all(
+        photoFiles.map((file) => fileToDataUrl(file))
+      );
+
+      const fotosNombres = photoFiles.map((file) =>
+        String(file?.name || "incidente.jpg").trim()
+      );
+
+      const res = await fetch(`${API_URL}/workshop/incidents`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -181,16 +260,25 @@ export default function ReportIncidentWorker() {
           ubicacionTexto: form.ubicacionTexto || undefined,
           reportedById: user?.id,
           empresa: norm(user?.empresa),
-          foto: fotoBase64 || undefined,
+
+          fotos: fotos.length > 0 ? fotos : undefined,
+          fotosNombres: fotosNombres.length > 0 ? fotosNombres : undefined,
+
+          // ✅ compatibilidad con backend antiguo
+          foto: fotos[0] || undefined,
+          fotoNombre: fotosNombres[0] || undefined,
         }),
       });
+
+      if (!res.ok) {
+        throw new Error("No se pudo enviar el incidente");
+      }
 
       showToast("✅ Incidente enviado correctamente");
 
       setTimeout(() => {
         goPortal();
       }, 1200);
-
     } catch {
       showToast("❌ Error al enviar", "error");
     } finally {
@@ -198,13 +286,11 @@ export default function ReportIncidentWorker() {
     }
   }
 
-  const showResults =
-    form.patente.trim().length > 0 && showSuggestions;
+  const showResults = form.patente.trim().length > 0 && showSuggestions;
 
   return (
     <div className="riw-page">
       <div className="riw-card">
-
         <div className="riw-toolbar">
           <button onClick={goPortal} className="btn-secondary">
             ← Volver
@@ -224,7 +310,6 @@ export default function ReportIncidentWorker() {
         </div>
 
         <form onSubmit={submit} className="riw-form">
-
           <div className="riw-field riw-field--autocomplete">
             <label className="riw-label">Patente</label>
 
@@ -271,50 +356,131 @@ export default function ReportIncidentWorker() {
             <textarea
               rows={5}
               value={form.descripcion}
-              onChange={(e) =>
-                updateField("descripcion", e.target.value)
-              }
+              onChange={(e) => updateField("descripcion", e.target.value)}
               className="riw-textarea"
             />
           </div>
 
           <div className="riw-field">
-            <label className="riw-label">Foto</label>
+            <label className="riw-label">
+              Fotos ({photoFiles.length}/{MAX_INCIDENT_PHOTOS})
+            </label>
 
             <input
               ref={takePhotoRef}
               type="file"
               accept="image/*"
               capture="environment"
-              onChange={handleFoto}
+              multiple
+              onChange={handleFotos}
               style={{ display: "none" }}
+              disabled={saving || photoFiles.length >= MAX_INCIDENT_PHOTOS}
             />
 
             <input
               ref={galleryRef}
               type="file"
               accept="image/*"
-              onChange={handleFoto}
+              multiple
+              onChange={handleFotos}
               style={{ display: "none" }}
+              disabled={saving || photoFiles.length >= MAX_INCIDENT_PHOTOS}
             />
 
             <div className="riw-photo-actions">
-              <button type="button" onClick={() => takePhotoRef.current.click()} className="riw-photo-action-btn">
-                📸 Tomar foto
+              <button
+                type="button"
+                onClick={() => takePhotoRef.current?.click()}
+                className="riw-photo-action-btn"
+                disabled={saving || photoFiles.length >= MAX_INCIDENT_PHOTOS}
+              >
+                📸 Tomar fotos
               </button>
 
-              <button type="button" onClick={() => galleryRef.current.click()} className="riw-photo-action-btn">
+              <button
+                type="button"
+                onClick={() => galleryRef.current?.click()}
+                className="riw-photo-action-btn"
+                disabled={saving || photoFiles.length >= MAX_INCIDENT_PHOTOS}
+              >
                 🖼️ Elegir desde galería
               </button>
             </div>
 
-            {fotoPreview && (
-              <div className="riw-photo-card">
-                <img src={fotoPreview} alt="Vista previa" className="riw-photo-preview" />
+            <div className="riw-help">
+              Puedes subir hasta {MAX_INCIDENT_PHOTOS} fotos del incidente.
+            </div>
 
-                <button type="button" className="btn-secondary" onClick={removeFoto}>
-                  Quitar foto
-                </button>
+            {photoPreviews.length > 0 && (
+              <div
+                className="riw-photo-card"
+                style={{
+                  display: "grid",
+                  gap: 12,
+                }}
+              >
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                    gap: 12,
+                  }}
+                >
+                  {photoPreviews.map((preview, index) => (
+                    <div
+                      key={`${preview}-${index}`}
+                      style={{
+                        border: "1px solid rgba(15,23,42,.08)",
+                        borderRadius: 14,
+                        padding: 8,
+                        background: "#f8fafc",
+                        display: "grid",
+                        gap: 8,
+                      }}
+                    >
+                      <img
+                        src={preview}
+                        alt={`Vista previa ${index + 1}`}
+                        className="riw-photo-preview"
+                        style={{
+                          width: "100%",
+                          height: 150,
+                          objectFit: "cover",
+                        }}
+                      />
+
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: "#475569",
+                          wordBreak: "break-word",
+                        }}
+                      >
+                        {photoFiles[index]?.name || `Foto ${index + 1}`}
+                      </div>
+
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => removeFoto(index)}
+                        disabled={saving}
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={removeAllFotos}
+                    disabled={saving}
+                  >
+                    Quitar todas
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -324,9 +490,7 @@ export default function ReportIncidentWorker() {
 
             <input
               value={form.ubicacionTexto}
-              onChange={(e) =>
-                updateField("ubicacionTexto", e.target.value)
-              }
+              onChange={(e) => updateField("ubicacionTexto", e.target.value)}
               className="riw-input"
             />
           </div>
@@ -343,7 +507,6 @@ export default function ReportIncidentWorker() {
         </form>
       </div>
 
-      {/* ✅ TOAST */}
       {toast && (
         <div
           style={{
@@ -355,10 +518,7 @@ export default function ReportIncidentWorker() {
             fontWeight: 900,
             zIndex: 9999,
             color: "#fff",
-            background:
-              toast.type === "error"
-                ? "#dc2626"
-                : "#16a34a",
+            background: toast.type === "error" ? "#dc2626" : "#16a34a",
             boxShadow: "0 10px 25px rgba(0,0,0,0.25)",
           }}
         >

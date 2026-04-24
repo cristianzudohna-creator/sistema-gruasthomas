@@ -13,6 +13,10 @@
 // - upload-evidence para subir imágenes base64
 // - upload-ingreso para subir fotos de ingreso de vehículo
 // - accesible con JwtAuthGuard para CONTROL_FLOTA / SUPERADMIN
+// ✅ AJUSTE MÍNIMO AHORA:
+// - se amplían tipos inline para aceptar múltiples fotos
+// - no cambia rutas ni comportamiento actual
+// - queda listo para que el service procese hasta 5 imágenes
 
 import {
   Body,
@@ -55,6 +59,11 @@ export class WorkshopController {
       filename?: string;
       mimeType?: string;
       base64?: string;
+
+      // ✅ NUEVO: soporte múltiple opcional
+      filenames?: string[];
+      mimeTypes?: string[];
+      base64List?: string[];
     },
     @Req() req: any,
   ) {
@@ -72,6 +81,11 @@ export class WorkshopController {
       filename?: string;
       mimeType?: string;
       base64?: string;
+
+      // ✅ NUEVO: soporte múltiple opcional
+      filenames?: string[];
+      mimeTypes?: string[];
+      base64List?: string[];
     },
     @Req() req: any,
   ) {
@@ -319,6 +333,10 @@ export class WorkshopController {
     dto: {
       trabajoRealizado?: string;
       fotoEvidencia?: string;
+
+      // ✅ NUEVO: soporte múltiple opcional
+      fotosEvidencia?: string[];
+      fotosNombres?: string[];
     },
     @Req() req: any,
   ) {

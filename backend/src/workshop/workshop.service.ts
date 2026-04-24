@@ -413,6 +413,138 @@ export class WorkshopService {
     return full || user?.email || '—';
   }
 
+    private extractIncidentImagesFromDescripcion(
+    descripcion?: string | null,
+  ) {
+    const raw = String(descripcion || '').trim();
+    if (!raw) return [];
+
+    const matches = [
+      ...raw.matchAll(/📸\s*Foto incidente:\s*(\/uploads\/incidents\/[^\s]+)/gi),
+    ];
+
+    return [
+      ...new Set(
+        matches
+          .map((m) => String(m?.[1] || '').trim())
+          .filter(Boolean),
+      ),
+    ];
+  }
+
+  private removeIncidentImagesFromDescripcion(
+    descripcion?: string | null,
+  ) {
+    let raw = String(descripcion || '').trim();
+    if (!raw) return '';
+
+    raw = raw.replace(
+      /\n?\s*📸\s*Foto incidente:\s*\/uploads\/incidents\/[^\s]+/gi,
+      '',
+    );
+
+    raw = raw
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    return raw;
+  }
+
+  private buildIncidentDescripcionWithImages(
+    baseDescripcion?: string | null,
+    imagePaths: string[] = [],
+  ) {
+    const cleanBase = this.removeIncidentImagesFromDescripcion(baseDescripcion);
+
+    const cleanImagePaths = [
+      ...new Set(
+        (Array.isArray(imagePaths) ? imagePaths : [])
+          .map((p) => String(p || '').trim())
+          .filter(Boolean),
+      ),
+    ];
+
+    if (!cleanImagePaths.length) {
+      return cleanBase || '';
+    }
+
+    const photoLines = cleanImagePaths.map(
+      (imgPath) => `📸 Foto incidente: ${imgPath}`,
+    );
+
+    return [cleanBase, ...photoLines].filter(Boolean).join('\n').trim();
+  }
+
+  private async saveIncidentPhotos(
+    fotosDataUrls: string[] = [],
+    fotosNombres: string[] = [],
+  ) {
+    const normalizedPhotos = (Array.isArray(fotosDataUrls) ? fotosDataUrls : [])
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+      .slice(0, 10);
+
+    const normalizedNames = (Array.isArray(fotosNombres) ? fotosNombres : []).map(
+      (value) => String(value || '').trim(),
+    );
+
+    const savedPhotos: Array<{
+      fotoUrl: string | null;
+      filePath: string | null;
+      originalName: string | null;
+      mimeType: string | null;
+      sizeBytes: number | null;
+    }> = [];
+
+    for (let i = 0; i < normalizedPhotos.length; i++) {
+      const saved = await this.saveIncidentPhoto(
+        normalizedPhotos[i],
+        normalizedNames[i] || `incident_${i + 1}.jpg`,
+      );
+
+      if (saved?.fotoUrl) {
+        savedPhotos.push(saved);
+      }
+    }
+
+    return savedPhotos;
+  }
+
+  private async saveWorkshopEvidencePhotos(
+    fotosDataUrls: string[] = [],
+    fotosNombres: string[] = [],
+  ) {
+    const normalizedPhotos = (Array.isArray(fotosDataUrls) ? fotosDataUrls : [])
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+      .slice(0, 10);
+
+    const normalizedNames = (Array.isArray(fotosNombres) ? fotosNombres : []).map(
+      (value) => String(value || '').trim(),
+    );
+
+    const savedPhotos: Array<{
+      fotoUrl: string | null;
+      filePath: string | null;
+      originalName: string | null;
+      mimeType: string | null;
+      sizeBytes: number | null;
+    }> = [];
+
+    for (let i = 0; i < normalizedPhotos.length; i++) {
+      const saved = await this.saveWorkshopEvidencePhoto(
+        normalizedPhotos[i],
+        normalizedNames[i] || `evidencia_${i + 1}.jpg`,
+      );
+
+      if (saved?.fotoUrl) {
+        savedPhotos.push(saved);
+      }
+    }
+
+    return savedPhotos;
+  }
+
     private async parseImageDataUrlMeta(dataUrl?: string | null) {
   const raw = String(dataUrl || '').trim();
   if (!raw) return null;
@@ -583,6 +715,41 @@ export class WorkshopService {
     };
   }
 
+    private async saveWorkshopIngresoPhotos(
+    fotosDataUrls: string[] = [],
+    fotosNombres: string[] = [],
+  ) {
+    const normalizedPhotos = (Array.isArray(fotosDataUrls) ? fotosDataUrls : [])
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+      .slice(0, 10);
+
+    const normalizedNames = (Array.isArray(fotosNombres) ? fotosNombres : []).map(
+      (value) => String(value || '').trim(),
+    );
+
+    const savedPhotos: Array<{
+      fotoUrl: string | null;
+      filePath: string | null;
+      originalName: string | null;
+      mimeType: string | null;
+      sizeBytes: number | null;
+    }> = [];
+
+    for (let i = 0; i < normalizedPhotos.length; i++) {
+      const saved = await this.saveWorkshopIngresoPhoto(
+        normalizedPhotos[i],
+        normalizedNames[i] || `ingreso_${i + 1}.jpg`,
+      );
+
+      if (saved?.fotoUrl) {
+        savedPhotos.push(saved);
+      }
+    }
+
+    return savedPhotos;
+  }
+
   private deleteUploadedFile(fileUrlOrPath?: string | null) {
     try {
       const raw = String(fileUrlOrPath || '').trim();
@@ -602,14 +769,29 @@ export class WorkshopService {
     }
   }
 
-    private extractWorkshopEvidenceImageFromObservaciones(
+      private extractWorkshopEvidenceImagesFromObservaciones(
     observaciones?: string | null,
   ) {
     const raw = String(observaciones || '').trim();
-    if (!raw) return '';
+    if (!raw) return [];
 
-    const match = raw.match(/(\/uploads\/workshop-evidence\/[^\s]+)/i);
-    return match?.[1] || '';
+    const matches = [
+      ...raw.matchAll(/📸\s*Evidencia:\s*(\/uploads\/workshop-evidence\/[^\s]+)/gi),
+    ];
+
+    return [
+      ...new Set(
+        matches
+          .map((m) => String(m?.[1] || '').trim())
+          .filter(Boolean),
+      ),
+    ];
+  }
+
+  private extractWorkshopEvidenceImageFromObservaciones(
+    observaciones?: string | null,
+  ) {
+    return this.extractWorkshopEvidenceImagesFromObservaciones(observaciones)[0] || '';
   }
 
   private removeWorkshopEvidenceImageFromObservaciones(
@@ -618,40 +800,58 @@ export class WorkshopService {
     let raw = String(observaciones || '').trim();
     if (!raw) return '';
 
-    const imagePath = this.extractWorkshopEvidenceImageFromObservaciones(raw);
-
-    if (imagePath) {
-      raw = raw.replace(imagePath, '').trim();
-    }
+    raw = raw.replace(
+      /\n?\s*📸\s*Evidencia:\s*\/uploads\/workshop-evidence\/[^\s]+/gi,
+      '',
+    );
 
     raw = raw
       .replace(/\n?\s*📸\s*Evidencia:\s*$/i, '')
       .replace(/\n?\s*📸\s*Foto:\s*$/i, '')
+      .replace(/\n{3,}/g, '\n\n')
       .trim();
 
     return raw;
+  }
+
+  private buildWorkshopObservacionesWithEvidenceImages(
+    baseObservaciones?: string | null,
+    imagePaths: string[] = [],
+  ) {
+    const cleanBase = this.removeWorkshopEvidenceImageFromObservaciones(
+      baseObservaciones,
+    );
+
+    const cleanImagePaths = [
+      ...new Set(
+        (Array.isArray(imagePaths) ? imagePaths : [])
+          .map((p) => String(p || '').trim())
+          .filter(Boolean),
+      ),
+    ];
+
+    if (!cleanImagePaths.length) {
+      return cleanBase || null;
+    }
+
+    const photoLines = cleanImagePaths.map(
+      (imgPath) => `📸 Evidencia: ${imgPath}`,
+    );
+
+    return [cleanBase, ...photoLines].filter(Boolean).join('\n').trim() || null;
   }
 
   private buildWorkshopObservacionesWithEvidenceImage(
     baseObservaciones?: string | null,
     imagePath?: string | null,
   ) {
-    const cleanBase = this.removeWorkshopEvidenceImageFromObservaciones(
+    return this.buildWorkshopObservacionesWithEvidenceImages(
       baseObservaciones,
+      imagePath ? [imagePath] : [],
     );
-
-    const cleanImagePath = String(imagePath || '').trim();
-
-    if (!cleanImagePath) {
-      return cleanBase || null;
-    }
-
-    return cleanBase
-      ? `${cleanBase}\n📸 Evidencia: ${cleanImagePath}`
-      : `📸 Evidencia: ${cleanImagePath}`;
   }
 
-  private drawCellTextCentered(
+    private drawCellTextCentered(
     doc: any,
     text: string,
     x: number,
@@ -1958,7 +2158,7 @@ export class WorkshopService {
   // INCIDENTES
   // ============================
 
-  async createIncident(dto: CreateIncidentDto) {
+    async createIncident(dto: CreateIncidentDto) {
     const patente = normalizePlate((dto as any).patente);
 
     if (!patente) {
@@ -1983,9 +2183,48 @@ export class WorkshopService {
       throw new NotFoundException('No se encontró un vehículo con esa patente');
     }
 
-    const savedPhoto = await this.saveIncidentPhoto(
-      (dto as any).foto,
-      (dto as any).fotoNombre,
+    const fotosArrayRaw = Array.isArray((dto as any).fotos)
+      ? (dto as any).fotos
+      : undefined;
+
+    const fotosNombresRaw = Array.isArray((dto as any).fotosNombres)
+      ? (dto as any).fotosNombres
+      : undefined;
+
+    const normalizedPhotos =
+      fotosArrayRaw && fotosArrayRaw.length > 0
+        ? fotosArrayRaw
+            .map((v: any) => String(v || '').trim())
+            .filter(Boolean)
+            .slice(0, 10)
+        : String((dto as any).foto || '').trim()
+          ? [String((dto as any).foto || '').trim()]
+          : [];
+
+    const normalizedPhotoNames =
+      fotosNombresRaw && fotosNombresRaw.length > 0
+        ? fotosNombresRaw
+            .map((v: any) => String(v || '').trim())
+            .slice(0, 10)
+        : normalizedPhotos.length > 0
+          ? [String((dto as any).fotoNombre || 'incidente_1.jpg').trim()]
+          : [];
+
+    const savedPhotos = await this.saveIncidentPhotos(
+      normalizedPhotos,
+      normalizedPhotoNames,
+    );
+
+    const savedPhotoUrls = savedPhotos
+      .map((p) => String(p?.fotoUrl || '').trim())
+      .filter(Boolean);
+
+    const mainPhotoUrl = savedPhotoUrls[0] || null;
+    const extraPhotoUrls = savedPhotoUrls.slice(1);
+
+    const descripcionFinal = this.buildIncidentDescripcionWithImages(
+      dto.descripcion,
+      extraPhotoUrls,
     );
 
     const incident = await this.prisma.vehicleIncident.create({
@@ -2001,7 +2240,7 @@ export class WorkshopService {
         severity: (dto as any).severity || 'MEDIA',
         status: (dto as any).status || VehicleIncidentStatus.ABIERTO,
         titulo: String((dto as any).titulo || '').trim() || 'Incidente reportado',
-        descripcion: dto.descripcion,
+        descripcion: descripcionFinal,
         ubicacionTexto: dto.ubicacionTexto,
         kilometraje:
           (dto as any).kilometraje !== undefined
@@ -2011,7 +2250,7 @@ export class WorkshopService {
           (dto as any).horometro !== undefined
             ? Number((dto as any).horometro)
             : undefined,
-        fotoUrl: savedPhoto.fotoUrl,
+        fotoUrl: mainPhotoUrl,
       },
       include: {
         vehicle: true,
@@ -2090,175 +2329,261 @@ export class WorkshopService {
     return incident;
   }
 
-  async updateIncident(
-  id: string,
-  dto: UpdateIncidentDto,
-  resolvedByUserId?: string,
-) {
-  const existingIncident = await this.prisma.vehicleIncident.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      status: true,
-      fotoUrl: true,
-    },
-  });
-
-  if (!existingIncident) {
-    throw new NotFoundException('Incidente no encontrado');
-  }
-
-  const nextStatus = dto.status
-    ? (dto.status as VehicleIncidentStatus)
-    : existingIncident.status;
-
-  const wasResolvedBefore =
-    existingIncident.status === VehicleIncidentStatus.RESUELTO ||
-    existingIncident.status === VehicleIncidentStatus.CERRADO ||
-    existingIncident.status === VehicleIncidentStatus.CANCELADO;
-
-  const willBeResolvedNow =
-    nextStatus === VehicleIncidentStatus.RESUELTO ||
-    nextStatus === VehicleIncidentStatus.CERRADO ||
-    nextStatus === VehicleIncidentStatus.CANCELADO;
-
-  const data: Prisma.VehicleIncidentUpdateInput = {
-    empresa: dto.empresa,
-    type: dto.type,
-    severity: dto.severity,
-    status: dto.status,
-    titulo:
-      dto.titulo !== undefined ? String(dto.titulo || '').trim() : undefined,
-    descripcion:
-      dto.descripcion !== undefined
-        ? String(dto.descripcion || '').trim()
-        : undefined,
-    ubicacionTexto:
-      dto.ubicacionTexto !== undefined
-        ? String(dto.ubicacionTexto || '').trim()
-        : undefined,
-    kilometraje: dto.kilometraje,
-    horometro: dto.horometro,
-  };
-
-  if (dto.vehicleId) {
-    const vehicle = await this.prisma.vehicle.findUnique({
-      where: { id: dto.vehicleId },
+    async updateIncident(
+    id: string,
+    dto: UpdateIncidentDto,
+    resolvedByUserId?: string,
+  ) {
+    const existingIncident = await this.prisma.vehicleIncident.findUnique({
+      where: { id },
       select: {
         id: true,
-        activo: true,
+        status: true,
+        fotoUrl: true,
+        descripcion: true,
       },
     });
 
-    if (!vehicle) {
-      throw new NotFoundException('Vehículo no encontrado');
+    if (!existingIncident) {
+      throw new NotFoundException('Incidente no encontrado');
     }
 
-    if (!vehicle.activo) {
-      throw new BadRequestException('El vehículo seleccionado está inactivo');
-    }
+    const nextStatus = dto.status
+      ? (dto.status as VehicleIncidentStatus)
+      : existingIncident.status;
 
-    data.vehicle = {
-      connect: { id: dto.vehicleId },
+    const wasResolvedBefore =
+      existingIncident.status === VehicleIncidentStatus.RESUELTO ||
+      existingIncident.status === VehicleIncidentStatus.CERRADO ||
+      existingIncident.status === VehicleIncidentStatus.CANCELADO;
+
+    const willBeResolvedNow =
+      nextStatus === VehicleIncidentStatus.RESUELTO ||
+      nextStatus === VehicleIncidentStatus.CERRADO ||
+      nextStatus === VehicleIncidentStatus.CANCELADO;
+
+    const data: Prisma.VehicleIncidentUpdateInput = {
+      empresa: dto.empresa,
+      type: dto.type,
+      severity: dto.severity,
+      status: dto.status,
+      titulo:
+        dto.titulo !== undefined ? String(dto.titulo || '').trim() : undefined,
+      descripcion:
+        dto.descripcion !== undefined
+          ? String(dto.descripcion || '').trim()
+          : undefined,
+      ubicacionTexto:
+        dto.ubicacionTexto !== undefined
+          ? String(dto.ubicacionTexto || '').trim()
+          : undefined,
+      kilometraje: dto.kilometraje,
+      horometro: dto.horometro,
     };
-  }
 
-  if (dto.reportedById) {
-    const reportedBy = await this.prisma.user.findUnique({
-      where: { id: dto.reportedById },
-      select: {
-        id: true,
-        activo: true,
-      },
-    });
+    if (dto.vehicleId) {
+      const vehicle = await this.prisma.vehicle.findUnique({
+        where: { id: dto.vehicleId },
+        select: {
+          id: true,
+          activo: true,
+        },
+      });
 
-    if (!reportedBy) {
-      throw new NotFoundException('Usuario reportante no encontrado');
-    }
-
-    if (!reportedBy.activo) {
-      throw new BadRequestException('El usuario reportante está inactivo');
-    }
-
-    data.reportedBy = {
-      connect: { id: dto.reportedById },
-    };
-  }
-
-  // ✅ FOTO:
-  // - foto undefined => no tocar
-  // - foto "" => eliminar foto actual
-  // - foto base64 => reemplazar foto actual
-  if ((dto as any).foto !== undefined) {
-    const fotoRaw = String((dto as any).foto ?? '').trim();
-
-    if (!fotoRaw) {
-      data.fotoUrl = null;
-
-      if (existingIncident.fotoUrl) {
-        this.deleteUploadedFile(existingIncident.fotoUrl);
+      if (!vehicle) {
+        throw new NotFoundException('Vehículo no encontrado');
       }
-    } else {
-      const savedPhoto = await this.saveIncidentPhoto(
-        (dto as any).foto,
-        (dto as any).fotoNombre,
+
+      if (!vehicle.activo) {
+        throw new BadRequestException('El vehículo seleccionado está inactivo');
+      }
+
+      data.vehicle = {
+        connect: { id: dto.vehicleId },
+      };
+    }
+
+    if (dto.reportedById) {
+      const reportedBy = await this.prisma.user.findUnique({
+        where: { id: dto.reportedById },
+        select: {
+          id: true,
+          activo: true,
+        },
+      });
+
+      if (!reportedBy) {
+        throw new NotFoundException('Usuario reportante no encontrado');
+      }
+
+      if (!reportedBy.activo) {
+        throw new BadRequestException('El usuario reportante está inactivo');
+      }
+
+      data.reportedBy = {
+        connect: { id: dto.reportedById },
+      };
+    }
+
+    const previousExtraPhotoPaths = this.extractIncidentImagesFromDescripcion(
+      existingIncident.descripcion,
+    );
+
+    const hasFotosArray = Array.isArray((dto as any).fotos);
+    const hasSingleFotoField = (dto as any).foto !== undefined;
+
+    if (hasFotosArray) {
+      const normalizedPhotos = ((dto as any).fotos || [])
+        .map((v: any) => String(v || '').trim())
+        .filter(Boolean)
+        .slice(0, 10);
+
+      const normalizedPhotoNames = Array.isArray((dto as any).fotosNombres)
+        ? ((dto as any).fotosNombres || [])
+            .map((v: any) => String(v || '').trim())
+            .slice(0, 10)
+        : [];
+
+      const baseDescription =
+        dto.descripcion !== undefined
+          ? String(dto.descripcion || '').trim()
+          : existingIncident.descripcion;
+
+      if (normalizedPhotos.length > 0) {
+        const savedPhotos = await this.saveIncidentPhotos(
+          normalizedPhotos,
+          normalizedPhotoNames,
+        );
+
+        const savedPhotoUrls = savedPhotos
+          .map((p) => String(p?.fotoUrl || '').trim())
+          .filter(Boolean);
+
+        const mainPhotoUrl = savedPhotoUrls[0] || null;
+        const extraPhotoUrls = savedPhotoUrls.slice(1);
+
+        if (existingIncident.fotoUrl) {
+          this.deleteUploadedFile(existingIncident.fotoUrl);
+        }
+
+        previousExtraPhotoPaths.forEach((imgPath) => {
+          this.deleteUploadedFile(imgPath);
+        });
+
+        data.fotoUrl = mainPhotoUrl;
+        data.descripcion = this.buildIncidentDescripcionWithImages(
+          baseDescription,
+          extraPhotoUrls,
+        );
+      } else {
+        if (existingIncident.fotoUrl) {
+          this.deleteUploadedFile(existingIncident.fotoUrl);
+        }
+
+        previousExtraPhotoPaths.forEach((imgPath) => {
+          this.deleteUploadedFile(imgPath);
+        });
+
+        data.fotoUrl = null;
+        data.descripcion = this.buildIncidentDescripcionWithImages(
+          baseDescription,
+          [],
+        );
+      }
+    } else if (hasSingleFotoField) {
+      const fotoRaw = String((dto as any).foto ?? '').trim();
+      const baseDescription =
+        dto.descripcion !== undefined
+          ? String(dto.descripcion || '').trim()
+          : existingIncident.descripcion;
+
+      if (!fotoRaw) {
+        data.fotoUrl = null;
+        data.descripcion = this.buildIncidentDescripcionWithImages(
+          baseDescription,
+          [],
+        );
+
+        if (existingIncident.fotoUrl) {
+          this.deleteUploadedFile(existingIncident.fotoUrl);
+        }
+
+        previousExtraPhotoPaths.forEach((imgPath) => {
+          this.deleteUploadedFile(imgPath);
+        });
+      } else {
+        const savedPhoto = await this.saveIncidentPhoto(
+          (dto as any).foto,
+          (dto as any).fotoNombre,
+        );
+
+        if (!savedPhoto.fotoUrl) {
+          throw new BadRequestException('No se pudo guardar la foto del incidente');
+        }
+
+        data.fotoUrl = savedPhoto.fotoUrl;
+        data.descripcion = this.buildIncidentDescripcionWithImages(
+          baseDescription,
+          [],
+        );
+
+        if (existingIncident.fotoUrl) {
+          this.deleteUploadedFile(existingIncident.fotoUrl);
+        }
+
+        previousExtraPhotoPaths.forEach((imgPath) => {
+          this.deleteUploadedFile(imgPath);
+        });
+      }
+    } else if (dto.descripcion !== undefined) {
+      data.descripcion = this.buildIncidentDescripcionWithImages(
+        String(dto.descripcion || '').trim(),
+        previousExtraPhotoPaths,
       );
-
-      if (!savedPhoto.fotoUrl) {
-        throw new BadRequestException('No se pudo guardar la foto del incidente');
-      }
-
-      data.fotoUrl = savedPhoto.fotoUrl;
-
-      if (existingIncident.fotoUrl) {
-        this.deleteUploadedFile(existingIncident.fotoUrl);
-      }
     }
-  }
 
-  if (
-    nextStatus === VehicleIncidentStatus.RESUELTO ||
-    nextStatus === VehicleIncidentStatus.CERRADO ||
-    nextStatus === VehicleIncidentStatus.CANCELADO
-  ) {
-    data.cerradoEn = new Date();
-  } else if (
-    nextStatus === VehicleIncidentStatus.ABIERTO ||
-    nextStatus === VehicleIncidentStatus.EN_REVISION
-  ) {
-    data.cerradoEn = null;
-  }
+    if (
+      nextStatus === VehicleIncidentStatus.RESUELTO ||
+      nextStatus === VehicleIncidentStatus.CERRADO ||
+      nextStatus === VehicleIncidentStatus.CANCELADO
+    ) {
+      data.cerradoEn = new Date();
+    } else if (
+      nextStatus === VehicleIncidentStatus.ABIERTO ||
+      nextStatus === VehicleIncidentStatus.EN_REVISION
+    ) {
+      data.cerradoEn = null;
+    }
 
-  const updatedIncident = await this.prisma.vehicleIncident.update({
-    where: { id },
-    data,
-    include: {
-      vehicle: true,
-      reportedBy: true,
-      workshopTasks: {
-        include: {
-          assignedTo: true,
-          assignments: {
-            include: {
-              user: true,
+    const updatedIncident = await this.prisma.vehicleIncident.update({
+      where: { id },
+      data,
+      include: {
+        vehicle: true,
+        reportedBy: true,
+        workshopTasks: {
+          include: {
+            assignedTo: true,
+            assignments: {
+              include: {
+                user: true,
+              },
             },
+            partsUsed: true,
           },
-          partsUsed: true,
-        },
-        orderBy: {
-          createdAt: 'desc',
+          orderBy: {
+            createdAt: 'desc',
+          },
         },
       },
-    },
-  });
+    });
 
-  // ✅ Notificar solo si recién pasó a estado resuelto/cerrado/cancelado
-  if (!wasResolvedBefore && willBeResolvedNow) {
-    await this.notifyIncidentResolved(id, resolvedByUserId);
+    if (!wasResolvedBefore && willBeResolvedNow) {
+      await this.notifyIncidentResolved(id, resolvedByUserId);
+    }
+
+    return updatedIncident;
   }
-
-  return updatedIncident;
-}
 
   async closeIncident(id: string, resolvedByUserId?: string) {
     await this.ensureIncidentExists(id);
@@ -2491,7 +2816,7 @@ export class WorkshopService {
     return result;
   }
 
-  async removeIncident(id: string) {
+    async removeIncident(id: string) {
     const incident = await this.prisma.vehicleIncident.findUnique({
       where: { id },
       include: {
@@ -2511,6 +2836,14 @@ export class WorkshopService {
     if (incident.fotoUrl) {
       this.deleteUploadedFile(incident.fotoUrl);
     }
+
+    const extraIncidentPhotos = this.extractIncidentImagesFromDescripcion(
+      incident.descripcion,
+    );
+
+    extraIncidentPhotos.forEach((imgPath) => {
+      this.deleteUploadedFile(imgPath);
+    });
 
     await this.prisma.$transaction(async (tx) => {
       for (const task of incident.workshopTasks) {
@@ -2541,7 +2874,7 @@ export class WorkshopService {
   // TAREAS DE TALLER
   // ============================
 
-  async createWorkshopTask(dto: CreateWorkshopTaskDto) {
+    async createWorkshopTask(dto: CreateWorkshopTaskDto) {
     const helperIds = Array.isArray(dto.helperIds)
       ? dto.helperIds.filter(Boolean)
       : [];
@@ -2639,16 +2972,49 @@ export class WorkshopService {
 
     const titulo = dto.titulo?.trim() || 'Tarea de taller';
 
-        const savedIngresoPhoto = await this.saveWorkshopIngresoPhoto(
-      (dto as any).fotoIngreso,
-      (dto as any).fotoIngresoNombre,
+    const fotosIngresoRaw = Array.isArray((dto as any).fotosIngreso)
+      ? (dto as any).fotosIngreso
+      : undefined;
+
+    const fotosIngresoNombresRaw = Array.isArray((dto as any).fotosIngresoNombres)
+      ? (dto as any).fotosIngresoNombres
+      : undefined;
+
+    const normalizedIngresoPhotos =
+      fotosIngresoRaw && fotosIngresoRaw.length > 0
+        ? fotosIngresoRaw
+            .map((v: any) => String(v || '').trim())
+            .filter(Boolean)
+            .slice(0, 10)
+        : String((dto as any).fotoIngreso || '').trim()
+          ? [String((dto as any).fotoIngreso || '').trim()]
+          : [];
+
+    const normalizedIngresoPhotoNames =
+      fotosIngresoNombresRaw && fotosIngresoNombresRaw.length > 0
+        ? fotosIngresoNombresRaw
+            .map((v: any) => String(v || '').trim())
+            .slice(0, 10)
+        : normalizedIngresoPhotos.length > 0
+          ? [String((dto as any).fotoIngresoNombre || 'foto_ingreso_1.jpg').trim()]
+          : [];
+
+    const savedIngresoPhotos = await this.saveWorkshopIngresoPhotos(
+      normalizedIngresoPhotos,
+      normalizedIngresoPhotoNames,
     );
 
-    const observacionesConIngreso = savedIngresoPhoto.fotoUrl
-      ? [String(dto.observaciones || '').trim(), `📸 Foto vehículo: ${savedIngresoPhoto.fotoUrl}`]
-          .filter(Boolean)
-          .join('\n')
-      : dto.observaciones;
+    const ingresoPhotoUrls = savedIngresoPhotos
+      .map((p) => String(p?.fotoUrl || '').trim())
+      .filter(Boolean);
+
+    const observacionesConIngreso =
+      ingresoPhotoUrls.length > 0
+        ? this.buildWorkshopObservacionesWithIngresoImages(
+            dto.observaciones,
+            ingresoPhotoUrls,
+          )
+        : dto.observaciones;
 
     const createdTask = await this.prisma.$transaction(async (tx) => {
       const codigo = await this.generateWorkshopCode(tx);
@@ -2679,7 +3045,7 @@ export class WorkshopService {
           status: dto.status ?? 'PENDIENTE',
           diagnostico: dto.diagnostico,
           trabajoRealizado: dto.trabajoRealizado,
-                    observaciones: observacionesConIngreso,
+          observaciones: observacionesConIngreso,
           problemaRepuesto:
             (dto as any).problemaRepuesto !== undefined
               ? String((dto as any).problemaRepuesto || '').trim() || null
@@ -2890,423 +3256,566 @@ private buildWorkshopObservacionesWithIngresoImages(
   return [cleanBase, ...photoLines].filter(Boolean).join('\n').trim() || null;
 }
 
-      async updateWorkshopTask(id: string, dto: UpdateWorkshopTaskDto) {
-    const existingTask = await this.prisma.workshopTask.findUnique({
+        async updateWorkshopTask(id: string, dto: UpdateWorkshopTaskDto) {
+  const existingTask = await this.prisma.workshopTask.findUnique({
+    where: { id },
+    include: {
+      incident: true,
+      assignments: {
+        include: {
+          user: true,
+        },
+      },
+    },
+  });
+
+  if (!existingTask) {
+    throw new NotFoundException('Tarea de taller no encontrada');
+  }
+
+  const helperIdsRaw = Array.isArray((dto as any).helperIds)
+    ? (dto as any).helperIds.filter(Boolean)
+    : undefined;
+
+  const nextResponsibleId =
+    dto.assignedToId !== undefined
+      ? String(dto.assignedToId || '').trim()
+      : String(existingTask.assignedToId || '').trim();
+
+  const helperIds =
+    helperIdsRaw !== undefined
+      ? helperIdsRaw
+          .map((id: any) => String(id || '').trim())
+          .filter(Boolean)
+          .filter((helperId: string) => helperId !== nextResponsibleId)
+      : existingTask.assignments
+          .filter(
+            (a) => a.role === WorkshopTaskAssignmentRole.APOYO && a.userId,
+          )
+          .map((a) => String(a.userId));
+
+  const uniqueUserIds = Array.from(
+    new Set(
+      [nextResponsibleId, ...helperIds].filter(
+        (userId): userId is string =>
+          typeof userId === 'string' && userId.trim().length > 0,
+      ),
+    ),
+  );
+
+  if (dto.vehicleId) {
+    const vehicle = await this.prisma.vehicle.findUnique({
+      where: { id: dto.vehicleId },
+      select: {
+        id: true,
+        activo: true,
+      },
+    });
+
+    if (!vehicle) {
+      throw new NotFoundException('Vehículo no encontrado');
+    }
+
+    if (!vehicle.activo) {
+      throw new BadRequestException('El vehículo seleccionado está inactivo');
+    }
+  }
+
+  if (dto.createdById) {
+    const creator = await this.prisma.user.findUnique({
+      where: { id: dto.createdById },
+      select: {
+        id: true,
+        activo: true,
+      },
+    });
+
+    if (!creator) {
+      throw new NotFoundException('Usuario creador no encontrado');
+    }
+
+    if (!creator.activo) {
+      throw new BadRequestException('El usuario creador está inactivo');
+    }
+  }
+
+  if (dto.incidentId) {
+    const incident = await this.prisma.vehicleIncident.findUnique({
+      where: { id: dto.incidentId },
+      select: { id: true },
+    });
+
+    if (!incident) {
+      throw new NotFoundException('Incidente relacionado no encontrado');
+    }
+  }
+
+  if (uniqueUserIds.length > 0) {
+    const users = await this.prisma.user.findMany({
+      where: {
+        id: {
+          in: uniqueUserIds,
+        },
+      },
+      select: {
+        id: true,
+        activo: true,
+      },
+    });
+
+    if (users.length !== uniqueUserIds.length) {
+      throw new NotFoundException(
+        'Uno o más técnicos seleccionados no existen',
+      );
+    }
+
+    const inactiveUser = users.find((u) => !u.activo);
+    if (inactiveUser) {
+      throw new BadRequestException(
+        'Uno o más técnicos seleccionados están inactivos',
+      );
+    }
+  }
+
+  const nextStatus = dto.status
+    ? (dto.status as WorkshopTaskStatus)
+    : existingTask.status;
+
+  // =========================================================
+  // ✅ MANEJO DE FOTOS DE INGRESO EN OBSERVACIONES
+  // =========================================================
+  const previousIngresoPaths =
+    this.extractWorkshopIngresoImagesFromObservaciones(
+      existingTask.observaciones,
+    );
+
+  const fotosIngresoExistentesRaw = Array.isArray(
+    (dto as any).fotosIngresoExistentes,
+  )
+    ? ((dto as any).fotosIngresoExistentes || [])
+        .map((v: any) => String(v || '').trim())
+        .filter(Boolean)
+    : undefined;
+
+  const keptExistingIngresoPaths =
+    fotosIngresoExistentesRaw !== undefined
+      ? fotosIngresoExistentesRaw.filter((v: string) =>
+          previousIngresoPaths.includes(v),
+        )
+      : undefined;
+
+  const hasFotosIngresoArray = Array.isArray((dto as any).fotosIngreso);
+  const hasSingleFotoIngresoField = (dto as any).fotoIngreso !== undefined;
+
+  let finalIngresoImagePaths =
+    keptExistingIngresoPaths !== undefined
+      ? [...keptExistingIngresoPaths]
+      : [...previousIngresoPaths];
+
+  if (hasFotosIngresoArray) {
+    const normalizedIngresoPhotos = ((dto as any).fotosIngreso || [])
+      .map((v: any) => String(v || '').trim())
+      .filter(Boolean)
+      .slice(0, 10);
+
+    const normalizedIngresoPhotoNames = Array.isArray(
+      (dto as any).fotosIngresoNombres,
+    )
+      ? ((dto as any).fotosIngresoNombres || [])
+          .map((v: any) => String(v || '').trim())
+          .slice(0, 10)
+      : [];
+
+    const pathsToDelete = previousIngresoPaths.filter(
+      (imgPath) => !finalIngresoImagePaths.includes(imgPath),
+    );
+
+    pathsToDelete.forEach((imgPath) => {
+      this.deleteUploadedFile(imgPath);
+    });
+
+    if (normalizedIngresoPhotos.length > 0) {
+      const savedIngresoPhotos = await this.saveWorkshopIngresoPhotos(
+        normalizedIngresoPhotos,
+        normalizedIngresoPhotoNames,
+      );
+
+      const newIngresoPaths = savedIngresoPhotos
+        .map((p) => String(p?.fotoUrl || '').trim())
+        .filter(Boolean);
+
+      finalIngresoImagePaths = [
+        ...finalIngresoImagePaths,
+        ...newIngresoPaths,
+      ];
+    }
+  } else if (hasSingleFotoIngresoField) {
+    const fotoIngresoRaw = String((dto as any).fotoIngreso ?? '').trim();
+    const fotoIngresoNombre = String(
+      (dto as any).fotoIngresoNombre ?? 'foto_ingreso.jpg',
+    ).trim();
+
+    const pathsToDelete = previousIngresoPaths.filter(
+      (imgPath) => !finalIngresoImagePaths.includes(imgPath),
+    );
+
+    pathsToDelete.forEach((imgPath) => {
+      this.deleteUploadedFile(imgPath);
+    });
+
+    if (fotoIngresoRaw) {
+      const savedIngreso = await this.saveWorkshopIngresoPhoto(
+        fotoIngresoRaw,
+        fotoIngresoNombre || 'foto_ingreso.jpg',
+      );
+
+      if (!savedIngreso.fotoUrl) {
+        throw new BadRequestException(
+          'No se pudo guardar la foto del ingreso',
+        );
+      }
+
+      finalIngresoImagePaths = [
+        ...finalIngresoImagePaths,
+        savedIngreso.fotoUrl,
+      ];
+    }
+  } else if (keptExistingIngresoPaths !== undefined) {
+    const pathsToDelete = previousIngresoPaths.filter(
+      (imgPath) => !keptExistingIngresoPaths.includes(imgPath),
+    );
+
+    pathsToDelete.forEach((imgPath) => {
+      this.deleteUploadedFile(imgPath);
+    });
+
+    finalIngresoImagePaths = [...keptExistingIngresoPaths];
+  }
+
+  finalIngresoImagePaths = [
+    ...new Set(
+      finalIngresoImagePaths
+        .map((p) => String(p || '').trim())
+        .filter(Boolean),
+    ),
+  ];
+
+  // =========================================================
+  // ✅ MANEJO DE EVIDENCIA EN OBSERVACIONES
+  // =========================================================
+  const previousEvidencePaths =
+    this.extractWorkshopEvidenceImagesFromObservaciones(
+      existingTask.observaciones,
+    );
+
+  const keptExistingEvidencePaths = Array.isArray((dto as any).fotosExistentes)
+    ? ((dto as any).fotosExistentes || [])
+        .map((v: any) => String(v || '').trim())
+        .filter(Boolean)
+        .filter((v: string) => previousEvidencePaths.includes(v))
+    : undefined;
+
+  const hasFotosArray = Array.isArray((dto as any).fotos);
+
+  const fotoEvidenciaSource =
+    (dto as any).fotoEvidencia !== undefined
+      ? (dto as any).fotoEvidencia
+      : (dto as any).foto !== undefined
+        ? (dto as any).foto
+        : undefined;
+
+  const fotoEvidenciaNombre =
+    (dto as any).fotoNombre !== undefined
+      ? String((dto as any).fotoNombre ?? '').trim()
+      : 'evidencia_tarea.jpg';
+
+  const fotoEvidenciaRaw =
+    fotoEvidenciaSource !== undefined
+      ? String(fotoEvidenciaSource ?? '').trim()
+      : undefined;
+
+  let finalEvidenceImagePaths =
+    keptExistingEvidencePaths !== undefined
+      ? [...keptExistingEvidencePaths]
+      : [...previousEvidencePaths];
+
+  if (hasFotosArray) {
+    const normalizedPhotos = ((dto as any).fotos || [])
+      .map((v: any) => String(v || '').trim())
+      .filter(Boolean)
+      .slice(0, 10);
+
+    const normalizedPhotoNames = Array.isArray((dto as any).fotosNombres)
+      ? ((dto as any).fotosNombres || [])
+          .map((v: any) => String(v || '').trim())
+          .slice(0, 10)
+      : [];
+
+    const pathsToDelete = previousEvidencePaths.filter(
+      (imgPath) => !finalEvidenceImagePaths.includes(imgPath),
+    );
+
+    pathsToDelete.forEach((imgPath) => {
+      this.deleteUploadedFile(imgPath);
+    });
+
+    if (normalizedPhotos.length > 0) {
+      const savedEvidencePhotos = await this.saveWorkshopEvidencePhotos(
+        normalizedPhotos,
+        normalizedPhotoNames,
+      );
+
+      const newEvidencePaths = savedEvidencePhotos
+        .map((p) => String(p?.fotoUrl || '').trim())
+        .filter(Boolean);
+
+      finalEvidenceImagePaths = [
+        ...finalEvidenceImagePaths,
+        ...newEvidencePaths,
+      ];
+    }
+  } else if (fotoEvidenciaRaw !== undefined) {
+    if (fotoEvidenciaRaw) {
+      const savedEvidence = await this.saveWorkshopEvidencePhoto(
+        fotoEvidenciaRaw,
+        fotoEvidenciaNombre || 'evidencia_tarea.jpg',
+      );
+
+      if (!savedEvidence.fotoUrl) {
+        throw new BadRequestException(
+          'No se pudo guardar la evidencia de la tarea',
+        );
+      }
+
+      const pathsToDelete = previousEvidencePaths.filter(
+        (imgPath) => !finalEvidenceImagePaths.includes(imgPath),
+      );
+
+      pathsToDelete.forEach((imgPath) => {
+        this.deleteUploadedFile(imgPath);
+      });
+
+      finalEvidenceImagePaths = [
+        ...finalEvidenceImagePaths,
+        savedEvidence.fotoUrl,
+      ];
+    } else {
+      previousEvidencePaths.forEach((imgPath) => {
+        this.deleteUploadedFile(imgPath);
+      });
+
+      finalEvidenceImagePaths = [];
+    }
+  } else if (keptExistingEvidencePaths !== undefined) {
+    const pathsToDelete = previousEvidencePaths.filter(
+      (imgPath) => !keptExistingEvidencePaths.includes(imgPath),
+    );
+
+    pathsToDelete.forEach((imgPath) => {
+      this.deleteUploadedFile(imgPath);
+    });
+
+    finalEvidenceImagePaths = [...keptExistingEvidencePaths];
+  }
+
+  finalEvidenceImagePaths = [
+    ...new Set(
+      finalEvidenceImagePaths
+        .map((p) => String(p || '').trim())
+        .filter(Boolean),
+    ),
+  ];
+
+  const normalizedObservaciones =
+    typeof dto.observaciones === 'string'
+      ? dto.observaciones.trim()
+      : undefined;
+
+  const problemaRepuestoRaw = (dto as any).problemaRepuesto;
+  const problemaRepuesto =
+    problemaRepuestoRaw !== undefined
+      ? String(problemaRepuestoRaw || '').trim()
+      : undefined;
+
+  const observacionesBase =
+    normalizedObservaciones !== undefined
+      ? normalizedObservaciones
+      : existingTask.observaciones;
+
+  const observacionesConIngreso =
+    this.buildWorkshopObservacionesWithIngresoImages(
+      observacionesBase,
+      finalIngresoImagePaths,
+    );
+
+  const observacionesFinal =
+    this.buildWorkshopObservacionesWithEvidenceImages(
+      observacionesConIngreso,
+      finalEvidenceImagePaths,
+    );
+
+  const data: Prisma.WorkshopTaskUpdateInput = {
+    empresa: dto.empresa,
+    titulo:
+      dto.titulo !== undefined
+        ? String(dto.titulo || '').trim() || 'Tarea de taller'
+        : undefined,
+    descripcion: dto.descripcion,
+    priority: dto.priority,
+    status: dto.status,
+    diagnostico: dto.diagnostico,
+    trabajoRealizado:
+      dto.trabajoRealizado !== undefined
+        ? dto.trabajoRealizado
+        : undefined,
+    observaciones: observacionesFinal,
+    estimatedCost: dto.estimatedCost,
+    actualCost: dto.actualCost,
+    problemaRepuesto:
+      problemaRepuesto !== undefined
+        ? problemaRepuesto || null
+        : undefined,
+  };
+
+  if (nextStatus === WorkshopTaskStatus.EN_REPARACION) {
+    data.startedAt = existingTask.startedAt ?? new Date();
+    data.closedAt = null;
+  }
+
+  if (nextStatus === WorkshopTaskStatus.ESPERANDO_REPUESTO) {
+    data.startedAt = existingTask.startedAt ?? new Date();
+    data.closedAt = null;
+  }
+
+  if (nextStatus === WorkshopTaskStatus.TERMINADA) {
+    data.closedAt = new Date();
+  }
+
+  if (nextStatus === WorkshopTaskStatus.CANCELADA) {
+    data.closedAt = new Date();
+  }
+
+  if (dto.incidentId) {
+    data.incident = {
+      connect: { id: dto.incidentId },
+    };
+  }
+
+  if (dto.vehicleId) {
+    data.vehicle = {
+      connect: { id: dto.vehicleId },
+    };
+  }
+
+  if (dto.createdById) {
+    data.createdBy = {
+      connect: { id: dto.createdById },
+    };
+  }
+
+  if (nextResponsibleId) {
+    data.assignedTo = {
+      connect: { id: nextResponsibleId },
+    };
+  }
+
+  if (dto.closedById) {
+    data.closedBy = {
+      connect: { id: dto.closedById },
+    };
+  }
+
+  const updatedTask = await this.prisma.$transaction(async (tx) => {
+    await tx.workshopTask.update({
+      where: { id },
+      data,
+    });
+
+    if (helperIdsRaw !== undefined || dto.assignedToId !== undefined) {
+      await tx.workshopTaskAssignment.deleteMany({
+        where: {
+          workshopTaskId: id,
+        },
+      });
+
+      const assignmentRows = [
+        ...(nextResponsibleId
+          ? [
+              {
+                workshopTaskId: id,
+                userId: nextResponsibleId,
+                role: WorkshopTaskAssignmentRole.RESPONSABLE,
+              },
+            ]
+          : []),
+        ...helperIds.map((helperId) => ({
+          workshopTaskId: id,
+          userId: helperId,
+          role: WorkshopTaskAssignmentRole.APOYO,
+        })),
+      ];
+
+      if (assignmentRows.length > 0) {
+        await tx.workshopTaskAssignment.createMany({
+          data: assignmentRows,
+          skipDuplicates: true,
+        });
+      }
+    }
+
+    return tx.workshopTask.findUnique({
       where: { id },
       include: {
+        vehicle: true,
         incident: true,
+        createdBy: true,
+        assignedTo: true,
+        closedBy: true,
         assignments: {
           include: {
             user: true,
           },
         },
+        partsUsed: true,
       },
     });
+  });
 
-    if (!existingTask) {
-      throw new NotFoundException('Tarea de taller no encontrada');
-    }
-
-    const helperIdsRaw = Array.isArray((dto as any).helperIds)
-      ? (dto as any).helperIds.filter(Boolean)
-      : undefined;
-
-    const nextResponsibleId =
-      dto.assignedToId !== undefined
-        ? String(dto.assignedToId || '').trim()
-        : String(existingTask.assignedToId || '').trim();
-
-    const helperIds =
-      helperIdsRaw !== undefined
-        ? helperIdsRaw
-            .map((id: any) => String(id || '').trim())
-            .filter(Boolean)
-            .filter((helperId: string) => helperId !== nextResponsibleId)
-        : existingTask.assignments
-            .filter(
-              (a) =>
-                a.role === WorkshopTaskAssignmentRole.APOYO && a.userId,
-            )
-            .map((a) => String(a.userId));
-
-    const uniqueUserIds = Array.from(
-      new Set(
-        [nextResponsibleId, ...helperIds].filter(
-          (userId): userId is string =>
-            typeof userId === 'string' && userId.trim().length > 0,
-        ),
-      ),
-    );
-
-    if (dto.vehicleId) {
-      const vehicle = await this.prisma.vehicle.findUnique({
-        where: { id: dto.vehicleId },
-        select: {
-          id: true,
-          activo: true,
-        },
-      });
-
-      if (!vehicle) {
-        throw new NotFoundException('Vehículo no encontrado');
-      }
-
-      if (!vehicle.activo) {
-        throw new BadRequestException('El vehículo seleccionado está inactivo');
-      }
-    }
-
-    if (dto.createdById) {
-      const creator = await this.prisma.user.findUnique({
-        where: { id: dto.createdById },
-        select: {
-          id: true,
-          activo: true,
-        },
-      });
-
-      if (!creator) {
-        throw new NotFoundException('Usuario creador no encontrado');
-      }
-
-      if (!creator.activo) {
-        throw new BadRequestException('El usuario creador está inactivo');
-      }
-    }
-
-    if (dto.incidentId) {
-      const incident = await this.prisma.vehicleIncident.findUnique({
-        where: { id: dto.incidentId },
-        select: { id: true },
-      });
-
-      if (!incident) {
-        throw new NotFoundException('Incidente relacionado no encontrado');
-      }
-    }
-
-    if (uniqueUserIds.length > 0) {
-      const users = await this.prisma.user.findMany({
-        where: {
-          id: {
-            in: uniqueUserIds,
-          },
-        },
-        select: {
-          id: true,
-          activo: true,
-        },
-      });
-
-      if (users.length !== uniqueUserIds.length) {
-        throw new NotFoundException(
-          'Uno o más técnicos seleccionados no existen',
-        );
-      }
-
-      const inactiveUser = users.find((u) => !u.activo);
-      if (inactiveUser) {
-        throw new BadRequestException(
-          'Uno o más técnicos seleccionados están inactivos',
-        );
-      }
-    }
-
-    const nextStatus = dto.status
-      ? (dto.status as WorkshopTaskStatus)
-      : existingTask.status;
-
-    // =========================================================
-    // ✅ MANEJO DE FOTO DE INGRESO EN OBSERVACIONES
-    // =========================================================
-    const previousIngresoPaths =
-  this.extractWorkshopIngresoImagesFromObservaciones(
-    existingTask.observaciones,
-  );
-
-    const fotoIngresoRaw =
-      (dto as any).fotoIngreso !== undefined
-        ? String((dto as any).fotoIngreso ?? '').trim()
-        : undefined;
-
-    const fotoIngresoNombre =
-      (dto as any).fotoIngresoNombre !== undefined
-        ? String((dto as any).fotoIngresoNombre ?? '').trim()
-        : 'foto_ingreso.jpg';
-
-    let finalIngresoImagePaths = [...previousIngresoPaths];
-
-    if (fotoIngresoRaw !== undefined) {
-  if (fotoIngresoRaw) {
-    const savedIngreso = await this.saveWorkshopIngresoPhoto(
-      fotoIngresoRaw,
-      fotoIngresoNombre || 'foto_ingreso.jpg',
-    );
-
-    if (!savedIngreso.fotoUrl) {
-      throw new BadRequestException(
-        'No se pudo guardar la foto del ingreso',
-      );
-    }
-
-    previousIngresoPaths.forEach((imgPath) => {
-      this.deleteUploadedFile(imgPath);
-    });
-
-    finalIngresoImagePaths = [savedIngreso.fotoUrl];
-  } else {
-    previousIngresoPaths.forEach((imgPath) => {
-      this.deleteUploadedFile(imgPath);
-    });
-
-    finalIngresoImagePaths = [];
-  }
-}
-
-    // =========================================================
-    // ✅ MANEJO DE EVIDENCIA EN OBSERVACIONES
-    // =========================================================
-    const previousEvidencePath =
-      this.extractWorkshopEvidenceImageFromObservaciones(
-        existingTask.observaciones,
-      );
-
-    const fotoEvidenciaSource =
-      (dto as any).fotoEvidencia !== undefined
-        ? (dto as any).fotoEvidencia
-        : (dto as any).foto !== undefined
-          ? (dto as any).foto
-          : undefined;
-
-    const fotoEvidenciaNombre =
-      (dto as any).fotoNombre !== undefined
-        ? String((dto as any).fotoNombre ?? '').trim()
-        : 'evidencia_tarea.jpg';
-
-    const fotoEvidenciaRaw =
-      fotoEvidenciaSource !== undefined
-        ? String(fotoEvidenciaSource ?? '').trim()
-        : undefined;
-
-    let finalEvidenceImagePath = previousEvidencePath || '';
-
-    if (fotoEvidenciaRaw !== undefined) {
-      if (fotoEvidenciaRaw) {
-        const savedEvidence = await this.saveWorkshopEvidencePhoto(
-          fotoEvidenciaRaw,
-          fotoEvidenciaNombre || 'evidencia_tarea.jpg',
-        );
-
-        if (!savedEvidence.fotoUrl) {
-          throw new BadRequestException(
-            'No se pudo guardar la evidencia de la tarea',
-          );
-        }
-
-        if (previousEvidencePath) {
-          this.deleteUploadedFile(previousEvidencePath);
-        }
-
-        finalEvidenceImagePath = savedEvidence.fotoUrl;
-      } else {
-        if (previousEvidencePath) {
-          this.deleteUploadedFile(previousEvidencePath);
-        }
-
-        finalEvidenceImagePath = '';
-      }
-    }
-
-    const normalizedObservaciones =
-      typeof dto.observaciones === 'string'
-        ? dto.observaciones.trim()
-        : undefined;
-
-    const problemaRepuestoRaw = (dto as any).problemaRepuesto;
-    const problemaRepuesto =
-      problemaRepuestoRaw !== undefined
-        ? String(problemaRepuestoRaw || '').trim()
-        : undefined;
-
-    const observacionesBase =
-      normalizedObservaciones !== undefined
-        ? normalizedObservaciones
-        : existingTask.observaciones;
-
-    const observacionesConIngreso =
-  this.buildWorkshopObservacionesWithIngresoImages(
-    observacionesBase,
-    finalIngresoImagePaths,
-  );
-
-    const observacionesFinal =
-      this.buildWorkshopObservacionesWithEvidenceImage(
-        observacionesConIngreso,
-        finalEvidenceImagePath,
-      );
-
-    const data: Prisma.WorkshopTaskUpdateInput = {
-      empresa: dto.empresa,
-      titulo:
-        dto.titulo !== undefined
-          ? String(dto.titulo || '').trim() || 'Tarea de taller'
-          : undefined,
-      descripcion: dto.descripcion,
-      priority: dto.priority,
-      status: dto.status,
-      diagnostico: dto.diagnostico,
-      trabajoRealizado:
-  dto.trabajoRealizado !== undefined
-    ? dto.trabajoRealizado
-    : undefined,
-      observaciones: observacionesFinal,
-      estimatedCost: dto.estimatedCost,
-      actualCost: dto.actualCost,
-      problemaRepuesto:
-        problemaRepuesto !== undefined
-          ? problemaRepuesto || null
-          : undefined,
-    };
-
-    if (nextStatus === WorkshopTaskStatus.EN_REPARACION) {
-      data.startedAt = existingTask.startedAt ?? new Date();
-      data.closedAt = null;
-    }
-
-    if (nextStatus === WorkshopTaskStatus.ESPERANDO_REPUESTO) {
-      data.startedAt = existingTask.startedAt ?? new Date();
-      data.closedAt = null;
-    }
-
+  if (existingTask.incidentId) {
     if (nextStatus === WorkshopTaskStatus.TERMINADA) {
-      data.closedAt = new Date();
-    }
-
-    if (nextStatus === WorkshopTaskStatus.CANCELADA) {
-      data.closedAt = new Date();
-    }
-
-    if (dto.incidentId) {
-      data.incident = {
-        connect: { id: dto.incidentId },
-      };
-    }
-
-    if (dto.vehicleId) {
-      data.vehicle = {
-        connect: { id: dto.vehicleId },
-      };
-    }
-
-    if (dto.createdById) {
-      data.createdBy = {
-        connect: { id: dto.createdById },
-      };
-    }
-
-    if (nextResponsibleId) {
-      data.assignedTo = {
-        connect: { id: nextResponsibleId },
-      };
-    }
-
-    if (dto.closedById) {
-      data.closedBy = {
-        connect: { id: dto.closedById },
-      };
-    }
-
-    const updatedTask = await this.prisma.$transaction(async (tx) => {
-      await tx.workshopTask.update({
-        where: { id },
-        data,
-      });
-
-      if (helperIdsRaw !== undefined || dto.assignedToId !== undefined) {
-        await tx.workshopTaskAssignment.deleteMany({
-          where: {
-            workshopTaskId: id,
-          },
-        });
-
-        const assignmentRows = [
-          ...(nextResponsibleId
-            ? [
-                {
-                  workshopTaskId: id,
-                  userId: nextResponsibleId,
-                  role: WorkshopTaskAssignmentRole.RESPONSABLE,
-                },
-              ]
-            : []),
-          ...helperIds.map((helperId) => ({
-            workshopTaskId: id,
-            userId: helperId,
-            role: WorkshopTaskAssignmentRole.APOYO,
-          })),
-        ];
-
-        if (assignmentRows.length > 0) {
-          await tx.workshopTaskAssignment.createMany({
-            data: assignmentRows,
-            skipDuplicates: true,
-          });
-        }
-      }
-
-      return tx.workshopTask.findUnique({
-        where: { id },
-        include: {
-          vehicle: true,
-          incident: true,
-          createdBy: true,
-          assignedTo: true,
-          closedBy: true,
-          assignments: {
-            include: {
-              user: true,
-            },
-          },
-          partsUsed: true,
+      await this.prisma.vehicleIncident.update({
+        where: { id: existingTask.incidentId },
+        data: {
+          status: VehicleIncidentStatus.RESUELTO,
+          cerradoEn: new Date(),
         },
       });
-    });
-
-    if (existingTask.incidentId) {
-      if (nextStatus === WorkshopTaskStatus.TERMINADA) {
-        await this.prisma.vehicleIncident.update({
-          where: { id: existingTask.incidentId },
-          data: {
-            status: VehicleIncidentStatus.RESUELTO,
-            cerradoEn: new Date(),
-          },
-        });
-      } else if (
-        nextStatus === WorkshopTaskStatus.EN_REVISION ||
-        nextStatus === WorkshopTaskStatus.EN_REPARACION ||
-        nextStatus === WorkshopTaskStatus.ESPERANDO_REPUESTO ||
-        nextStatus === WorkshopTaskStatus.PENDIENTE
-      ) {
-        await this.prisma.vehicleIncident.update({
-          where: { id: existingTask.incidentId },
-          data: {
-            status: VehicleIncidentStatus.EN_REVISION,
-            cerradoEn: null,
-          },
-        });
-      } else if (nextStatus === WorkshopTaskStatus.CANCELADA) {
-        await this.prisma.vehicleIncident.update({
-          where: { id: existingTask.incidentId },
-          data: {
-            status: VehicleIncidentStatus.CANCELADO,
-            cerradoEn: new Date(),
-          },
-        });
-      }
+    } else if (
+      nextStatus === WorkshopTaskStatus.EN_REVISION ||
+      nextStatus === WorkshopTaskStatus.EN_REPARACION ||
+      nextStatus === WorkshopTaskStatus.ESPERANDO_REPUESTO ||
+      nextStatus === WorkshopTaskStatus.PENDIENTE
+    ) {
+      await this.prisma.vehicleIncident.update({
+        where: { id: existingTask.incidentId },
+        data: {
+          status: VehicleIncidentStatus.EN_REVISION,
+          cerradoEn: null,
+        },
+      });
+    } else if (nextStatus === WorkshopTaskStatus.CANCELADA) {
+      await this.prisma.vehicleIncident.update({
+        where: { id: existingTask.incidentId },
+        data: {
+          status: VehicleIncidentStatus.CANCELADO,
+          cerradoEn: new Date(),
+        },
+      });
     }
-
-    return updatedTask;
   }
+
+  return updatedTask;
+}
 
   async closeWorkshopTask(id: string) {
     const existingTask = await this.prisma.workshopTask.findUnique({
@@ -3602,12 +4111,14 @@ private buildWorkshopObservacionesWithIngresoImages(
     return result.part;
   }
 
-  async finishWorkshopTaskByWorker(
+    async finishWorkshopTaskByWorker(
     taskId: string,
     userId: string,
     dto?: {
       trabajoRealizado?: string;
       fotoEvidencia?: string;
+      fotosEvidencia?: string[];
+      fotosNombres?: string[];
     },
   ) {
     const task = await this.ensureWorkshopTaskExists(taskId);
@@ -3623,20 +4134,55 @@ private buildWorkshopObservacionesWithIngresoImages(
       throw new BadRequestException('La tarea ya está terminada');
     }
 
-        let imagePath: string | null = null;
+    const previousEvidencePaths =
+      this.extractWorkshopEvidenceImagesFromObservaciones(task.observaciones);
 
-    if (dto?.fotoEvidencia) {
+    let finalEvidenceImagePaths = [...previousEvidencePaths];
+
+    const fotosEvidencia = Array.isArray(dto?.fotosEvidencia)
+      ? dto?.fotosEvidencia
+          .map((v: any) => String(v || '').trim())
+          .filter(Boolean)
+          .slice(0, 10)
+      : [];
+
+    const fotosNombres = Array.isArray(dto?.fotosNombres)
+      ? dto?.fotosNombres
+          .map((v: any) => String(v || '').trim())
+          .slice(0, 10)
+      : [];
+
+    if (fotosEvidencia.length > 0) {
+      previousEvidencePaths.forEach((imgPath) => {
+        this.deleteUploadedFile(imgPath);
+      });
+
+      const savedEvidencePhotos = await this.saveWorkshopEvidencePhotos(
+        fotosEvidencia,
+        fotosNombres,
+      );
+
+      finalEvidenceImagePaths = savedEvidencePhotos
+        .map((p) => String(p?.fotoUrl || '').trim())
+        .filter(Boolean);
+    } else if (dto?.fotoEvidencia) {
+      previousEvidencePaths.forEach((imgPath) => {
+        this.deleteUploadedFile(imgPath);
+      });
+
       const savedEvidence = await this.saveWorkshopEvidencePhoto(
         dto.fotoEvidencia,
         'evidencia_tarea.jpg',
       );
 
-      imagePath = savedEvidence.fotoUrl;
+      finalEvidenceImagePaths = savedEvidence?.fotoUrl
+        ? [savedEvidence.fotoUrl]
+        : [];
     }
 
     const trabajoRealizado = String(dto?.trabajoRealizado || '').trim();
 
-        const updatedTask = await this.prisma.workshopTask.update({
+    const updatedTask = await this.prisma.workshopTask.update({
       where: { id: taskId },
       data: {
         status: WorkshopTaskStatus.TERMINADA,
@@ -3646,9 +4192,9 @@ private buildWorkshopObservacionesWithIngresoImages(
           connect: { id: userId },
         },
         trabajoRealizado: trabajoRealizado || undefined,
-        observaciones: this.buildWorkshopObservacionesWithEvidenceImage(
+        observaciones: this.buildWorkshopObservacionesWithEvidenceImages(
           task.observaciones,
-          imagePath,
+          finalEvidenceImagePaths,
         ),
       },
       include: {
@@ -3682,7 +4228,6 @@ private buildWorkshopObservacionesWithIngresoImages(
 
     return updatedTask;
   }
-
   // ============================
   // INSUMOS -> PREVENCION
   // ============================

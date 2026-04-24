@@ -85,7 +85,7 @@ export class CreateWorkshopTaskDto {
   @Min(0)
   actualCost?: number;
 
-    @IsOptional()
+  @IsOptional()
   @IsString()
   fotoIngreso?: string;
 
@@ -93,5 +93,16 @@ export class CreateWorkshopTaskDto {
   @IsString()
   @MaxLength(255)
   fotoIngresoNombre?: string;
-}
 
+  // ✅ NUEVO: múltiples fotos de ingreso
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  fotosIngreso?: string[];
+
+  // ✅ NUEVO: nombres de múltiples fotos de ingreso
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  fotosIngresoNombres?: string[];
+}

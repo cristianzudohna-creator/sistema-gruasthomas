@@ -17,6 +17,11 @@
 // - ahora busca fotos del vehículo no solo en observaciones
 // - también revisa campos reales del task y objetos anidados
 // - filtra branding, evidencia final y fotos de repuesto
+// ✅ NUEVO AHORA:
+// - finalizar tarea permite subir hasta 10 fotos de evidencia
+// - muestra previews múltiples
+// - permite quitar una por una o todas
+// - envía fotosEvidencia + fotosNombres al backend
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -26,6 +31,7 @@ import "./Admin.css";
 import "./WorkshopMyTasks.css";
 
 const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
+const MAX_EVIDENCE_PHOTOS = 10;
 
 function getToken() {
   return (
@@ -253,37 +259,28 @@ function cleanObservationText(rawText) {
 
   text = text.replace(/\r/g, "");
 
-  // Quitar líneas vacías tipo:
-  // 📸 Foto vehículo:
-  // 📸 Evidencia:
-  // 📸 Foto:
   text = text.replace(
     /(?:^|\n)\s*📸\s*(?:Foto vehículo|Fotos del vehículo|Foto|Evidencia)\s*:\s*(?=\n|$)/gi,
     ""
   );
 
-  // Quitar líneas con rutas de imágenes de ingreso
   text = text.replace(
     /(?:^|\n)\s*📸\s*Foto vehículo\s*:\s*\/uploads\/workshop-ingreso\/[^\s]+/gi,
     ""
   );
 
-  // Quitar líneas con rutas de imágenes de evidencia
   text = text.replace(
     /(?:^|\n)\s*📸\s*Evidencia\s*:\s*\/uploads\/workshop-evidence\/[^\s]+/gi,
     ""
   );
 
-  // Quitar líneas con rutas de imágenes de repuestos
   text = text.replace(
     /(?:^|\n)\s*📸\s*Foto\s*:\s*\/uploads\/workshop-parts\/[^\s]+/gi,
     ""
   );
 
-  // Quitar cualquier ruta suelta /uploads/...
   text = text.replace(/(?:^|\n)\s*\/uploads\/[^\s]+/gi, "");
 
-  // Limpiar saltos y espacios
   text = text
     .replace(/\n{2,}/g, "\n")
     .replace(/[ \t]{2,}/g, " ")
@@ -300,19 +297,6 @@ function uniqueStrings(values) {
         .filter(Boolean)
     ),
   ];
-}
-
-function looksLikeImagePath(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return false;
-
-  if (/^data:image\//i.test(raw)) return true;
-  if (/^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i.test(raw)) return true;
-  if (/^\/?(api\/)?uploads\/.+\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i.test(raw)) {
-    return true;
-  }
-
-  return false;
 }
 
 function isBrandingImage(value) {
@@ -560,6 +544,50 @@ function buildUploadUrl(imagePath) {
   return `${API_URL}/${raw.replace(/^\/+/, "")}`;
 }
 
+function isHistoryStatus(status) {
+  const s = norm(status);
+  return s === "TERMINADA" || s === "CANCELADA" || s === "ENTREGADO";
+}
+
+function isRepairStatus(status) {
+  const s = norm(status);
+  return s === "EN_REVISION" || s === "EN_REPARACION";
+}
+
+function isSpareStatus(status) {
+  const s = norm(status);
+  return (
+    s === "ESPERANDO_REPUESTO" ||
+    s === "EN_COMPRA" ||
+    s === "COMPRADO"
+  );
+}
+
+function getTaskSearchText(task, userId) {
+  const principal = getPrincipalAssignment(task);
+  const helpers = getHelperAssignments(task);
+
+  return [
+    getTaskTitle(task),
+    getTaskDescription(task),
+    getTaskObservations(task),
+    task?.trabajoRealizado,
+    task?.problemaRepuesto,
+    task?.status,
+    prettifyTaskStatus(task?.status),
+    fmtVehicleFromTask(task),
+    fmtPerson(principal),
+    principal?.workerType,
+    prettyWorkerType(principal?.workerType),
+    getMyRoleInTask(task, userId),
+    ...helpers.map((h) => fmtPerson(h)),
+    ...helpers.map((h) => h?.workerType || ""),
+    ...helpers.map((h) => prettyWorkerType(h?.workerType)),
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
 export default function WorkshopMyTasks() {
   const token = useMemo(() => getToken(), []);
   const user = useMemo(() => getUser(), []);
@@ -571,6 +599,8 @@ export default function WorkshopMyTasks() {
   const [savingTaskId, setSavingTaskId] = useState("");
   const [actionError, setActionError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+const [statusFilter, setStatusFilter] = useState("ALL");
 
   const [spareModalOpen, setSpareModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -581,8 +611,8 @@ export default function WorkshopMyTasks() {
   const [finishModalOpen, setFinishModalOpen] = useState(false);
   const [finishTaskSelected, setFinishTaskSelected] = useState(null);
   const [finishDescription, setFinishDescription] = useState("");
-  const [finishPhotoFile, setFinishPhotoFile] = useState(null);
-  const [finishPhotoPreview, setFinishPhotoPreview] = useState("");
+  const [finishPhotoFiles, setFinishPhotoFiles] = useState([]);
+  const [finishPhotoPreviews, setFinishPhotoPreviews] = useState([]);
 
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
   const [imageViewerSrc, setImageViewerSrc] = useState("");
@@ -595,7 +625,7 @@ export default function WorkshopMyTasks() {
 
   const [evidenceViewerOpen, setEvidenceViewerOpen] = useState(false);
   const [evidenceViewerTitle, setEvidenceViewerTitle] = useState("");
-  const [evidenceViewerSrc, setEvidenceViewerSrc] = useState("");
+  const [evidenceViewerImages, setEvidenceViewerImages] = useState([]);
   const [evidenceViewerText, setEvidenceViewerText] = useState("");
 
   const [problemModalOpen, setProblemModalOpen] = useState(false);
@@ -665,10 +695,14 @@ export default function WorkshopMyTasks() {
 
   function openEvidenceViewer(task) {
     const evidence = getFinalEvidenceData(task);
-    const imageSrc = buildUploadUrl(evidence.image);
+    const imageSrcs = uniqueStrings(
+      (Array.isArray(evidence.images) ? evidence.images : []).map((img) =>
+        buildUploadUrl(img)
+      )
+    ).filter(Boolean);
 
     setEvidenceViewerTitle("Evidencia final");
-    setEvidenceViewerSrc(imageSrc);
+    setEvidenceViewerImages(imageSrcs);
     setEvidenceViewerText(String(evidence.text || "").trim());
     setEvidenceViewerOpen(true);
   }
@@ -676,7 +710,7 @@ export default function WorkshopMyTasks() {
   function closeEvidenceViewer() {
     setEvidenceViewerOpen(false);
     setEvidenceViewerTitle("");
-    setEvidenceViewerSrc("");
+    setEvidenceViewerImages([]);
     setEvidenceViewerText("");
   }
 
@@ -690,14 +724,17 @@ export default function WorkshopMyTasks() {
     setProblemModalText("");
   }
 
-  async function loadTasks() {
+    async function loadTasks() {
     setLoading(true);
     setError("");
 
     try {
-      const res = await fetch(`${API_URL}/workshop/tasks`, {
+      const url = `${API_URL}/workshop/tasks?_=${Date.now()}`;
+
+      const res = await fetch(url, {
         headers: authHeaders(),
         credentials: "include",
+        cache: "no-store",
       });
 
       if (!res.ok) {
@@ -710,6 +747,7 @@ export default function WorkshopMyTasks() {
       const filtered = (Array.isArray(data) ? data : [])
         .filter((task) => {
           if (!userId) return false;
+          if (!task?.id) return false;
 
           const isIndependent = !task?.incidentId && !task?.incident;
           if (!isIndependent) return false;
@@ -783,8 +821,8 @@ export default function WorkshopMyTasks() {
 
     setFinishTaskSelected(task || null);
     setFinishDescription(String(task?.trabajoRealizado || ""));
-    setFinishPhotoFile(null);
-    setFinishPhotoPreview("");
+    setFinishPhotoFiles([]);
+    setFinishPhotoPreviews([]);
     setFinishModalOpen(true);
   }
 
@@ -794,39 +832,70 @@ export default function WorkshopMyTasks() {
     setFinishModalOpen(false);
     setFinishTaskSelected(null);
     setFinishDescription("");
-    setFinishPhotoFile(null);
-    setFinishPhotoPreview("");
+    setFinishPhotoFiles([]);
+    setFinishPhotoPreviews([]);
   }
 
   async function handleFinishPhotoChange(event) {
-    const file = event?.target?.files?.[0] || null;
+    const selectedFiles = Array.from(event?.target?.files || []);
 
-    if (!file) {
-      setFinishPhotoFile(null);
-      setFinishPhotoPreview("");
+    if (!selectedFiles.length) {
       return;
     }
 
-    if (!String(file.type || "").startsWith("image/")) {
-      setActionError("Debes seleccionar una imagen válida.");
+    const availableSlots = MAX_EVIDENCE_PHOTOS - finishPhotoFiles.length;
+
+    if (availableSlots <= 0) {
+      setActionError(`Solo puedes subir hasta ${MAX_EVIDENCE_PHOTOS} fotos.`);
+      event.target.value = "";
+      return;
+    }
+
+    const imageFiles = selectedFiles.filter((file) =>
+      String(file?.type || "").startsWith("image/")
+    );
+
+    const validFiles = imageFiles.slice(0, availableSlots);
+
+    if (!validFiles.length) {
+      setActionError("Debes seleccionar imágenes válidas.");
+      event.target.value = "";
       return;
     }
 
     try {
-      const preview = await fileToDataUrl(file);
-      setFinishPhotoFile(file);
-      setFinishPhotoPreview(preview);
+      const previews = await Promise.all(
+        validFiles.map((file) => fileToDataUrl(file))
+      );
+
+      setFinishPhotoFiles((prev) => [...prev, ...validFiles]);
+      setFinishPhotoPreviews((prev) => [...prev, ...previews]);
       setActionError("");
+
+      if (imageFiles.length > availableSlots) {
+        setActionError(
+          `Solo se agregaron ${availableSlots} fotos. El máximo es ${MAX_EVIDENCE_PHOTOS}.`
+        );
+      }
     } catch (err) {
-      setActionError(err?.message || "No se pudo cargar la imagen.");
-      setFinishPhotoFile(null);
-      setFinishPhotoPreview("");
+      setActionError(err?.message || "No se pudieron cargar las imágenes.");
+    } finally {
+      event.target.value = "";
     }
   }
 
-  function removeFinishPhoto() {
-    setFinishPhotoFile(null);
-    setFinishPhotoPreview("");
+  function removeFinishPhoto(indexToRemove) {
+    setFinishPhotoFiles((prev) =>
+      prev.filter((_, index) => index !== indexToRemove)
+    );
+    setFinishPhotoPreviews((prev) =>
+      prev.filter((_, index) => index !== indexToRemove)
+    );
+  }
+
+  function removeAllFinishPhotos() {
+    setFinishPhotoFiles([]);
+    setFinishPhotoPreviews([]);
   }
 
   async function submitFinishTask() {
@@ -852,11 +921,13 @@ export default function WorkshopMyTasks() {
     setSavingTaskId(finishTaskSelected.id);
 
     try {
-      let fotoEvidencia = "";
+      const fotosEvidencia = await Promise.all(
+        finishPhotoFiles.map((file) => fileToDataUrl(file))
+      );
 
-      if (finishPhotoFile) {
-        fotoEvidencia = await fileToDataUrl(finishPhotoFile);
-      }
+      const fotosNombres = finishPhotoFiles.map((file) =>
+        String(file?.name || "evidencia.jpg").trim()
+      );
 
       const res = await fetch(
         `${API_URL}/workshop/tasks/${finishTaskSelected.id}/finish`,
@@ -868,7 +939,11 @@ export default function WorkshopMyTasks() {
           credentials: "include",
           body: JSON.stringify({
             trabajoRealizado: cleanDesc,
-            fotoEvidencia: fotoEvidencia || undefined,
+            fotosEvidencia:
+              fotosEvidencia.length > 0 ? fotosEvidencia : undefined,
+            fotosNombres: fotosNombres.length > 0 ? fotosNombres : undefined,
+            fotoEvidencia:
+              fotosEvidencia.length === 1 ? fotosEvidencia[0] : undefined,
           }),
         }
       );
@@ -1021,9 +1096,63 @@ export default function WorkshopMyTasks() {
   }
 
   useEffect(() => {
+  loadTasks();
+
+  function handleRefresh() {
     loadTasks();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }
+
+  function handleVisibilityChange() {
+    if (document.visibilityState === "visible") {
+      loadTasks();
+    }
+  }
+
+  window.addEventListener("focus", handleRefresh);
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+
+  const interval = setInterval(() => {
+    loadTasks();
+  }, 15000);
+
+  return () => {
+    window.removeEventListener("focus", handleRefresh);
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+    clearInterval(interval);
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
+
+const stats = useMemo(() => {
+  return {
+    total: items.length,
+    pending: items.filter((task) => norm(task?.status) === "PENDIENTE").length,
+    repairing: items.filter((task) => isRepairStatus(task?.status)).length,
+    spare: items.filter((task) => isSpareStatus(task?.status)).length,
+    history: items.filter((task) => isHistoryStatus(task?.status)).length,
+  };
+}, [items]);
+
+const filteredItems = useMemo(() => {
+  const q = String(searchTerm || "").trim().toLowerCase();
+
+  return items.filter((task) => {
+    const status = norm(task?.status);
+
+    const matchesFilter =
+      statusFilter === "ALL" ||
+      (statusFilter === "PENDING" && status === "PENDIENTE") ||
+      (statusFilter === "REPAIRING" && isRepairStatus(status)) ||
+      (statusFilter === "SPARE" && isSpareStatus(status)) ||
+      (statusFilter === "HISTORY" && isHistoryStatus(status));
+
+    if (!matchesFilter) return false;
+
+    if (!q) return true;
+
+    return getTaskSearchText(task, user?.id).includes(q);
+  });
+}, [items, searchTerm, statusFilter, user?.id]);
 
   const currentGalleryImage =
     galleryViewerImages[galleryViewerIndex] || "";
@@ -1050,27 +1179,123 @@ export default function WorkshopMyTasks() {
         </div>
 
         <div className="wmt-page-head">
-          <h1 className="wmt-page-title">Mis tareas de taller</h1>
+  <h1 className="wmt-page-title">Mis tareas de taller</h1>
 
-          <p className="wmt-page-subtitle">
-            Aquí ves solo las tareas independientes asignadas por el jefe de
-            taller.
-          </p>
+  <p className="wmt-page-subtitle">
+    Aquí ves solo las tareas independientes asignadas por el jefe de
+    taller.
+  </p>
 
-          <div
-            style={{
-              marginTop: "10px",
-              padding: "10px 12px",
-              borderRadius: "12px",
-              background: "rgba(15, 23, 42, 0.04)",
-              border: "1px solid rgba(15, 23, 42, 0.08)",
-              color: "#334155",
-              fontWeight: 700,
-            }}
-          >
-            Logeado como: {getLoggedUserLabel(user)}
-          </div>
-        </div>
+  <div className="wmt-user-box">
+    Logeado como: {getLoggedUserLabel(user)}
+  </div>
+</div>
+
+<div className="wmt-summary-grid">
+  <button
+    type="button"
+    className={`wmt-summary-card wmt-summary-card--pending ${
+      statusFilter === "PENDING" ? "is-active" : ""
+    }`}
+    onClick={() =>
+      setStatusFilter(statusFilter === "PENDING" ? "ALL" : "PENDING")
+    }
+  >
+    <span>Pendientes</span>
+    <strong>{stats.pending}</strong>
+  </button>
+
+  <button
+    type="button"
+    className={`wmt-summary-card wmt-summary-card--repair ${
+      statusFilter === "REPAIRING" ? "is-active" : ""
+    }`}
+    onClick={() =>
+      setStatusFilter(statusFilter === "REPAIRING" ? "ALL" : "REPAIRING")
+    }
+  >
+    <span>En reparación</span>
+    <strong>{stats.repairing}</strong>
+  </button>
+
+  <button
+    type="button"
+    className={`wmt-summary-card wmt-summary-card--spare ${
+      statusFilter === "SPARE" ? "is-active" : ""
+    }`}
+    onClick={() =>
+      setStatusFilter(statusFilter === "SPARE" ? "ALL" : "SPARE")
+    }
+  >
+    <span>Con repuesto</span>
+    <strong>{stats.spare}</strong>
+  </button>
+
+  <button
+    type="button"
+    className={`wmt-summary-card wmt-summary-card--history ${
+      statusFilter === "HISTORY" ? "is-active" : ""
+    }`}
+    onClick={() =>
+      setStatusFilter(statusFilter === "HISTORY" ? "ALL" : "HISTORY")
+    }
+  >
+    <span>Historial</span>
+    <strong>{stats.history}</strong>
+  </button>
+</div>
+
+<div className="wmt-filter-panel">
+  <input
+    className="wmt-search-input"
+    type="search"
+    value={searchTerm}
+    onChange={(e) => setSearchTerm(e.target.value)}
+    placeholder="Buscar por patente, vehículo, detalle, responsable, apoyo..."
+  />
+
+  <div className="wmt-filter-tabs">
+    <button
+      type="button"
+      className={`wmt-filter-tab ${statusFilter === "ALL" ? "is-active" : ""}`}
+      onClick={() => setStatusFilter("ALL")}
+    >
+      Todos <span>{stats.total}</span>
+    </button>
+
+    <button
+      type="button"
+      className={`wmt-filter-tab ${statusFilter === "PENDING" ? "is-active" : ""}`}
+      onClick={() => setStatusFilter("PENDING")}
+    >
+      Pendientes <span>{stats.pending}</span>
+    </button>
+
+    <button
+      type="button"
+      className={`wmt-filter-tab ${statusFilter === "REPAIRING" ? "is-active" : ""}`}
+      onClick={() => setStatusFilter("REPAIRING")}
+    >
+      En reparación <span>{stats.repairing}</span>
+    </button>
+
+    <button
+      type="button"
+      className={`wmt-filter-tab ${statusFilter === "SPARE" ? "is-active" : ""}`}
+      onClick={() => setStatusFilter("SPARE")}
+    >
+      Repuestos <span>{stats.spare}</span>
+    </button>
+
+    <button
+      type="button"
+      className={`wmt-filter-tab ${statusFilter === "HISTORY" ? "is-active" : ""}`}
+      onClick={() => setStatusFilter("HISTORY")}
+    >
+      Historial <span>{stats.history}</span>
+    </button>
+  </div>
+</div>
 
         {actionMessage ? (
           <div className="wmt-alert wmt-alert--success">{actionMessage}</div>
@@ -1100,9 +1325,17 @@ export default function WorkshopMyTasks() {
               aparecerá aquí.
             </div>
           </div>
-        ) : (
-          <div className="wmt-list">
-            {items.map((task) => {
+        ) : filteredItems.length === 0 ? (
+  <div className="empty-state">
+    <div className="empty-state__icon">🔎</div>
+    <div className="empty-state__title">Sin resultados</div>
+    <div className="empty-state__text">
+      No hay tareas que coincidan con el filtro o búsqueda actual.
+    </div>
+  </div>
+) : (
+  <div className="wmt-list">
+    {filteredItems.map((task) => {
               const principal = getPrincipalAssignment(task);
               const helpers = getHelperAssignments(task);
               const taskStatus = norm(task?.status);
@@ -1270,8 +1503,7 @@ export default function WorkshopMyTasks() {
                     {(parsedObservation.text ||
                       ingresoImages.length > 0 ||
                       parsedObservation.spareImage ||
-                      parsedObservation.evidenceImage ||
-                      finalEvidence.image ||
+                      finalEvidence.images.length > 0 ||
                       problemaRepuesto) ? (
                       <div className="wmt-field wmt-field--wide">
                         <div className="wmt-field__label">OBSERVACIONES</div>
@@ -1317,7 +1549,9 @@ export default function WorkshopMyTasks() {
                                 )
                               }
                             >
-                              Ver fotos
+                              {ingresoImages.length > 1
+                                ? `Ver fotos (${ingresoImages.length})`
+                                : "Ver foto"}
                             </button>
                           </div>
                         ) : null}
@@ -1340,7 +1574,7 @@ export default function WorkshopMyTasks() {
                           </div>
                         ) : null}
 
-                        {(parsedObservation.evidenceImage || finalEvidence.image) ? (
+                        {finalEvidence.images.length > 0 ? (
                           <div style={{ marginTop: 12 }}>
                             <div className="wmt-field__label">EVIDENCIA FINAL</div>
                             <button
@@ -1348,7 +1582,9 @@ export default function WorkshopMyTasks() {
                               className="btn-secondary"
                               onClick={() => openEvidenceViewer(task)}
                             >
-                              Ver imagen
+                              {finalEvidence.images.length > 1
+                                ? `Ver imágenes (${finalEvidence.images.length})`
+                                : "Ver imagen"}
                             </button>
                           </div>
                         ) : null}
@@ -1594,8 +1830,8 @@ export default function WorkshopMyTasks() {
       >
         <div className="wmt-modal-body">
           <div className="wmt-modal-text">
-            Describe claramente el trabajo realizado y adjunta una foto como
-            evidencia.
+            Describe claramente el trabajo realizado y adjunta hasta{" "}
+            {MAX_EVIDENCE_PHOTOS} fotos como evidencia.
           </div>
 
           <div className="modal-form">
@@ -1614,7 +1850,7 @@ export default function WorkshopMyTasks() {
 
           <div className="modal-form">
             <div>
-              <label>Foto evidencia (opcional)</label>
+              <label>Fotos evidencia (opcional)</label>
 
               <div
                 style={{
@@ -1636,14 +1872,18 @@ export default function WorkshopMyTasks() {
                     color: "#0f172a",
                   }}
                 >
-                  📸 Tomar foto
+                  📸 Tomar fotos
                   <input
                     type="file"
                     accept="image/*"
                     capture="environment"
+                    multiple
                     onChange={handleFinishPhotoChange}
                     style={{ display: "none" }}
-                    disabled={!!savingTaskId}
+                    disabled={
+                      !!savingTaskId ||
+                      finishPhotoFiles.length >= MAX_EVIDENCE_PHOTOS
+                    }
                   />
                 </label>
 
@@ -1664,9 +1904,13 @@ export default function WorkshopMyTasks() {
                   <input
                     type="file"
                     accept="image/*"
+                    multiple
                     onChange={handleFinishPhotoChange}
                     style={{ display: "none" }}
-                    disabled={!!savingTaskId}
+                    disabled={
+                      !!savingTaskId ||
+                      finishPhotoFiles.length >= MAX_EVIDENCE_PHOTOS
+                    }
                   />
                 </label>
               </div>
@@ -1679,11 +1923,11 @@ export default function WorkshopMyTasks() {
                   lineHeight: 1.35,
                 }}
               >
-                En celular puedes tomar la foto directamente o elegir una imagen
-                guardada.
+                Puedes subir hasta {MAX_EVIDENCE_PHOTOS} fotos. Actualmente:{" "}
+                {finishPhotoFiles.length}/{MAX_EVIDENCE_PHOTOS}.
               </div>
 
-              {finishPhotoPreview ? (
+              {finishPhotoPreviews.length > 0 ? (
                 <div
                   style={{
                     marginTop: 12,
@@ -1692,39 +1936,72 @@ export default function WorkshopMyTasks() {
                     padding: 12,
                     background: "#fff",
                     display: "grid",
-                    gap: 10,
+                    gap: 12,
                   }}
                 >
-                  <img
-                    src={finishPhotoPreview}
-                    alt="Vista previa de evidencia"
-                    style={{
-                      width: "100%",
-                      maxHeight: 260,
-                      objectFit: "contain",
-                      borderRadius: 12,
-                      background: "#f8fafc",
-                    }}
-                  />
-
                   <div
                     style={{
-                      fontSize: 13,
-                      color: "#475569",
-                      wordBreak: "break-word",
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                      gap: 12,
                     }}
                   >
-                    {finishPhotoFile?.name || "Imagen seleccionada"}
+                    {finishPhotoPreviews.map((preview, index) => (
+                      <div
+                        key={`${preview}-${index}`}
+                        style={{
+                          border: "1px solid rgba(15,23,42,.08)",
+                          borderRadius: 12,
+                          padding: 8,
+                          background: "#f8fafc",
+                          display: "grid",
+                          gap: 8,
+                        }}
+                      >
+                        <img
+                          src={preview}
+                          alt={`Vista previa evidencia ${index + 1}`}
+                          style={{
+                            width: "100%",
+                            height: 150,
+                            objectFit: "cover",
+                            borderRadius: 10,
+                            background: "#fff",
+                          }}
+                        />
+
+                        <div
+                          style={{
+                            fontSize: 12,
+                            color: "#475569",
+                            wordBreak: "break-word",
+                            lineHeight: 1.3,
+                          }}
+                        >
+                          {finishPhotoFiles[index]?.name ||
+                            `Imagen ${index + 1}`}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => removeFinishPhoto(index)}
+                          className="btn-secondary"
+                          disabled={!!savingTaskId}
+                        >
+                          Quitar
+                        </button>
+                      </div>
+                    ))}
                   </div>
 
-                  <div>
+                  <div style={{ display: "flex", justifyContent: "flex-start" }}>
                     <button
                       type="button"
-                      onClick={removeFinishPhoto}
+                      onClick={removeAllFinishPhotos}
                       className="btn-secondary"
                       disabled={!!savingTaskId}
                     >
-                      Quitar foto
+                      Quitar todas
                     </button>
                   </div>
                 </div>
@@ -1922,14 +2199,13 @@ export default function WorkshopMyTasks() {
                 color: "#0f172a",
               }}
             >
-              FOTO
+              FOTOS
             </div>
 
             <div
               style={{
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
+                display: "grid",
+                gap: 14,
                 minHeight: 220,
                 padding: 12,
                 borderRadius: 16,
@@ -1937,17 +2213,28 @@ export default function WorkshopMyTasks() {
                 border: "1px solid rgba(15, 23, 42, 0.08)",
               }}
             >
-              {evidenceViewerSrc ? (
-                <img
-                  src={evidenceViewerSrc}
-                  alt={evidenceViewerTitle || "Evidencia final"}
-                  style={{
-                    maxWidth: "100%",
-                    maxHeight: "70vh",
-                    borderRadius: "12px",
-                    objectFit: "contain",
-                  }}
-                />
+              {evidenceViewerImages.length > 0 ? (
+                evidenceViewerImages.map((src, index) => (
+                  <div
+                    key={`${src}-${index}`}
+                    style={{
+                      display: "flex",
+                      justifyContent: "center",
+                      alignItems: "center",
+                    }}
+                  >
+                    <img
+                      src={src}
+                      alt={`${evidenceViewerTitle || "Evidencia final"} ${index + 1}`}
+                      style={{
+                        maxWidth: "100%",
+                        maxHeight: "70vh",
+                        borderRadius: "12px",
+                        objectFit: "contain",
+                      }}
+                    />
+                  </div>
+                ))
               ) : (
                 <div style={{ opacity: 0.7 }}>Sin foto de evidencia.</div>
               )}

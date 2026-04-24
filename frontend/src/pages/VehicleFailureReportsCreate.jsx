@@ -46,6 +46,13 @@ function norm(value) {
   return String(value || "").trim().toUpperCase();
 }
 
+function normalizeSearch(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[-.\s]/g, "");
+}
+
 function pickRole(user) {
   return norm(user?.role || user?.rol || user?.perfil);
 }
@@ -190,6 +197,9 @@ export default function VehicleFailureReportsCreate() {
   const [vehiclesError, setVehiclesError] = useState("");
 
   const [vehicleId, setVehicleId] = useState("");
+  const [vehicleSearch, setVehicleSearch] = useState("");
+  const [showVehicleSuggestions, setShowVehicleSuggestions] = useState(false);
+
   const [traidoPorNombre, setTraidoPorNombre] = useState("");
   const [descripcion, setDescripcion] = useState("");
 
@@ -201,6 +211,7 @@ export default function VehicleFailureReportsCreate() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saveOk, setSaveOk] = useState("");
+  const [successModalOpen, setSuccessModalOpen] = useState(false);
 
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
@@ -209,6 +220,26 @@ export default function VehicleFailureReportsCreate() {
     () => vehicles.find((x) => x.id === vehicleId) || null,
     [vehicles, vehicleId]
   );
+
+  const filteredVehicles = useMemo(() => {
+    const q = normalizeSearch(vehicleSearch);
+
+    if (!q) return [];
+
+    return vehicles
+      .filter((vehicle) => {
+        const patente = normalizeSearch(vehicle?.patente);
+        const marcaModelo = normalizeSearch(vehicle?.marcaModelo);
+        const tipoVehiculo = normalizeSearch(vehicle?.tipoVehiculo);
+
+        return (
+          patente.includes(q) ||
+          marcaModelo.includes(q) ||
+          tipoVehiculo.includes(q)
+        );
+      })
+      .slice(0, 10);
+  }, [vehicles, vehicleSearch]);
 
   useEffect(() => {
     loadVehicles();
@@ -249,9 +280,19 @@ export default function VehicleFailureReportsCreate() {
     return `${(size / (1024 * 1024)).toFixed(1)} MB`;
   }
 
-  function onVehicleChange(e) {
-    const nextVehicleId = e.target.value;
-    setVehicleId(nextVehicleId);
+  function selectVehicle(vehicle) {
+    if (!vehicle?.id) return;
+
+    setVehicleId(vehicle.id);
+    setVehicleSearch(vehicleLabel(vehicle));
+    setShowVehicleSuggestions(false);
+    setSaveError("");
+  }
+
+  function clearVehicleSelection() {
+    setVehicleId("");
+    setVehicleSearch("");
+    setShowVehicleSuggestions(false);
     setSaveError("");
   }
 
@@ -419,8 +460,11 @@ export default function VehicleFailureReportsCreate() {
         evidences: uploadedEvidences,
       });
 
-      setSaveOk("Reporte creado correctamente.");
+      setSuccessModalOpen(true);
+
       setVehicleId("");
+      setVehicleSearch("");
+      setShowVehicleSuggestions(false);
       setTraidoPorNombre("");
       setDescripcion("");
 
@@ -449,8 +493,8 @@ export default function VehicleFailureReportsCreate() {
 
       {!canCreate ? (
         <div className="vfrc-alert vfrc-alert--error">
-          No tienes permisos para crear este reporte. Solo SUPERADMIN y CONTROL_FLOTA
-          pueden registrarlo.
+          No tienes permisos para crear este reporte. Solo SUPERADMIN y
+          CONTROL_FLOTA pueden registrarlo.
         </div>
       ) : null}
 
@@ -470,27 +514,70 @@ export default function VehicleFailureReportsCreate() {
           ) : null}
 
           <form className="vfrc-form" onSubmit={onSubmit}>
-            <div className="vfrc-field">
+            <div className="vfrc-field vfrc-field--autocomplete">
               <label>Vehículo / patente</label>
-              <select
-                value={vehicleId}
-                onChange={onVehicleChange}
-                disabled={saving || loadingVehicles || !canCreate}
-              >
-                <option value="">
-                  {loadingVehicles ? "Cargando vehículos..." : "Selecciona un vehículo"}
-                </option>
 
-                {vehicles.map((vehicle) => (
-                  <option key={vehicle.id} value={vehicle.id}>
-                    {vehicleLabel(vehicle)}
-                  </option>
-                ))}
-              </select>
+              <input
+                type="text"
+                value={vehicleSearch}
+                onChange={(e) => {
+                  setVehicleSearch(e.target.value);
+                  setVehicleId("");
+                  setShowVehicleSuggestions(true);
+                  setSaveError("");
+                }}
+                onFocus={() => setShowVehicleSuggestions(true)}
+                placeholder={
+                  loadingVehicles
+                    ? "Cargando vehículos..."
+                    : "Escribe patente, marca o modelo..."
+                }
+                disabled={saving || loadingVehicles || !canCreate}
+                autoComplete="off"
+              />
+
+              {vehicleSearch && selectedVehicle ? (
+                <button
+                  type="button"
+                  className="vfrc-clear-vehicle"
+                  onClick={clearVehicleSelection}
+                  disabled={saving}
+                  title="Limpiar vehículo"
+                >
+                  ✕
+                </button>
+              ) : null}
+
+              {showVehicleSuggestions && vehicleSearch.trim() ? (
+                <div className="vfrc-suggestions">
+                  {filteredVehicles.length > 0 ? (
+                    filteredVehicles.map((vehicle) => (
+                      <button
+                        key={vehicle.id}
+                        type="button"
+                        className="vfrc-suggestion"
+                        onClick={() => selectVehicle(vehicle)}
+                      >
+                        {vehicleLabel(vehicle)}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="vfrc-suggestion vfrc-suggestion--empty">
+                      No se encontraron vehículos similares.
+                    </div>
+                  )}
+                </div>
+              ) : null}
 
               {vehiclesError ? (
-                <div className="vfrc-help vfrc-help--error">{vehiclesError}</div>
-              ) : null}
+                <div className="vfrc-help vfrc-help--error">
+                  {vehiclesError}
+                </div>
+              ) : (
+                <div className="vfrc-help">
+                  Escribe para buscar. Solo aparecerán patentes similares.
+                </div>
+              )}
             </div>
 
             <div className="vfrc-field">
@@ -575,7 +662,9 @@ export default function VehicleFailureReportsCreate() {
                         ? "not-allowed"
                         : "pointer",
                     opacity:
-                      saving || !canCreate || files.length >= MAX_FILES ? 0.65 : 1,
+                      saving || !canCreate || files.length >= MAX_FILES
+                        ? 0.65
+                        : 1,
                   }}
                 >
                   📸 Tomar foto
@@ -598,18 +687,18 @@ export default function VehicleFailureReportsCreate() {
                         ? "not-allowed"
                         : "pointer",
                     opacity:
-                      saving || !canCreate || files.length >= MAX_FILES ? 0.65 : 1,
+                      saving || !canCreate || files.length >= MAX_FILES
+                        ? 0.65
+                        : 1,
                   }}
                 >
                   🖼️ Elegir desde galería
                 </button>
               </div>
 
-              <div
-                className="vfrc-help"
-                style={{ marginTop: 12 }}
-              >
-                Puedes adjuntar fotos del vehículo al momento de crear el reporte. Máximo {MAX_FILES}.
+              <div className="vfrc-help" style={{ marginTop: 12 }}>
+                Puedes adjuntar fotos del vehículo al momento de crear el
+                reporte. Máximo {MAX_FILES}.
               </div>
 
               <div className="vfrc-help">
@@ -644,11 +733,7 @@ export default function VehicleFailureReportsCreate() {
                 {loadingVehicles ? "Cargando..." : "Recargar vehículos"}
               </button>
 
-              <button
-                type="submit"
-                className="btn"
-                disabled={saving || !canCreate}
-              >
+              <button type="submit" className="btn" disabled={saving || !canCreate}>
                 {saving ? "Guardando reporte..." : "Guardar reporte"}
               </button>
             </div>
@@ -727,6 +812,29 @@ export default function VehicleFailureReportsCreate() {
             <div className="vfrc-viewer__body">
               <img src={viewerSrc} alt={viewerTitle || "Imagen"} />
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {successModalOpen ? (
+        <div className="vfrc-success-modal">
+          <div className="vfrc-success-modal__card">
+            <div className="vfrc-success-modal__icon">✅</div>
+
+            <h2>Ingreso de vehículo creado</h2>
+
+            <p>
+              El reporte se registró correctamente y ya quedó disponible para
+              revisión en Incidentes / Taller.
+            </p>
+
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setSuccessModalOpen(false)}
+            >
+              Entendido
+            </button>
           </div>
         </div>
       ) : null}

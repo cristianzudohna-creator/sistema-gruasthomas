@@ -25,6 +25,17 @@
 // - Ver fotos
 // - ConfirmModal
 // - Modales ya existentes
+// ✅ FIX NUEVO:
+// - las fotos del incidente creado ya NO se muestran en la descripción
+// - se limpian las líneas "📸 Foto incidente: ..."
+// - las fotos del incidente se muestran en el bloque FOTO
+// - evidencia sigue separada solo para cierre/tarea
+// ✅ NUEVO AHORA:
+// - modal de imágenes tipo galería
+// - miniaturas abajo
+// - imagen principal grande
+// - navegación anterior / siguiente
+// - click en miniatura para ver grande
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -129,6 +140,67 @@ function getIncidentTitle(incident) {
   const titulo = String(incident?.titulo || "").trim();
   if (titulo) return titulo;
   return prettifyType(incident?.type);
+}
+
+function cleanIncidentDescription(rawText) {
+  let text = String(rawText || "").trim();
+  if (!text) return "";
+
+  text = text.replace(/\r/g, " ");
+
+  text = text.replace(
+    /(?:^|\n)\s*📸\s*Foto incidente:\s*\/uploads\/[^\s]+/gim,
+    "\n"
+  );
+
+  text = text
+    .replace(/\n{2,}/g, "\n")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([,:;.-])/g, "$1")
+    .trim();
+
+  return text;
+}
+
+function parseIncidentDescriptionWithImages(text) {
+  const raw = String(text || "").trim();
+
+  if (!raw) {
+    return {
+      cleanText: "",
+      incidentImageUrls: [],
+    };
+  }
+
+  const lines = raw.split("\n");
+  const incidentImageUrls = [];
+  const remainingLines = [];
+
+  for (const line of lines) {
+    const trimmed = String(line || "").trim();
+    if (!trimmed) continue;
+
+    const match = trimmed.match(/^📸\s*Foto incidente:\s*(.*)$/i);
+
+    if (match) {
+      const path = String(match[1] || "").trim();
+      if (path && /\/uploads\/[^\s]+/i.test(path)) {
+        incidentImageUrls.push(path);
+      }
+      continue;
+    }
+
+    remainingLines.push(line);
+  }
+
+  return {
+    cleanText: cleanIncidentDescription(remainingLines.join("\n")),
+    incidentImageUrls: [
+      ...new Set(
+        incidentImageUrls.map((v) => String(v || "").trim()).filter(Boolean)
+      ),
+    ],
+  };
 }
 
 function prettyWorkerType(value) {
@@ -416,6 +488,25 @@ function buildUploadUrl(imagePath) {
   return `${backendOrigin}/${raw}`;
 }
 
+function getIncidentCreatedPhotoData(incident) {
+  const parsed = parseIncidentDescriptionWithImages(incident?.descripcion);
+
+  const imagePaths = [
+    incident?.fotoUrl,
+    ...(Array.isArray(parsed.incidentImageUrls) ? parsed.incidentImageUrls : []),
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .filter((value, index, arr) => arr.indexOf(value) === index);
+
+  return {
+    cleanText: parsed.cleanText,
+    imageUrl: imagePaths[0] ? buildUploadUrl(imagePaths[0]) : "",
+    imageUrls: imagePaths.map((path) => buildUploadUrl(path)),
+    hasPhotos: imagePaths.length > 0,
+  };
+}
+
 function taskHasRealEvidence(task) {
   const realText = getRealEvidenceText(task);
   const realImages = getRealEvidenceImagePaths(task);
@@ -646,6 +737,7 @@ export default function Incidents() {
 
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [selectedImages, setSelectedImages] = useState([]);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   const [problemModalOpen, setProblemModalOpen] = useState(false);
   const [selectedProblemText, setSelectedProblemText] = useState("");
@@ -720,7 +812,7 @@ export default function Incidents() {
     navigate("/trabajador");
   }
 
-  function openImageModal(imagesOrImage) {
+  function openImageModal(imagesOrImage, startIndex = 0) {
     const images = Array.isArray(imagesOrImage)
       ? imagesOrImage
       : [imagesOrImage];
@@ -730,11 +822,15 @@ export default function Incidents() {
       .filter(Boolean);
 
     setSelectedImages(clean);
+    setSelectedImageIndex(
+      clean.length === 0 ? 0 : Math.min(Math.max(startIndex, 0), clean.length - 1)
+    );
     setImageModalOpen(true);
   }
 
   function closeImageModal() {
     setSelectedImages([]);
+    setSelectedImageIndex(0);
     setImageModalOpen(false);
   }
 
@@ -1197,12 +1293,12 @@ export default function Incidents() {
         onClick: () => setActiveFilter("incidents"),
       },
       {
-        key: "ing-unassigned",
-        label: "Ingresos sin asignar",
-        value: taskStats.ingresosUnassigned,
-        tone: "blue",
-        onClick: () => setActiveFilter("ingresos"),
-      },
+  key: "ingresos",
+  label: "Ingresos activos",
+  value: taskStats.ingresos,
+  tone: "blue",
+  onClick: () => setActiveFilter("ingresos"),
+},
       {
         key: "task-pending",
         label: "Tareas pendientes",
@@ -1243,13 +1339,22 @@ export default function Incidents() {
     [filteredIndependentTasks]
   );
 
-  const ingresoPendingUnassignedList = useMemo(
-    () =>
-      independentTaskPendingList.filter(
-        (task) => isVehicleIngresoTask(task) && !getPrincipalAssignment(task)
-      ),
-    [independentTaskPendingList]
-  );
+  const ingresoPendingList = useMemo(
+  () =>
+    independentTaskPendingList
+      .filter((task) => isVehicleIngresoTask(task))
+      .sort((a, b) => {
+        const aPrincipal = !!getPrincipalAssignment(a);
+        const bPrincipal = !!getPrincipalAssignment(b);
+
+        if (aPrincipal !== bPrincipal) {
+          return aPrincipal ? 1 : -1;
+        }
+
+        return getSortDate(a?.createdAt, b?.createdAt);
+      }),
+  [independentTaskPendingList]
+);
 
   const openIncidentsPrioritizedList = useMemo(() => {
     return [...incidentOpenList].sort((a, b) => {
@@ -1353,14 +1458,22 @@ export default function Incidents() {
   }, [activeFilter]);
 
   const visibleIngresoUnassignedList = useMemo(() => {
-    let list = [...ingresoPendingUnassignedList];
+  let list = [...ingresoPendingList];
 
-    if (visibleSections.onlyRecent) {
-      list = list.filter((task) => isRecentDate(task?.createdAt, 48));
-    }
+  if (visibleSections.onlyRecent) {
+    list = list.filter((task) => isRecentDate(task?.createdAt, 48));
+  }
 
-    return list;
-  }, [ingresoPendingUnassignedList, visibleSections.onlyRecent]);
+  if (visibleSections.onlyUnassigned) {
+    list = list.filter((task) => !getPrincipalAssignment(task));
+  }
+
+  return list;
+}, [
+  ingresoPendingList,
+  visibleSections.onlyRecent,
+  visibleSections.onlyUnassigned,
+]);
 
   const visibleOpenIncidentsList = useMemo(() => {
     let list = [...openIncidentsPrioritizedList];
@@ -1539,11 +1652,10 @@ export default function Incidents() {
               <section className="inc-section">
                 <div className="inc-section__head">
                   <h2 className="inc-section__title">
-                    Ingresos nuevos / sin asignar
+                    Ingresos de vehículo
                   </h2>
                   <p className="inc-section__text">
-                    Aquí aparecen primero los ingresos de vehículo pendientes de
-                    asignación.
+                    Aquí aparecen los ingresos de vehículo activos, asignados o sin asignar.
                   </p>
                 </div>
 
@@ -1743,15 +1855,15 @@ export default function Incidents() {
                             canShowEditTaskEvidence) && (
                             <div className="inc-actions">
                               {canAssignWorkshopTask ? (
-                                <button
-                                  type="button"
-                                  onClick={() => openEditTaskModal(task)}
-                                  disabled={isDeletingTask}
-                                  className="btn-primary inc-action-btn"
-                                >
-                                  Asignar ingreso
-                                </button>
-                              ) : null}
+  <button
+    type="button"
+    onClick={() => openEditTaskModal(task)}
+    disabled={isDeletingTask}
+    className="btn-primary inc-action-btn"
+  >
+    {principal ? "Editar ingreso" : "Asignar ingreso"}
+  </button>
+) : null}
 
                               {canShowEditTaskEvidence ? (
                                 <button
@@ -1813,6 +1925,8 @@ export default function Incidents() {
                       ).trim();
 
                       const incidentEvidence = getIncidentEvidenceData(incident);
+                      const incidentCreatedPhotos =
+                        getIncidentCreatedPhotoData(incident);
 
                       const isClosing = closingId === incident.id;
                       const isDeleting = deletingIncidentId === incident.id;
@@ -1832,8 +1946,6 @@ export default function Incidents() {
                       const canShowEditEvidence =
                         canManageIncidents && hasRealEvidence;
                       const canShowDeleteIncident = canManageIncidents;
-
-                      const incidentPhotoUrl = buildUploadUrl(incident?.fotoUrl);
 
                       return (
                         <article key={incident.id} className="inc-card">
@@ -1862,7 +1974,7 @@ export default function Incidents() {
                           </div>
 
                           <div className="inc-card__desc">
-                            {incident.descripcion || "Sin descripción"}
+                            {incidentCreatedPhotos.cleanText || "Sin descripción"}
                           </div>
 
                           <div className="inc-meta">
@@ -1885,18 +1997,21 @@ export default function Incidents() {
                               )}
                             </div>
 
-                            {incident?.fotoUrl ? (
+                            {incidentCreatedPhotos.hasPhotos ? (
                               <div className="inc-meta__item">
                                 <b>FOTO</b>
                                 <div style={{ marginTop: 8 }}>
                                   <button
                                     type="button"
                                     onClick={() =>
-                                      openImageModal([incidentPhotoUrl])
+                                      openImageModal(incidentCreatedPhotos.imageUrls)
                                     }
                                     className="btn-secondary inc-action-btn"
                                   >
-                                    📷 Ver foto
+                                    📷{" "}
+                                    {incidentCreatedPhotos.imageUrls.length > 1
+                                      ? `Ver fotos (${incidentCreatedPhotos.imageUrls.length})`
+                                      : "Ver foto"}
                                   </button>
                                 </div>
                               </div>
@@ -2319,6 +2434,8 @@ export default function Incidents() {
 
                             const incidentEvidence =
                               getIncidentEvidenceData(incident);
+                            const incidentCreatedPhotos =
+                              getIncidentCreatedPhotoData(incident);
 
                             const hasRealEvidence =
                               !!String(incidentEvidence?.text || "").trim() ||
@@ -2332,9 +2449,6 @@ export default function Incidents() {
                             const canShowEvidenceButton = hasRealEvidence;
 
                             const isDeleting = deletingIncidentId === incident.id;
-                            const incidentPhotoUrl = buildUploadUrl(
-                              incident?.fotoUrl
-                            );
 
                             return (
                               <article key={incident.id} className="inc-card inc-card--history">
@@ -2355,7 +2469,7 @@ export default function Incidents() {
                                 </div>
 
                                 <div className="inc-card__desc">
-                                  {incident.descripcion || "Sin descripción"}
+                                  {incidentCreatedPhotos.cleanText || "Sin descripción"}
                                 </div>
 
                                 <div className="inc-meta">
@@ -2379,18 +2493,23 @@ export default function Incidents() {
                                     )}
                                   </div>
 
-                                  {incident?.fotoUrl ? (
+                                  {incidentCreatedPhotos.hasPhotos ? (
                                     <div className="inc-meta__item">
                                       <b>FOTO</b>
                                       <div style={{ marginTop: 8 }}>
                                         <button
                                           type="button"
                                           onClick={() =>
-                                            openImageModal([incidentPhotoUrl])
+                                            openImageModal(
+                                              incidentCreatedPhotos.imageUrls
+                                            )
                                           }
                                           className="btn-secondary inc-action-btn"
                                         >
-                                          📷 Ver foto
+                                          📷{" "}
+                                          {incidentCreatedPhotos.imageUrls.length > 1
+                                            ? `Ver fotos (${incidentCreatedPhotos.imageUrls.length})`
+                                            : "Ver foto"}
                                         </button>
                                       </div>
                                     </div>
@@ -2921,46 +3040,120 @@ export default function Incidents() {
       <Modal
         open={imageModalOpen}
         onClose={closeImageModal}
-        title="Vista de imagen"
-        subtitle="Evidencia o foto del repuesto"
-        width={900}
+        title="Galería de imágenes"
+        subtitle="Haz click en miniaturas"
+        width={1100}
       >
         <div
           style={{
             display: "grid",
-            gap: 16,
-            minHeight: 240,
+            gap: 18,
           }}
         >
           {selectedImages.length > 0 ? (
-            selectedImages.map((image, index) => (
+            <>
               <div
-                key={`${image}-${index}`}
                 style={{
+                  background: "#fff",
+                  borderRadius: 18,
+                  padding: 12,
                   display: "flex",
                   justifyContent: "center",
                   alignItems: "center",
-                  background: "#fff",
-                  borderRadius: 16,
-                  padding: 12,
+                  minHeight: 420,
                 }}
               >
                 <img
-                  src={image}
-                  alt={`Evidencia ${index + 1}`}
-                  onError={(e) => {
-                    e.currentTarget.style.display = "none";
-                  }}
+                  src={selectedImages[selectedImageIndex]}
+                  alt={`Imagen ${selectedImageIndex + 1}`}
                   style={{
                     maxWidth: "100%",
-                    maxHeight: "70vh",
+                    maxHeight: "72vh",
                     objectFit: "contain",
-                    borderRadius: 12,
-                    boxShadow: "0 10px 24px rgba(0,0,0,.12)",
+                    borderRadius: 14,
+                    boxShadow: "0 12px 28px rgba(0,0,0,.18)",
                   }}
                 />
               </div>
-            ))
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 12,
+                  flexWrap: "wrap",
+                }}
+              >
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() =>
+                    setSelectedImageIndex((prev) =>
+                      prev === 0 ? selectedImages.length - 1 : prev - 1
+                    )
+                  }
+                >
+                  ← Anterior
+                </button>
+
+                <div style={{ fontWeight: 800 }}>
+                  {selectedImageIndex + 1} / {selectedImages.length}
+                </div>
+
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() =>
+                    setSelectedImageIndex((prev) =>
+                      prev === selectedImages.length - 1 ? 0 : prev + 1
+                    )
+                  }
+                >
+                  Siguiente →
+                </button>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill,minmax(120px,1fr))",
+                  gap: 12,
+                  maxHeight: 280,
+                  overflowY: "auto",
+                  paddingRight: 4,
+                }}
+              >
+                {selectedImages.map((img, index) => (
+                  <button
+                    key={`${img}-${index}`}
+                    type="button"
+                    onClick={() => setSelectedImageIndex(index)}
+                    style={{
+                      border:
+                        selectedImageIndex === index
+                          ? "3px solid #d4a017"
+                          : "1px solid #ddd",
+                      borderRadius: 14,
+                      padding: 4,
+                      background: "#fff",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <img
+                      src={img}
+                      alt={`Miniatura ${index + 1}`}
+                      style={{
+                        width: "100%",
+                        height: 95,
+                        objectFit: "cover",
+                        borderRadius: 10,
+                      }}
+                    />
+                  </button>
+                ))}
+              </div>
+            </>
           ) : (
             <div
               style={{
@@ -3050,31 +3243,45 @@ export default function Incidents() {
             >
               {Array.isArray(selectedIncidentEvidence?.imageUrls) &&
               selectedIncidentEvidence.imageUrls.length > 0 ? (
-                selectedIncidentEvidence.imageUrls.map((img, index) => (
-                  <div
-                    key={`${img}-${index}`}
-                    style={{
-                      display: "flex",
-                      justifyContent: "center",
-                      alignItems: "center",
-                    }}
-                  >
-                    <img
-                      src={img}
-                      alt={`Evidencia final del incidente ${index + 1}`}
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                      }}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))",
+                    gap: 12,
+                  }}
+                >
+                  {selectedIncidentEvidence.imageUrls.map((img, index) => (
+                    <button
+                      key={`${img}-${index}`}
+                      type="button"
+                      onClick={() =>
+                        openImageModal(selectedIncidentEvidence.imageUrls, index)
+                      }
                       style={{
-                        maxWidth: "100%",
-                        maxHeight: "70vh",
-                        objectFit: "contain",
-                        borderRadius: 12,
-                        boxShadow: "0 10px 24px rgba(0,0,0,.12)",
+                        border: "1px solid rgba(15,23,42,.08)",
+                        borderRadius: 14,
+                        padding: 6,
+                        background: "#fff",
+                        cursor: "pointer",
                       }}
-                    />
-                  </div>
-                ))
+                    >
+                      <img
+                        src={img}
+                        alt={`Evidencia final del incidente ${index + 1}`}
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                        }}
+                        style={{
+                          width: "100%",
+                          height: 130,
+                          objectFit: "cover",
+                          borderRadius: 10,
+                          display: "block",
+                        }}
+                      />
+                    </button>
+                  ))}
+                </div>
               ) : (
                 <div style={{ opacity: 0.7 }}>Sin foto de evidencia.</div>
               )}
@@ -3183,31 +3390,45 @@ export default function Incidents() {
             >
               {Array.isArray(selectedTaskEvidence?.imageUrls) &&
               selectedTaskEvidence.imageUrls.length > 0 ? (
-                selectedTaskEvidence.imageUrls.map((img, index) => (
-                  <div
-                    key={`${img}-${index}`}
-                    style={{
-                      display: "flex",
-                      justifyContent: "center",
-                      alignItems: "center",
-                    }}
-                  >
-                    <img
-                      src={img}
-                      alt={`Evidencia final de la tarea ${index + 1}`}
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                      }}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))",
+                    gap: 12,
+                  }}
+                >
+                  {selectedTaskEvidence.imageUrls.map((img, index) => (
+                    <button
+                      key={`${img}-${index}`}
+                      type="button"
+                      onClick={() =>
+                        openImageModal(selectedTaskEvidence.imageUrls, index)
+                      }
                       style={{
-                        maxWidth: "100%",
-                        maxHeight: "70vh",
-                        objectFit: "contain",
-                        borderRadius: 12,
-                        boxShadow: "0 10px 24px rgba(0,0,0,.12)",
+                        border: "1px solid rgba(15,23,42,.08)",
+                        borderRadius: 14,
+                        padding: 6,
+                        background: "#fff",
+                        cursor: "pointer",
                       }}
-                    />
-                  </div>
-                ))
+                    >
+                      <img
+                        src={img}
+                        alt={`Evidencia final de la tarea ${index + 1}`}
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                        }}
+                        style={{
+                          width: "100%",
+                          height: 130,
+                          objectFit: "cover",
+                          borderRadius: 10,
+                          display: "block",
+                        }}
+                      />
+                    </button>
+                  ))}
+                </div>
               ) : (
                 <div style={{ opacity: 0.7 }}>Sin foto de evidencia.</div>
               )}

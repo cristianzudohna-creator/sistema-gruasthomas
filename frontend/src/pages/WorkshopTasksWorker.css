@@ -97,6 +97,134 @@
   border: 1px solid rgba(220, 38, 38, 0.16);
 }
 
+/* ✅ NUEVO: resumen + búsqueda + filtros */
+
+.wtw-dashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.wtw-dashboard-card {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 18px;
+  padding: 14px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  display: grid;
+  gap: 8px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.wtw-dashboard-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.08);
+}
+
+.wtw-dashboard-card span {
+  font-size: 13px;
+  font-weight: 800;
+  color: #475569;
+}
+
+.wtw-dashboard-card b {
+  font-size: 28px;
+  line-height: 1;
+  color: #0f172a;
+}
+
+.wtw-dashboard-card--blue {
+  background: rgba(37, 99, 235, 0.07);
+}
+
+.wtw-dashboard-card--yellow {
+  background: rgba(245, 158, 11, 0.09);
+}
+
+.wtw-dashboard-card--orange {
+  background: rgba(249, 115, 22, 0.09);
+}
+
+.wtw-dashboard-card--green {
+  background: rgba(22, 163, 74, 0.08);
+}
+
+.wtw-control-panel {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 14px;
+  border-radius: 20px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.wtw-search-input {
+  width: 100%;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 16px;
+  padding: 13px 14px;
+  font-size: 15px;
+  outline: none;
+  color: #0f172a;
+  background: #fff;
+}
+
+.wtw-search-input:focus {
+  border-color: rgba(37, 99, 235, 0.45);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.08);
+}
+
+.wtw-filter-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.wtw-filter-chip {
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: #fff;
+  color: #334155;
+  border-radius: 999px;
+  padding: 9px 12px;
+  font-weight: 900;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease,
+    transform 0.12s ease;
+}
+
+.wtw-filter-chip:hover {
+  transform: translateY(-1px);
+}
+
+.wtw-filter-chip span {
+  min-width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #0f172a;
+  display: inline-grid;
+  place-items: center;
+  font-size: 12px;
+}
+
+.wtw-filter-chip.is-active {
+  background: #0f172a;
+  color: #fff;
+  border-color: #0f172a;
+}
+
+.wtw-filter-chip.is-active span {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
 .wtw-list {
   display: grid;
   gap: 18px;
@@ -110,6 +238,11 @@
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
   display: grid;
   gap: 16px;
+}
+
+.wtw-card--history {
+  opacity: 0.86;
+  background: #fcfcfd;
 }
 
 .wtw-card__top {
@@ -430,6 +563,34 @@
     font-size: 14px;
   }
 
+  .wtw-dashboard {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .wtw-dashboard-card {
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .wtw-dashboard-card b {
+    font-size: 24px;
+  }
+
+  .wtw-control-panel {
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .wtw-filter-row {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .wtw-filter-chip {
+    justify-content: space-between;
+    width: 100%;
+  }
+
   .wtw-card {
     padding: 14px;
     border-radius: 18px;
@@ -486,6 +647,10 @@
 
   .wtw-page-title {
     font-size: 20px;
+  }
+
+  .wtw-dashboard {
+    grid-template-columns: 1fr;
   }
 
   .wtw-card {

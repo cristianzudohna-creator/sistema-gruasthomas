@@ -15,6 +15,11 @@
 // - Título dinámico: asignar / editar asignación
 // - Botón dinámico: asignar / guardar asignación
 // - Botón "Asignarme a mí" para JEFE_TALLER / SUPERVISOR
+// ✅ FIX NUEVO:
+// - limpia la descripción del incidente creado
+// - las fotos del incidente ya no se muestran como texto
+// - las fotos del incidente van al bloque FOTO
+// - evidencia sigue siendo otra cosa aparte
 
 import { useEffect, useMemo, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -168,6 +173,123 @@ function getTaskHelperIds(task) {
     .map((a) => String(a.user.id));
 }
 
+function getBackendOrigin() {
+  const api = String(API_URL || "").trim();
+
+  if (api === "/api") {
+    const host = window.location.hostname;
+
+    if (host === "localhost" || host === "127.0.0.1") {
+      return `${window.location.protocol}//${host}:3000`;
+    }
+
+    return window.location.origin;
+  }
+
+  if (api.startsWith("http://") || api.startsWith("https://")) {
+    return api.replace(/\/api\/?$/, "");
+  }
+
+  return window.location.origin;
+}
+
+function buildUploadUrl(imagePath) {
+  const raw = String(imagePath || "").trim();
+  if (!raw) return "";
+
+  if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    return raw;
+  }
+
+  const backendOrigin = getBackendOrigin();
+
+  if (raw.startsWith("/")) {
+    return `${backendOrigin}${raw}`;
+  }
+
+  return `${backendOrigin}/${raw}`;
+}
+
+function cleanIncidentDescription(rawText) {
+  let text = String(rawText || "").trim();
+  if (!text) return "";
+
+  text = text.replace(/\r/g, " ");
+
+  text = text.replace(
+    /(?:^|\n)\s*📸\s*Foto incidente:\s*\/uploads\/[^\s]+/gim,
+    "\n"
+  );
+
+  text = text
+    .replace(/\n{2,}/g, "\n")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([,:;.-])/g, "$1")
+    .trim();
+
+  return text;
+}
+
+function parseIncidentDescriptionWithImages(text) {
+  const raw = String(text || "").trim();
+
+  if (!raw) {
+    return {
+      cleanText: "",
+      incidentImageUrls: [],
+    };
+  }
+
+  const lines = raw.split("\n");
+  const incidentImageUrls = [];
+  const remainingLines = [];
+
+  for (const line of lines) {
+    const trimmed = String(line || "").trim();
+    if (!trimmed) continue;
+
+    const match = trimmed.match(/^📸\s*Foto incidente:\s*(.*)$/i);
+
+    if (match) {
+      const path = String(match[1] || "").trim();
+      if (path && /\/uploads\/[^\s]+/i.test(path)) {
+        incidentImageUrls.push(path);
+      }
+      continue;
+    }
+
+    remainingLines.push(line);
+  }
+
+  return {
+    cleanText: cleanIncidentDescription(remainingLines.join("\n")),
+    incidentImageUrls: [
+      ...new Set(
+        incidentImageUrls.map((v) => String(v || "").trim()).filter(Boolean)
+      ),
+    ],
+  };
+}
+
+function getIncidentCreatedPhotoData(incident) {
+  const parsed = parseIncidentDescriptionWithImages(incident?.descripcion);
+
+  const imagePaths = [
+    incident?.fotoUrl,
+    ...(Array.isArray(parsed.incidentImageUrls) ? parsed.incidentImageUrls : []),
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .filter((value, index, arr) => arr.indexOf(value) === index);
+
+  return {
+    cleanText: parsed.cleanText,
+    imageUrl: imagePaths[0] ? buildUploadUrl(imagePaths[0]) : "",
+    imageUrls: imagePaths.map((path) => buildUploadUrl(path)),
+    hasPhotos: imagePaths.length > 0,
+  };
+}
+
 export default function AssignIncidentModal({
   open,
   incident,
@@ -188,6 +310,9 @@ export default function AssignIncidentModal({
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
 
+  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [selectedImages, setSelectedImages] = useState([]);
+
   const currentUserId = String(currentUser?.id || "");
   const currentUserWorkerType = norm(
     currentUser?.workerType ||
@@ -203,11 +328,34 @@ export default function AssignIncidentModal({
     (currentUserWorkerType === "JEFE_TALLER" ||
       currentUserWorkerType === "SUPERVISOR");
 
+  const incidentCreatedPhotos = useMemo(
+    () => getIncidentCreatedPhotoData(incident),
+    [incident]
+  );
+
   function authHeaders(extra = {}) {
     return {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...extra,
     };
+  }
+
+  function openImageModal(imagesOrImage) {
+    const images = Array.isArray(imagesOrImage)
+      ? imagesOrImage
+      : [imagesOrImage];
+
+    const clean = images
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+
+    setSelectedImages(clean);
+    setImageModalOpen(true);
+  }
+
+  function closeImageModal() {
+    setSelectedImages([]);
+    setImageModalOpen(false);
   }
 
   async function fetchJson(url, options = {}) {
@@ -429,355 +577,441 @@ export default function AssignIncidentModal({
   }
 
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={hasExistingAssignment ? "Editar asignación" : "Asignar incidente"}
-      size="lg"
-    >
-      <div style={{ display: "grid", gap: 16 }}>
-        <div
-          style={{
-            border: "1px solid rgba(15,23,42,.10)",
-            borderRadius: 18,
-            padding: 18,
-            background: "#f8fafc",
-          }}
-        >
+    <>
+      <Modal
+        open={open}
+        onClose={onClose}
+        title={hasExistingAssignment ? "Editar asignación" : "Asignar incidente"}
+        size="lg"
+      >
+        <div style={{ display: "grid", gap: 16 }}>
           <div
             style={{
-              fontSize: 22,
-              fontWeight: 900,
-              color: "#0f172a",
-              lineHeight: 1.15,
-              marginBottom: 8,
+              border: "1px solid rgba(15,23,42,.10)",
+              borderRadius: 18,
+              padding: 18,
+              background: "#f8fafc",
             }}
           >
-            {getIncidentTitle(incident)}
-          </div>
-
-          <div
-            style={{
-              marginTop: 6,
-              color: "#334155",
-              fontSize: 14,
-              marginBottom: 16,
-            }}
-          >
-            {incident?.descripcion || "Sin descripción"}
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: 14,
-            }}
-          >
-            <div>
-              <div style={{ fontSize: 12, opacity: 0.6, fontWeight: 800 }}>
-                VEHÍCULO
-              </div>
-              <div style={{ fontWeight: 800, fontSize: 14 }}>
-                {fmtVehicle(incident)}
-              </div>
-            </div>
-
-            <div>
-              <div style={{ fontSize: 12, opacity: 0.6, fontWeight: 800 }}>
-                REPORTADO POR
-              </div>
-              <div style={{ fontWeight: 800, fontSize: 14 }}>
-                {fmtReporter(incident)}
-              </div>
-            </div>
-
-            <div>
-              <div style={{ fontSize: 12, opacity: 0.6, fontWeight: 800 }}>
-                ESTADO ACTUAL
-              </div>
-              <div style={{ fontWeight: 800, fontSize: 14 }}>
-                {incident?.status || "—"}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {canSelfAssign ? (
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-start",
-            }}
-          >
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={handleAssignToMe}
-              disabled={saving || loadingWorkers}
-            >
-              Asignarme a mí
-            </button>
-          </div>
-        ) : null}
-
-        <div className="modal-form">
-          <div>
-            <label htmlFor="workerTypeFilter">Tipo de técnico</label>
-            <select
-              id="workerTypeFilter"
-              value={workerTypeFilter}
-              onChange={(e) => {
-                setWorkerTypeFilter(e.target.value);
-                setSelectedWorkerId("");
+            <div
+              style={{
+                fontSize: 22,
+                fontWeight: 900,
+                color: "#0f172a",
+                lineHeight: 1.15,
+                marginBottom: 8,
               }}
             >
-              <option value="">Todos</option>
-              <option value="MECANICO">Mecánico</option>
-              <option value="AYUDANTE_MECANICO">Ayudante mecánico</option>
-              <option value="MECANICO_HIDRAULICO">Mecánico hidráulico</option>
-              <option value="JEFE_TALLER">Jefe de taller</option>
-              <option value="SUPERVISOR">Supervisor</option>
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="selectedWorkerId">Responsable principal</label>
-            <select
-              id="selectedWorkerId"
-              value={selectedWorkerId}
-              onChange={(e) => handlePrincipalChange(e.target.value)}
-              disabled={loadingWorkers}
-            >
-              <option value="">
-                {loadingWorkers
-                  ? "Cargando técnicos..."
-                  : "Selecciona un responsable"}
-              </option>
-
-              {principalOptions.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {workerLabel(w)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="helperSearch">Buscar apoyos</label>
-            <input
-              id="helperSearch"
-              type="text"
-              value={helperSearch}
-              onChange={(e) => setHelperSearch(e.target.value)}
-              placeholder="Buscar por nombre o especialidad..."
-            />
-          </div>
-
-          <div>
-            <label>Apoyos adicionales</label>
+              {getIncidentTitle(incident)}
+            </div>
 
             <div
               style={{
-                border: "1px solid rgba(15,23,42,.12)",
-                borderRadius: 12,
-                background: "#fff",
-                padding: 10,
-                display: "grid",
-                gap: 8,
-                maxHeight: 240,
-                overflowY: "auto",
+                marginTop: 6,
+                color: "#334155",
+                fontSize: 14,
+                marginBottom: 16,
+                whiteSpace: "pre-line",
+                lineHeight: 1.5,
               }}
             >
-              {loadingWorkers ? (
-                <div style={{ fontSize: 14, color: "#475569", padding: 8 }}>
-                  Cargando técnicos...
-                </div>
-              ) : helperOptions.length === 0 ? (
-                <div style={{ fontSize: 14, color: "#475569", padding: 8 }}>
-                  No hay apoyos disponibles.
-                </div>
-              ) : (
-                helperOptions.map((w) => {
-                  const id = String(w.id);
-                  const checked = helperIds.some((x) => String(x) === id);
+              {incidentCreatedPhotos.cleanText || "Sin descripción"}
+            </div>
 
-                  return (
-                    <label
-                      key={w.id}
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "20px 1fr",
-                        alignItems: "center",
-                        gap: 12,
-                        padding: "10px 12px",
-                        borderRadius: 12,
-                        border: checked
-                          ? "1px solid rgba(234,179,8,.45)"
-                          : "1px solid rgba(15,23,42,.08)",
-                        background: checked
-                          ? "rgba(234,179,8,.10)"
-                          : "rgba(248,250,252,.85)",
-                        cursor: "pointer",
-                      }}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: 14,
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 12, opacity: 0.6, fontWeight: 800 }}>
+                  VEHÍCULO
+                </div>
+                <div style={{ fontWeight: 800, fontSize: 14 }}>
+                  {fmtVehicle(incident)}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 12, opacity: 0.6, fontWeight: 800 }}>
+                  REPORTADO POR
+                </div>
+                <div style={{ fontWeight: 800, fontSize: 14 }}>
+                  {fmtReporter(incident)}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 12, opacity: 0.6, fontWeight: 800 }}>
+                  ESTADO ACTUAL
+                </div>
+                <div style={{ fontWeight: 800, fontSize: 14 }}>
+                  {incident?.status || "—"}
+                </div>
+              </div>
+
+              {incidentCreatedPhotos.hasPhotos ? (
+                <div>
+                  <div style={{ fontSize: 12, opacity: 0.6, fontWeight: 800 }}>
+                    FOTO
+                  </div>
+
+                  <div style={{ marginTop: 6 }}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openImageModal(incidentCreatedPhotos.imageUrls)
+                      }
+                      className="btn-secondary"
                     >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => handleToggleHelper(id)}
+                      📷{" "}
+                      {incidentCreatedPhotos.imageUrls.length > 1
+                        ? `Ver fotos (${incidentCreatedPhotos.imageUrls.length})`
+                        : "Ver foto"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          {canSelfAssign ? (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-start",
+              }}
+            >
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleAssignToMe}
+                disabled={saving || loadingWorkers}
+              >
+                Asignarme a mí
+              </button>
+            </div>
+          ) : null}
+
+          <div className="modal-form">
+            <div>
+              <label htmlFor="workerTypeFilter">Tipo de técnico</label>
+              <select
+                id="workerTypeFilter"
+                value={workerTypeFilter}
+                onChange={(e) => {
+                  setWorkerTypeFilter(e.target.value);
+                  setSelectedWorkerId("");
+                }}
+              >
+                <option value="">Todos</option>
+                <option value="MECANICO">Mecánico</option>
+                <option value="AYUDANTE_MECANICO">Ayudante mecánico</option>
+                <option value="MECANICO_HIDRAULICO">Mecánico hidráulico</option>
+                <option value="JEFE_TALLER">Jefe de taller</option>
+                <option value="SUPERVISOR">Supervisor</option>
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="selectedWorkerId">Responsable principal</label>
+              <select
+                id="selectedWorkerId"
+                value={selectedWorkerId}
+                onChange={(e) => handlePrincipalChange(e.target.value)}
+                disabled={loadingWorkers}
+              >
+                <option value="">
+                  {loadingWorkers
+                    ? "Cargando técnicos..."
+                    : "Selecciona un responsable"}
+                </option>
+
+                {principalOptions.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {workerLabel(w)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="helperSearch">Buscar apoyos</label>
+              <input
+                id="helperSearch"
+                type="text"
+                value={helperSearch}
+                onChange={(e) => setHelperSearch(e.target.value)}
+                placeholder="Buscar por nombre o especialidad..."
+              />
+            </div>
+
+            <div>
+              <label>Apoyos adicionales</label>
+
+              <div
+                style={{
+                  border: "1px solid rgba(15,23,42,.12)",
+                  borderRadius: 12,
+                  background: "#fff",
+                  padding: 10,
+                  display: "grid",
+                  gap: 8,
+                  maxHeight: 240,
+                  overflowY: "auto",
+                }}
+              >
+                {loadingWorkers ? (
+                  <div style={{ fontSize: 14, color: "#475569", padding: 8 }}>
+                    Cargando técnicos...
+                  </div>
+                ) : helperOptions.length === 0 ? (
+                  <div style={{ fontSize: 14, color: "#475569", padding: 8 }}>
+                    No hay apoyos disponibles.
+                  </div>
+                ) : (
+                  helperOptions.map((w) => {
+                    const id = String(w.id);
+                    const checked = helperIds.some((x) => String(x) === id);
+
+                    return (
+                      <label
+                        key={w.id}
                         style={{
-                          width: 16,
-                          height: 16,
-                          margin: 0,
-                          accentColor: "#eab308",
+                          display: "grid",
+                          gridTemplateColumns: "20px 1fr",
+                          alignItems: "center",
+                          gap: 12,
+                          padding: "10px 12px",
+                          borderRadius: 12,
+                          border: checked
+                            ? "1px solid rgba(234,179,8,.45)"
+                            : "1px solid rgba(15,23,42,.08)",
+                          background: checked
+                            ? "rgba(234,179,8,.10)"
+                            : "rgba(248,250,252,.85)",
                           cursor: "pointer",
                         }}
-                      />
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => handleToggleHelper(id)}
+                          style={{
+                            width: 16,
+                            height: 16,
+                            margin: 0,
+                            accentColor: "#eab308",
+                            cursor: "pointer",
+                          }}
+                        />
 
-                      <span style={{ minWidth: 0 }}>
-                        <span
-                          style={{
-                            display: "block",
-                            fontSize: 14,
-                            fontWeight: 800,
-                            color: "#0f172a",
-                            lineHeight: 1.2,
-                            wordBreak: "break-word",
-                          }}
-                        >
-                          {w.nombre}
+                        <span style={{ minWidth: 0 }}>
+                          <span
+                            style={{
+                              display: "block",
+                              fontSize: 14,
+                              fontWeight: 800,
+                              color: "#0f172a",
+                              lineHeight: 1.2,
+                              wordBreak: "break-word",
+                            }}
+                          >
+                            {w.nombre}
+                          </span>
+                          <span
+                            style={{
+                              display: "block",
+                              fontSize: 13,
+                              color: "#475569",
+                              marginTop: 2,
+                              lineHeight: 1.2,
+                            }}
+                          >
+                            {prettyWorkerType(w.workerType)}
+                          </span>
                         </span>
-                        <span
-                          style={{
-                            display: "block",
-                            fontSize: 13,
-                            color: "#475569",
-                            marginTop: 2,
-                            lineHeight: 1.2,
-                          }}
-                        >
-                          {prettyWorkerType(w.workerType)}
-                        </span>
-                      </span>
-                    </label>
-                  );
-                })
-              )}
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {(principalWorker || helperWorkers.length > 0) && (
+              <div
+                style={{
+                  border: "1px solid rgba(15,23,42,.10)",
+                  borderRadius: 14,
+                  background: "#fff",
+                  padding: 12,
+                  display: "grid",
+                  gap: 10,
+                }}
+              >
+                {principalWorker ? (
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        opacity: 0.65,
+                        fontWeight: 800,
+                        marginBottom: 4,
+                      }}
+                    >
+                      RESPONSABLE
+                    </div>
+                    <div
+                      style={{ fontSize: 14, fontWeight: 800, color: "#0f172a" }}
+                    >
+                      {principalWorker.nombre}
+                    </div>
+                    <div style={{ fontSize: 13, color: "#475569" }}>
+                      {prettyWorkerType(principalWorker.workerType)}
+                    </div>
+                  </div>
+                ) : null}
+
+                {helperWorkers.length > 0 ? (
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        opacity: 0.65,
+                        fontWeight: 800,
+                        marginBottom: 6,
+                      }}
+                    >
+                      APOYOS
+                    </div>
+
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {helperWorkers.map((w) => (
+                        <div key={w.id} style={{ fontSize: 14, color: "#0f172a" }}>
+                          • {w.nombre}
+                          <span style={{ color: "#64748b" }}>
+                            {" "}
+                            · {prettyWorkerType(w.workerType)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            <div>
+              <label htmlFor="assignNote">Observación</label>
+              <textarea
+                id="assignNote"
+                rows={4}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Ej: revisar fuga hidráulica, apoyar desmontaje, validar mangueras..."
+              />
             </div>
           </div>
 
-          {(principalWorker || helperWorkers.length > 0) && (
+          {error ? (
             <div
               style={{
-                border: "1px solid rgba(15,23,42,.10)",
-                borderRadius: 14,
-                background: "#fff",
-                padding: 12,
-                display: "grid",
-                gap: 10,
+                color: "#b91c1c",
+                background: "rgba(220,38,38,.08)",
+                border: "1px solid rgba(220,38,38,.16)",
+                borderRadius: 12,
+                padding: "10px 12px",
+                fontWeight: 700,
+                fontSize: 14,
               }}
             >
-              {principalWorker ? (
-                <div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      opacity: 0.65,
-                      fontWeight: 800,
-                      marginBottom: 4,
-                    }}
-                  >
-                    RESPONSABLE
-                  </div>
-                  <div
-                    style={{ fontSize: 14, fontWeight: 800, color: "#0f172a" }}
-                  >
-                    {principalWorker.nombre}
-                  </div>
-                  <div style={{ fontSize: 13, color: "#475569" }}>
-                    {prettyWorkerType(principalWorker.workerType)}
-                  </div>
-                </div>
-              ) : null}
+              {error}
+            </div>
+          ) : null}
 
-              {helperWorkers.length > 0 ? (
-                <div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      opacity: 0.65,
-                      fontWeight: 800,
-                      marginBottom: 6,
-                    }}
-                  >
-                    APOYOS
-                  </div>
+          <div className="modal-actions">
+            <button type="button" onClick={onClose} className="btn-secondary">
+              Cancelar
+            </button>
 
-                  <div style={{ display: "grid", gap: 6 }}>
-                    {helperWorkers.map((w) => (
-                      <div key={w.id} style={{ fontSize: 14, color: "#0f172a" }}>
-                        • {w.nombre}
-                        <span style={{ color: "#64748b" }}>
-                          {" "}
-                          · {prettyWorkerType(w.workerType)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || loadingWorkers}
+              className="btn-primary"
+            >
+              {saving
+                ? hasExistingAssignment
+                  ? "Guardando..."
+                  : "Asignando..."
+                : hasExistingAssignment
+                ? "Guardar asignación"
+                : "Asignar incidente"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={imageModalOpen}
+        onClose={closeImageModal}
+        title="Fotos del incidente"
+        subtitle="Imágenes cargadas al crear el incidente"
+        width={900}
+      >
+        <div
+          style={{
+            display: "grid",
+            gap: 16,
+            minHeight: 240,
+          }}
+        >
+          {selectedImages.length > 0 ? (
+            selectedImages.map((image, index) => (
+              <div
+                key={`${image}-${index}`}
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  background: "#fff",
+                  borderRadius: 16,
+                  padding: 12,
+                }}
+              >
+                <img
+                  src={image}
+                  alt={`Foto del incidente ${index + 1}`}
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                  }}
+                  style={{
+                    maxWidth: "100%",
+                    maxHeight: "70vh",
+                    objectFit: "contain",
+                    borderRadius: 12,
+                    boxShadow: "0 10px 24px rgba(0,0,0,.12)",
+                  }}
+                />
+              </div>
+            ))
+          ) : (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                minHeight: 240,
+                opacity: 0.7,
+              }}
+            >
+              No hay imagen disponible
             </div>
           )}
-
-          <div>
-            <label htmlFor="assignNote">Observación</label>
-            <textarea
-              id="assignNote"
-              rows={4}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Ej: revisar fuga hidráulica, apoyar desmontaje, validar mangueras..."
-            />
-          </div>
         </div>
-
-        {error ? (
-          <div
-            style={{
-              color: "#b91c1c",
-              background: "rgba(220,38,38,.08)",
-              border: "1px solid rgba(220,38,38,.16)",
-              borderRadius: 12,
-              padding: "10px 12px",
-              fontWeight: 700,
-              fontSize: 14,
-            }}
-          >
-            {error}
-          </div>
-        ) : null}
-
-        <div className="modal-actions">
-          <button type="button" onClick={onClose} className="btn-secondary">
-            Cancelar
-          </button>
-
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving || loadingWorkers}
-            className="btn-primary"
-          >
-            {saving
-              ? hasExistingAssignment
-                ? "Guardando..."
-                : "Asignando..."
-              : hasExistingAssignment
-              ? "Guardar asignación"
-              : "Asignar incidente"}
-          </button>
-        </div>
-      </div>
-    </Modal>
+      </Modal>
+    </>
   );
 }

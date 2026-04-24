@@ -1,27 +1,29 @@
 // ✅ Archivo: src/pages/IncidentModal.jsx
+// ✅ COMPLETO
 // ✅ Modal para crear y editar incidentes
 // ✅ NUEVO:
 // - soporte para mode="full" y mode="evidence"
 // - mode="full": editar incidente completo
 // - mode="evidence": editar descripción + agregar/quitar/reemplazar evidencia
 // ✅ FIX REAL:
-// - sin título
-// - la foto actual se toma DIRECTO desde incident.fotoUrl
-// - no depende de existingPhotoUrl en state
-// - la foto nueva reemplaza visualmente a la actual
-// - si la actual existe, se ve igual que en la vista principal
-// ✅ FIX NUEVO:
-// - en mode="evidence" ahora carga la evidencia real del cierre
-// - toma texto y foto desde la última tarea del incidente
-// - así coincide con el modal "Ver evidencia"
-// ✅ FIX NUEVO AHORA:
-// - editar evidencia del incidente YA NO actualiza incident.fotoUrl
-// - ahora actualiza la última tarea del incidente
-// - así "Ver evidencia" cambia correctamente y "Ver foto" del incidente no se toca
+// - sin título extra
+// - la foto actual se toma directo desde incident / tarea
 // ✅ FIX PRODUCCIÓN:
 // - si el incidente NO tiene tarea asociada, permite editar evidencia directo en el incidente
-// - en modo evidencia usa fallback a incident.descripcion + incident.fotoUrl
-// - así no bloquea incidentes antiguos o sin tarea
+// ✅ NUEVO AHORA:
+// - soporta múltiples fotos actuales al editar evidencia
+// - muestra todas las fotos guardadas
+// - permite quitar una por una con X
+// - permite agregar nuevas fotos
+// - envía fotosExistentes + fotos / fotosNombres SOLO en mode="evidence"
+// - mantiene compatibilidad con backend actual enviando también foto / fotoNombre
+// ✅ CAMBIO NUEVO:
+// - ahora permite hasta 10 fotos en vez de 5
+// ✅ FIX NUEVO AHORA:
+// - limpia la descripción del incidente al editar
+// - ya NO envía fotosExistentes al editar incidente normal
+// - convierte fotos existentes a base64 para no perderlas al guardar
+// - evita el error: property fotosExistentes should not exist
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -29,6 +31,7 @@ import { getToken } from "../auth/auth";
 import "./Admin.css";
 
 const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
+const MAX_INCIDENT_PHOTOS = 10;
 
 function getUserFromStorage() {
   try {
@@ -38,6 +41,7 @@ function getUserFromStorage() {
       localStorage.getItem("profile");
 
     if (!raw) return null;
+
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === "object" ? parsed : null;
   } catch {
@@ -60,7 +64,9 @@ function fmtVehicle(vehicle) {
   if (!vehicle) return "—";
 
   const patente = vehicle?.patente || "Sin patente";
-  const marcaModelo = vehicle?.marcaModelo || "";
+  const marcaModelo =
+    vehicle?.marcaModelo ||
+    [vehicle?.marca, vehicle?.modelo].filter(Boolean).join(" ").trim();
 
   return marcaModelo ? `${patente} · ${marcaModelo}` : patente;
 }
@@ -89,13 +95,8 @@ function buildUploadUrl(imagePath) {
   const raw = String(imagePath || "").trim();
   if (!raw) return "";
 
-  if (raw.startsWith("data:image/")) {
-    return raw;
-  }
-
-  if (raw.startsWith("http://") || raw.startsWith("https://")) {
-    return raw;
-  }
+  if (raw.startsWith("data:image/")) return raw;
+  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
 
   const backendOrigin = getBackendOrigin();
 
@@ -117,34 +118,59 @@ function prettifyIncidentStatus(value) {
   return value || "—";
 }
 
-function parseObservationWithImage(text) {
+function extractImagePaths(text) {
+  const raw = String(text || "");
+
+  const matches = [...raw.matchAll(/\/uploads\/[^\s)]+/gi)].map((m) =>
+    String(m?.[0] || "").trim()
+  );
+
+  return [...new Set(matches.filter(Boolean))].filter((value) =>
+    /\.(jpg|jpeg|png|webp|gif)$/i.test(value)
+  );
+}
+
+function cleanIncidentDescription(rawText) {
+  let text = String(rawText || "").trim();
+  if (!text) return "";
+
+  text = text.replace(/\r/g, " ");
+
+  text = text.replace(
+    /(?:^|\n)\s*📸\s*Foto incidente:\s*\/uploads\/[^\s]+/gim,
+    "\n"
+  );
+
+  text = text
+    .replace(/\n{2,}/g, "\n")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([,:;.-])/g, "$1")
+    .trim();
+
+  return text;
+}
+
+function parseObservationWithImages(text) {
   const raw = String(text || "").trim();
 
   if (!raw) {
     return {
       cleanText: "",
-      imageUrl: "",
+      imageUrls: [],
     };
   }
 
-  const uploadMatches = raw.match(/\/uploads\/[^\s]+/gi) || [];
-
-  const imagePaths = uploadMatches.filter((value) =>
-    /\.(jpg|jpeg|png|webp|gif)$/i.test(String(value || ""))
-  );
-
-  const imageUrl = imagePaths[imagePaths.length - 1] || "";
+  const imagePaths = extractImagePaths(raw);
 
   let cleanText = raw;
 
-  if (imagePaths.length > 0) {
-    imagePaths.forEach((path) => {
-      cleanText = cleanText.replace(path, " ");
-    });
-  }
+  imagePaths.forEach((path) => {
+    cleanText = cleanText.replaceAll(path, " ");
+  });
 
   cleanText = cleanText
     .replace(/📸\s*Foto vehículo:\s*/gi, " ")
+    .replace(/📸\s*Foto incidente:\s*/gi, " ")
     .replace(/📸\s*Foto:\s*/gi, " ")
     .replace(/📷\s*Foto:\s*/gi, " ")
     .replace(/📸\s*Evidencia:\s*/gi, " ")
@@ -156,7 +182,7 @@ function parseObservationWithImage(text) {
 
   return {
     cleanText,
-    imageUrl,
+    imageUrls: imagePaths,
   };
 }
 
@@ -185,7 +211,7 @@ function getIncidentEvidenceData(incident) {
     latestTask?.notes ||
     "";
 
-  const parsedObservation = parseObservationWithImage(observationRaw);
+  const parsedObservation = parseObservationWithImages(observationRaw);
 
   const cleanTaskTextCandidates = [
     latestTask?.trabajoRealizado,
@@ -202,28 +228,106 @@ function getIncidentEvidenceData(incident) {
   const taskText = cleanTaskTextCandidates[0] || "";
 
   const taskImageCandidates = [
+    ...(Array.isArray(parsedObservation.imageUrls)
+      ? parsedObservation.imageUrls
+      : []),
     latestTask?.evidenciaFotoUrl,
     latestTask?.evidenciaImageUrl,
-    parsedObservation.imageUrl,
     latestTask?.imageUrl,
     latestTask?.fotoUrl,
     latestTask?.photoUrl,
     latestTask?.imagenUrl,
   ]
     .map((value) => String(value || "").trim())
-    .filter(Boolean);
-
-  const taskImagePath = taskImageCandidates[0] || "";
+    .filter(Boolean)
+    .filter((value, index, arr) => arr.indexOf(value) === index);
 
   const incidentText = String(incident?.descripcion || "").trim();
-  const incidentImagePath = String(incident?.fotoUrl || "").trim();
+  const incidentImageCandidates = [
+    incident?.fotoUrl,
+    ...extractImagePaths(incident?.descripcion || ""),
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .filter((value, index, arr) => arr.indexOf(value) === index);
 
   const finalText = taskText || incidentText || "";
-  const finalImagePath = taskImagePath || incidentImagePath || "";
+  const finalImagePaths =
+    taskImageCandidates.length > 0
+      ? taskImageCandidates
+      : incidentImageCandidates;
 
   return {
     text: finalText,
-    imageUrl: buildUploadUrl(finalImagePath),
+    imageUrls: finalImagePaths.map((path) => buildUploadUrl(path)),
+    rawImagePaths: finalImagePaths,
+  };
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      resolve(String(reader.result || ""));
+    };
+
+    reader.onerror = () => {
+      reject(new Error("No se pudo leer la foto seleccionada."));
+    };
+
+    reader.readAsDataURL(file);
+  });
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onloadend = () => {
+      resolve(String(reader.result || ""));
+    };
+
+    reader.onerror = () => {
+      reject(new Error("No se pudo convertir la imagen actual."));
+    };
+
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function urlToDataUrl(url) {
+  const res = await fetch(url, { credentials: "include" });
+
+  if (!res.ok) {
+    throw new Error("No se pudo leer una foto actual del incidente.");
+  }
+
+  const blob = await res.blob();
+  return blobToDataUrl(blob);
+}
+
+function createNewPhotoItem(file, dataUrl) {
+  return {
+    id: `new_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    name: String(file?.name || "foto.jpg"),
+    base64: dataUrl,
+    preview: dataUrl,
+    type: "new",
+    failed: false,
+  };
+}
+
+function createExistingPhotoItem(rawPath) {
+  const safePath = String(rawPath || "").trim();
+
+  return {
+    id: `existing_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    rawPath: safePath,
+    preview: buildUploadUrl(safePath),
+    name: safePath.split("/").pop() || "foto_actual",
+    type: "existing",
+    failed: false,
   };
 }
 
@@ -241,7 +345,7 @@ export default function IncidentModal({
   onCreated,
   onSaved,
   incident = null,
-  mode = "full", // ✅ "full" | "evidence"
+  mode = "full",
 }) {
   const currentUser = useMemo(() => getUserFromStorage(), []);
 
@@ -265,11 +369,7 @@ export default function IncidentModal({
   });
 
   const [vehicleQuery, setVehicleQuery] = useState("");
-  const [photoBase64, setPhotoBase64] = useState("");
-  const [photoPreview, setPhotoPreview] = useState("");
-  const [removeCurrentPhoto, setRemoveCurrentPhoto] = useState(false);
-  const [currentPhotoFailed, setCurrentPhotoFailed] = useState(false);
-  const [newPhotoFailed, setNewPhotoFailed] = useState(false);
+  const [photoItems, setPhotoItems] = useState([]);
 
   function resetInputs() {
     if (takePhotoInputRef.current) takePhotoInputRef.current.value = "";
@@ -284,11 +384,7 @@ export default function IncidentModal({
       status: "ABIERTO",
     });
     setVehicleQuery("");
-    setPhotoBase64("");
-    setPhotoPreview("");
-    setRemoveCurrentPhoto(false);
-    setCurrentPhotoFailed(false);
-    setNewPhotoFailed(false);
+    setPhotoItems([]);
     setError("");
     resetInputs();
   }
@@ -314,7 +410,10 @@ export default function IncidentModal({
     return availableVehicles
       .filter((vehicle) => {
         const patente = String(vehicle?.patente || "").toLowerCase();
-        const marcaModelo = String(vehicle?.marcaModelo || "").toLowerCase();
+        const marcaModelo = String(
+          vehicle?.marcaModelo ||
+            [vehicle?.marca, vehicle?.modelo].filter(Boolean).join(" ")
+        ).toLowerCase();
         const empresa = String(vehicle?.empresa || "").toLowerCase();
 
         return (
@@ -327,48 +426,22 @@ export default function IncidentModal({
   }, [availableVehicles, vehicleQuery]);
 
   const evidenceTask = useMemo(() => {
-  if (!Array.isArray(incident?.workshopTasks)) return null;
+    if (!Array.isArray(incident?.workshopTasks)) return null;
 
-  return incident.workshopTasks
-    .slice()
-    .sort((a, b) => {
-      const da = new Date(a?.updatedAt || a?.createdAt || 0).getTime();
-      const db = new Date(b?.updatedAt || b?.createdAt || 0).getTime();
-      return db - da;
-    })
-    .find((task) => {
-      const obs =
-        task?.observaciones ||
-        task?.observation ||
-        task?.comentarios ||
-        task?.notes ||
-        "";
-
-      const hasText = String(obs || "").trim().length > 0;
-
-      const hasImage =
-        task?.evidenciaFotoUrl ||
-        task?.evidenciaImageUrl ||
-        task?.imageUrl ||
-        task?.fotoUrl ||
-        task?.photoUrl ||
-        task?.imagenUrl;
-
-      return hasText || hasImage;
-    });
-}, [incident]);
+    return (
+      incident.workshopTasks
+        .slice()
+        .sort((a, b) => {
+          const da = new Date(a?.updatedAt || a?.createdAt || 0).getTime();
+          const db = new Date(b?.updatedAt || b?.createdAt || 0).getTime();
+          return db - da;
+        })[0] || null
+    );
+  }, [incident]);
 
   const incidentEvidence = useMemo(() => {
     return getIncidentEvidenceData(incident);
   }, [incident]);
-
-  const currentIncidentPhotoUrl = useMemo(() => {
-    if (isEvidenceMode) {
-      return incidentEvidence.imageUrl || "";
-    }
-
-    return buildUploadUrl(incident?.fotoUrl);
-  }, [incident?.fotoUrl, incidentEvidence.imageUrl, isEvidenceMode]);
 
   useEffect(() => {
     if (!open) return;
@@ -388,24 +461,41 @@ export default function IncidentModal({
         vehicleId: String(incidentVehicle?.id || ""),
         descripcion: isEvidenceMode
           ? String(incidentEvidence.text || "").trim()
-          : String(incident?.descripcion || "").trim(),
+          : cleanIncidentDescription(incident?.descripcion),
         ubicacionTexto: String(incident?.ubicacionTexto || "").trim(),
         status: String(incident?.status || "ABIERTO").trim() || "ABIERTO",
       });
 
       setVehicleQuery(incidentVehicle ? fmtVehicle(incidentVehicle) : "");
-      setPhotoBase64("");
-      setPhotoPreview("");
-      setRemoveCurrentPhoto(false);
-      setCurrentPhotoFailed(false);
-      setNewPhotoFailed(false);
+
+      const initialPhotos = (
+        isEvidenceMode
+          ? incidentEvidence.rawImagePaths || []
+          : [
+              String(incident?.fotoUrl || "").trim(),
+              ...extractImagePaths(incident?.descripcion || ""),
+            ]
+      )
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .filter((value, index, arr) => arr.indexOf(value) === index)
+        .map((rawPath) => createExistingPhotoItem(rawPath));
+
+      setPhotoItems(initialPhotos);
       setError("");
       resetInputs();
       return;
     }
 
     resetForm();
-  }, [open, isEditMode, incident, isEvidenceMode, incidentEvidence.text]);
+  }, [
+    open,
+    isEditMode,
+    incident,
+    isEvidenceMode,
+    incidentEvidence.text,
+    incidentEvidence.rawImagePaths,
+  ]);
 
   useEffect(() => {
     if (isEvidenceMode) return;
@@ -466,44 +556,96 @@ export default function IncidentModal({
     setVehicleQuery(fmtVehicle(vehicle));
   }
 
-  function handlePhotoChange(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  async function handlePhotoChange(e) {
+    const files = Array.from(e.target.files || []);
 
-    const reader = new FileReader();
+    if (!files.length) return;
 
-    reader.onload = () => {
-      const result = String(reader.result || "");
-      setPhotoBase64(result);
-      setPhotoPreview(result);
-      setRemoveCurrentPhoto(false);
-      setNewPhotoFailed(false);
-      setCurrentPhotoFailed(false);
-    };
+    try {
+      const remainingSlots = MAX_INCIDENT_PHOTOS - photoItems.length;
 
-    reader.onerror = () => {
-      setError("No se pudo leer la foto seleccionada.");
-    };
+      if (remainingSlots <= 0) {
+        setError(`Solo puedes subir hasta ${MAX_INCIDENT_PHOTOS} fotos.`);
+        resetInputs();
+        return;
+      }
 
-    reader.readAsDataURL(file);
+      const filesToProcess = files.slice(0, remainingSlots);
+
+      if (files.length > remainingSlots) {
+        setError(
+          `Solo se tomarán las primeras ${remainingSlots} fotos disponibles.`
+        );
+      } else {
+        setError("");
+      }
+
+      const loadedItems = [];
+
+      for (const file of filesToProcess) {
+        const result = await readFileAsDataUrl(file);
+        loadedItems.push(createNewPhotoItem(file, result));
+      }
+
+      setPhotoItems((prev) => {
+        const next = [...prev, ...loadedItems];
+        return next.slice(0, MAX_INCIDENT_PHOTOS);
+      });
+    } catch (err) {
+      setError(err?.message || "No se pudo leer una de las fotos seleccionadas.");
+    } finally {
+      resetInputs();
+    }
   }
 
-  function removePhoto() {
-    setPhotoBase64("");
-    setPhotoPreview("");
-    setRemoveCurrentPhoto(true);
-    setCurrentPhotoFailed(false);
-    setNewPhotoFailed(false);
+  function removePhotoAt(photoId) {
+    setPhotoItems((prev) => prev.filter((item) => item.id !== photoId));
+  }
+
+  function clearAllPhotos() {
+    setPhotoItems([]);
     resetInputs();
   }
 
-  function clearNewPhotoOnly() {
-    setPhotoBase64("");
-    setPhotoPreview("");
-    setNewPhotoFailed(false);
-    setRemoveCurrentPhoto(false);
-    setCurrentPhotoFailed(false);
-    resetInputs();
+  function markPhotoFailed(photoId) {
+    setPhotoItems((prev) =>
+      prev.map((item) =>
+        item.id === photoId ? { ...item, failed: true } : item
+      )
+    );
+  }
+
+  async function buildIncidentEditPhotosPayload() {
+    const orderedPhotoPayload = [];
+
+    for (let i = 0; i < photoItems.length; i++) {
+      const item = photoItems[i];
+
+      if (item.type === "new") {
+        const base64 = String(item?.base64 || "").trim();
+        if (base64) {
+          orderedPhotoPayload.push({
+            base64,
+            name: String(item?.name || `foto_${i + 1}.jpg`).trim(),
+          });
+        }
+        continue;
+      }
+
+      if (item.type === "existing") {
+        const previewUrl = buildUploadUrl(item?.rawPath || item?.preview || "");
+        if (!previewUrl) continue;
+
+        const base64 = await urlToDataUrl(previewUrl);
+
+        orderedPhotoPayload.push({
+          base64,
+          name: String(item?.name || `foto_actual_${i + 1}.jpg`).trim(),
+        });
+      }
+    }
+
+    return orderedPhotoPayload;
   }
 
   async function submit(e) {
@@ -555,44 +697,56 @@ export default function IncidentModal({
     try {
       const token = getToken();
 
+      const existingPhotoItems = photoItems.filter(
+        (item) => item.type === "existing"
+      );
+      const newPhotoItems = photoItems.filter((item) => item.type === "new");
+
+      const fotosExistentes = existingPhotoItems
+        .map((item) => String(item?.rawPath || "").trim())
+        .filter(Boolean);
+
+      const photoBase64List = newPhotoItems
+        .map((item, index) => ({
+          base64: String(item?.base64 || "").trim(),
+          name: String(item?.name || `foto_${index + 1}.jpg`).trim(),
+        }))
+        .filter((item) => item.base64);
+
+      const firstPhotoBase64 = photoBase64List[0]?.base64 || "";
+      const firstPhotoName = photoBase64List[0]?.name || "";
+
       if (isEditMode && isEvidenceMode) {
-  // ✅ Si existe tarea, guardar en la tarea
-  if (evidenceTask?.id) {
-    const cleanEvidenceText = String(form.descripcion || "").trim();
+        if (evidenceTask?.id) {
+          const cleanEvidenceText = String(form.descripcion || "").trim();
 
-    const evidencePayload = {
-  observaciones: cleanEvidenceText,
-  trabajoRealizado: cleanEvidenceText,
-  ...(photoBase64
-    ? {
-        foto: photoBase64,
-        fotoNombre: "incidente_evidencia.jpg",
-      }
-    : {}),
-  ...(removeCurrentPhoto
-    ? {
-        foto: "",
-        fotoNombre: "",
-      }
-    : {}),
-};
+          const evidencePayload = {
+            observaciones: cleanEvidenceText,
+            trabajoRealizado: cleanEvidenceText,
+            fotosExistentes,
+            fotos: photoBase64List.map((item) => item.base64),
+            fotosNombres: photoBase64List.map((item) => item.name),
+            foto: firstPhotoBase64,
+            fotoNombre: firstPhotoName || "incidente_evidencia_1.jpg",
+          };
 
-const res = await fetch(`${API_URL}/workshop/tasks/${evidenceTask.id}`, {
-  method: "PATCH",
-  headers: {
-    "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  },
-  credentials: "include",
-  body: JSON.stringify(evidencePayload),
-});
+          const res = await fetch(`${API_URL}/workshop/tasks/${evidenceTask.id}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            credentials: "include",
+            body: JSON.stringify(evidencePayload),
+          });
 
-if (!res.ok) {
-  const text = await res.text().catch(() => "");
-  throw new Error(
-    text || "No se pudo actualizar la evidencia del incidente"
-  );
-}
+          if (!res.ok) {
+            const text = await res.text().catch(() => "");
+            throw new Error(
+              text || "No se pudo actualizar la evidencia del incidente"
+            );
+          }
+
           const updated = await res.json().catch(() => null);
 
           resetForm();
@@ -601,8 +755,6 @@ if (!res.ok) {
           return;
         }
 
-        // ✅ FIX PRODUCCIÓN:
-        // Si NO existe tarea, guardar directo en el incidente
         const incidentPayload = {
           vehicleId: incident?.vehicle?.id
             ? String(incident.vehicle.id)
@@ -614,18 +766,10 @@ if (!res.ok) {
           descripcion: String(form.descripcion || "").trim(),
           ubicacionTexto: String(incident?.ubicacionTexto || "").trim() || null,
           status: String(incident?.status || "ABIERTO").trim() || "ABIERTO",
-          ...(photoBase64
-            ? {
-                foto: photoBase64,
-                fotoNombre: "incidente_evidencia.jpg",
-              }
-            : {}),
-          ...(removeCurrentPhoto
-            ? {
-                foto: "",
-                fotoNombre: "",
-              }
-            : {}),
+          fotos: photoBase64List.map((item) => item.base64),
+          fotosNombres: photoBase64List.map((item) => item.name),
+          foto: firstPhotoBase64,
+          fotoNombre: firstPhotoName || "incidente_evidencia_1.jpg",
         };
 
         const res = await fetch(`${API_URL}/workshop/incidents/${incident.id}`, {
@@ -656,6 +800,11 @@ if (!res.ok) {
       let payload;
 
       if (isEditMode) {
+        const combinedPhotosForIncident = await buildIncidentEditPhotosPayload();
+
+        const firstCombinedBase64 = combinedPhotosForIncident[0]?.base64 || "";
+        const firstCombinedName = combinedPhotosForIncident[0]?.name || "";
+
         payload = {
           vehicleId: String(form.vehicleId || "").trim(),
           reportedById: incident?.reportedBy?.id
@@ -665,15 +814,11 @@ if (!res.ok) {
           descripcion: String(form.descripcion || "").trim(),
           ubicacionTexto: String(form.ubicacionTexto || "").trim() || null,
           status: String(form.status || "ABIERTO").trim() || "ABIERTO",
+          fotos: combinedPhotosForIncident.map((item) => item.base64),
+          fotosNombres: combinedPhotosForIncident.map((item) => item.name),
+          foto: firstCombinedBase64,
+          fotoNombre: firstCombinedName || "incidente_editado_1.jpg",
         };
-
-        if (photoBase64) {
-          payload.foto = photoBase64;
-          payload.fotoNombre = "incidente_editado.jpg";
-        } else if (removeCurrentPhoto) {
-          payload.foto = "";
-          payload.fotoNombre = "";
-        }
 
         const res = await fetch(`${API_URL}/workshop/incidents/${incident.id}`, {
           method: "PATCH",
@@ -704,8 +849,10 @@ if (!res.ok) {
         empresa,
         descripcion: String(form.descripcion || "").trim(),
         ubicacionTexto: String(form.ubicacionTexto || "").trim() || null,
-        foto: photoBase64 || null,
-        fotoNombre: photoBase64 ? "incidente.jpg" : null,
+        fotos: photoBase64List.map((item) => item.base64),
+        fotosNombres: photoBase64List.map((item) => item.name),
+        foto: firstPhotoBase64 || null,
+        fotoNombre: firstPhotoBase64 ? firstPhotoName || "incidente_1.jpg" : null,
       };
 
       const res = await fetch(`${API_URL}/workshop/incidents`, {
@@ -751,13 +898,6 @@ if (!res.ok) {
     fontSize: 14,
     color: "#1f2937",
   };
-
-  const hasNewPhoto = Boolean(photoPreview);
-  const hasCurrentPhoto =
-    isEditMode &&
-    !removeCurrentPhoto &&
-    !hasNewPhoto &&
-    Boolean(currentIncidentPhotoUrl);
 
   const modalTitle = isEditMode
     ? isEvidenceMode
@@ -957,6 +1097,7 @@ if (!res.ok) {
                     type="file"
                     accept="image/*"
                     capture="environment"
+                    multiple
                     onChange={handlePhotoChange}
                     style={{ display: "none" }}
                   />
@@ -965,6 +1106,7 @@ if (!res.ok) {
                     ref={galleryInputRef}
                     type="file"
                     accept="image/*"
+                    multiple
                     onChange={handlePhotoChange}
                     style={{ display: "none" }}
                   />
@@ -972,7 +1114,7 @@ if (!res.ok) {
                   <button
                     type="button"
                     onClick={() => takePhotoInputRef.current?.click()}
-                    disabled={saving}
+                    disabled={saving || photoItems.length >= MAX_INCIDENT_PHOTOS}
                     style={photoActionBtnStyle}
                   >
                     📸 Tomar foto
@@ -981,7 +1123,7 @@ if (!res.ok) {
                   <button
                     type="button"
                     onClick={() => galleryInputRef.current?.click()}
-                    disabled={saving}
+                    disabled={saving || photoItems.length >= MAX_INCIDENT_PHOTOS}
                     style={photoActionBtnStyle}
                   >
                     🖼️ Elegir desde galería
@@ -994,8 +1136,8 @@ if (!res.ok) {
                       lineHeight: 1.45,
                     }}
                   >
-                    En celular puedes tomar la foto directamente o elegir una
-                    imagen guardada.
+                    Puedes subir hasta {MAX_INCIDENT_PHOTOS} fotos. Ahora mismo:{" "}
+                    <strong>{photoItems.length}</strong> seleccionada(s).
                   </div>
 
                   <div
@@ -1007,72 +1149,104 @@ if (!res.ok) {
                       background: "#fff",
                     }}
                   >
-                    {hasNewPhoto ? (
-                      !newPhotoFailed ? (
-                        <img
-                          src={photoPreview}
-                          alt="Vista previa nueva"
-                          onError={() => setNewPhotoFailed(true)}
-                          style={{
-                            width: "100%",
-                            maxHeight: 260,
-                            objectFit: "contain",
-                            borderRadius: 12,
-                            display: "block",
-                            background: "#f8fafc",
-                          }}
-                        />
-                      ) : (
-                        <div
-                          style={{
-                            minHeight: 180,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            borderRadius: 12,
-                            background: "#f8fafc",
-                            color: "#64748b",
-                            fontSize: 14,
-                            textAlign: "center",
-                            padding: 16,
-                          }}
-                        >
-                          No se pudo mostrar la nueva foto seleccionada.
-                        </div>
-                      )
-                    ) : hasCurrentPhoto ? (
-                      !currentPhotoFailed ? (
-                        <img
-                          src={currentIncidentPhotoUrl}
-                          alt="Foto actual del incidente"
-                          onError={() => setCurrentPhotoFailed(true)}
-                          style={{
-                            width: "100%",
-                            maxHeight: 260,
-                            objectFit: "contain",
-                            borderRadius: 12,
-                            display: "block",
-                            background: "#f8fafc",
-                          }}
-                        />
-                      ) : (
-                        <div
-                          style={{
-                            minHeight: 180,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            borderRadius: 12,
-                            background: "#f8fafc",
-                            color: "#64748b",
-                            fontSize: 14,
-                            textAlign: "center",
-                            padding: 16,
-                          }}
-                        >
-                          No se pudo mostrar la foto actual.
-                        </div>
-                      )
+                    {photoItems.length > 0 ? (
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                          gap: 12,
+                        }}
+                      >
+                        {photoItems.map((item, index) => (
+                          <div
+                            key={item.id}
+                            style={{
+                              position: "relative",
+                              border: "1px solid rgba(15,23,42,.08)",
+                              borderRadius: 12,
+                              overflow: "hidden",
+                              background: "#f8fafc",
+                            }}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => removePhotoAt(item.id)}
+                              disabled={saving}
+                              style={{
+                                position: "absolute",
+                                top: 8,
+                                right: 8,
+                                width: 28,
+                                height: 28,
+                                borderRadius: "50%",
+                                border: "none",
+                                background: "rgba(15,23,42,.9)",
+                                color: "#fff",
+                                fontWeight: 900,
+                                fontSize: 18,
+                                lineHeight: 1,
+                                cursor: "pointer",
+                                zIndex: 2,
+                              }}
+                              title="Quitar foto"
+                            >
+                              ×
+                            </button>
+
+                            {!item.failed ? (
+                              <img
+                                src={item.preview}
+                                alt={`Vista previa ${index + 1}`}
+                                onError={() => markPhotoFailed(item.id)}
+                                style={{
+                                  width: "100%",
+                                  height: 140,
+                                  objectFit: "cover",
+                                  display: "block",
+                                  background: "#e5e7eb",
+                                }}
+                              />
+                            ) : (
+                              <div
+                                style={{
+                                  height: 140,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  textAlign: "center",
+                                  padding: 12,
+                                  color: "#64748b",
+                                  fontSize: 13,
+                                  background: "#f8fafc",
+                                }}
+                              >
+                                No se pudo mostrar esta foto.
+                              </div>
+                            )}
+
+                            <div
+                              style={{
+                                padding: 10,
+                                display: "grid",
+                                gap: 8,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: 800,
+                                  color: "#334155",
+                                  wordBreak: "break-word",
+                                }}
+                              >
+                                {item.type === "existing"
+                                  ? `Actual ${index + 1}`
+                                  : item.name || `Foto ${index + 1}`}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     ) : (
                       <div
                         style={{
@@ -1088,13 +1262,11 @@ if (!res.ok) {
                           padding: 16,
                         }}
                       >
-                        {removeCurrentPhoto
-                          ? "La foto fue quitada."
-                          : "No hay foto seleccionada."}
+                        No hay fotos seleccionadas.
                       </div>
                     )}
 
-                    {(hasCurrentPhoto || hasNewPhoto || removeCurrentPhoto) && (
+                    {photoItems.length > 0 && (
                       <div
                         style={{
                           marginTop: 10,
@@ -1107,22 +1279,11 @@ if (!res.ok) {
                         <button
                           type="button"
                           className="btn-secondary"
-                          onClick={removePhoto}
+                          onClick={clearAllPhotos}
                           disabled={saving}
                         >
-                          Quitar foto
+                          Quitar todas
                         </button>
-
-                        {hasNewPhoto && hasCurrentPhoto ? (
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            onClick={clearNewPhotoOnly}
-                            disabled={saving}
-                          >
-                            Volver a foto actual
-                          </button>
-                        ) : null}
                       </div>
                     )}
                   </div>

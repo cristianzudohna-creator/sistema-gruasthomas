@@ -2,6 +2,7 @@
 
 import { Type } from "class-transformer";
 import {
+  IsArray,
   IsEnum,
   IsInt,
   IsOptional,
@@ -69,16 +70,29 @@ export class UpdateIncidentDto {
   @Min(0)
   horometro?: number;
 
-  // ✅ NUEVO: permite reemplazar o eliminar la foto del incidente
-  // - si viene base64 => reemplaza la foto
+  // ✅ COMPATIBILIDAD ACTUAL:
+  // - si viene base64 => reemplaza la foto principal
   // - si viene "" => elimina la foto
   @IsOptional()
   @IsString()
   foto?: string;
 
-  // ✅ NUEVO: nombre original del archivo de foto
+  // ✅ COMPATIBILIDAD ACTUAL:
+  // nombre original del archivo de foto principal
   @IsOptional()
   @IsString()
   @MaxLength(255)
   fotoNombre?: string;
+
+  // ✅ NUEVO: soporte para múltiples fotos (hasta 5 desde frontend)
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  fotos?: string[];
+
+  // ✅ NUEVO: nombres de múltiples fotos
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  fotosNombres?: string[];
 }
