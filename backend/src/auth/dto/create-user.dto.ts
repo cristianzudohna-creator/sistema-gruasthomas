@@ -1,7 +1,9 @@
-// ✅ Archivo: src/auth/dto/create-user.dto.ts
+// ✅ Archivo: src/auth/dto/create-user.dto.ts (COMPLETO)
 // ✅ Cambio: rut ahora es OBLIGATORIO
 // ✅ Motivo: todos ingresan con RUT
 // ✅ FIX: mensaje de workerType actualizado para incluir supervisor taller mecánico y supervisor de terreno
+// ✅ NUEVO AHORA:
+// - soporte workerTypesExtra WorkerType[]
 
 import {
   IsBoolean,
@@ -11,6 +13,7 @@ import {
   IsString,
   MinLength,
   IsNotEmpty,
+  IsArray,
 } from "class-validator";
 import { Role, Empresa, WorkerType } from "@prisma/client";
 
@@ -53,7 +56,7 @@ export class CreateUserDto {
   empresa?: Empresa;
 
   // =========================
-  // workerType
+  // workerType principal
   // =========================
   @IsOptional()
   @IsEnum(WorkerType, {
@@ -61,6 +64,18 @@ export class CreateUserDto {
       "workerType debe ser un valor válido del sistema, por ejemplo: CONDUCTOR, RIGGER, OPERADOR, MECANICO, JEFE_TALLER, SUPERVISOR, SUPERVISOR_TERRENO u OTRO",
   })
   workerType?: WorkerType;
+
+  // =========================
+  // workerTypesExtra
+  // =========================
+  @IsOptional()
+  @IsArray()
+  @IsEnum(WorkerType, {
+    each: true,
+    message:
+      "workerTypesExtra debe contener valores válidos de WorkerType",
+  })
+  workerTypesExtra?: WorkerType[];
 
   // ⚠️ No existen en Prisma → no se guardan
   @IsOptional()

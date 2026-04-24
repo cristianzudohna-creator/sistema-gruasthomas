@@ -7,6 +7,10 @@
 // - Devuelve password temporal (para entregarla al usuario)
 // ✅ NUEVO:
 // - saveFcmToken() para guardar token FCM por usuario
+// ✅ NUEVO AHORA:
+// - soporte workerTypesExtra WorkerType[]
+// - crear/editar/listar usuario con funciones extra
+// - filtro workerType ahora busca workerType principal O workerTypesExtra
 
 import {
   BadRequestException,
@@ -38,7 +42,6 @@ export class UsersService {
   // ======================
 
   private normalizeEmpresa(value: any): Empresa | null {
-    // undefined = "no vino" (ojo: no es null)
     if (value === undefined) return undefined as any;
     if (value === null || value === "") return null;
 
@@ -68,6 +71,37 @@ export class UsersService {
     return wt as WorkerType;
   }
 
+  private normalizeWorkerTypesExtra(value: any, mainWorkerType?: WorkerType | null): WorkerType[] {
+    if (value === undefined) return undefined as any;
+    if (value === null || value === "") return [];
+
+    const raw = Array.isArray(value) ? value : [value];
+
+    const allowed = Object.values(WorkerType).map((x) =>
+      String(x).toUpperCase()
+    );
+
+    const normalized = raw
+      .map((x) => String(x || "").trim().toUpperCase())
+      .filter(Boolean);
+
+    for (const wt of normalized) {
+      if (!allowed.includes(wt)) {
+        throw new BadRequestException(
+          `workerTypesExtra inválido. Debe ser uno de: ${allowed.join(", ")}`
+        );
+      }
+    }
+
+    const unique = Array.from(new Set(normalized)) as WorkerType[];
+
+    if (mainWorkerType) {
+      return unique.filter((x) => x !== mainWorkerType);
+    }
+
+    return unique;
+  }
+
   private assertSuperadmin(actor: any) {
     const role = String(actor?.role || "").toUpperCase();
     if (role !== "SUPERADMIN") {
@@ -89,8 +123,8 @@ export class UsersService {
       activo: u.activo,
       empresa: (u as any).empresa ?? null,
       workerType: (u as any).workerType ?? null,
+      workerTypesExtra: (u as any).workerTypesExtra ?? [],
 
-      // ✅ útil para auditoría/diagnóstico (sin password)
       mustChangePassword: (u as any).mustChangePassword ?? false,
       passwordResetAt: (u as any).passwordResetAt ?? null,
     };
@@ -105,9 +139,7 @@ export class UsersService {
       .replace(/\s+/g, "");
   }
 
-  // ✅ genera password temporal (fácil de dictar)
   private generateTempPassword() {
-    // ej: GT-583194
     const n = Math.floor(100000 + Math.random() * 900000);
     return `GT-${n}`;
   }
@@ -123,33 +155,29 @@ export class UsersService {
     });
   }
 
-  // ✅ Login por RUT
-  // (devuelve el user completo, incluyendo password hash y flags)
   findByRut(rut: string) {
-  const cleanRut = this.normalizeRut(rut);
-  if (!cleanRut) return null as any;
+    const cleanRut = this.normalizeRut(rut);
+    if (!cleanRut) return null as any;
 
-  return this.prisma.user.findFirst({
-    where: {
-      OR: [
-        // formato limpio
-        {
-          rut: {
-            equals: cleanRut,
-            mode: "insensitive",
+    return this.prisma.user.findFirst({
+      where: {
+        OR: [
+          {
+            rut: {
+              equals: cleanRut,
+              mode: "insensitive",
+            },
           },
-        },
-        // formato con guion posible
-        {
-          rut: {
-            contains: cleanRut,
-            mode: "insensitive",
+          {
+            rut: {
+              contains: cleanRut,
+              mode: "insensitive",
+            },
           },
-        },
-      ],
-    },
-  });
-}
+        ],
+      },
+    });
+  }
 
   async ensureAdmin() {
     const email = "admin@empresa.cl";
@@ -165,8 +193,8 @@ export class UsersService {
         apellido: "Sistema",
         empresa: null,
         workerType: null as any,
+        workerTypesExtra: [],
 
-        // ✅ admin no requiere cambiar pass
         mustChangePassword: false,
         passwordResetAt: null,
       } as any,
@@ -179,6 +207,7 @@ export class UsersService {
         activo: true,
         empresa: null,
         workerType: null as any,
+        workerTypesExtra: [],
 
         mustChangePassword: false,
         passwordResetAt: null,
@@ -206,6 +235,7 @@ export class UsersService {
         activo: true,
         empresa: true as any,
         workerType: true as any,
+        workerTypesExtra: true as any,
         mustChangePassword: true as any,
         passwordResetAt: true as any,
         createdAt: true,
@@ -233,6 +263,7 @@ export class UsersService {
         activo: true,
         empresa: true as any,
         workerType: true as any,
+        workerTypesExtra: true as any,
         mustChangePassword: true as any,
         passwordResetAt: true as any,
       },
@@ -278,6 +309,12 @@ export class UsersService {
       throw new BadRequestException("No puedes modificar tu tipo de trabajador.");
     }
 
+    if ((dto as any).workerTypesExtra !== undefined) {
+      throw new BadRequestException(
+        "No puedes modificar tus funciones extra de trabajador."
+      );
+    }
+
     if (!Object.keys(data).length) {
       return this.prisma.user.findUnique({
         where: { id },
@@ -291,6 +328,7 @@ export class UsersService {
           activo: true,
           empresa: true as any,
           workerType: true as any,
+          workerTypesExtra: true as any,
           mustChangePassword: true as any,
           passwordResetAt: true as any,
           createdAt: true,
@@ -312,6 +350,7 @@ export class UsersService {
         activo: true,
         empresa: true as any,
         workerType: true as any,
+        workerTypesExtra: true as any,
         mustChangePassword: true as any,
         passwordResetAt: true as any,
         createdAt: true,
@@ -358,12 +397,23 @@ export class UsersService {
     }
 
     let workerTypeFinal: WorkerType | null = null;
+    let workerTypesExtraFinal: WorkerType[] = [];
 
     if (role === Role.TRABAJADOR) {
       workerTypeFinal =
         workerTypeInput === undefined ? null : (workerTypeInput ?? null);
+
+      workerTypesExtraFinal = this.normalizeWorkerTypesExtra(
+        (dto as any).workerTypesExtra,
+        workerTypeFinal
+      );
+
+      if (workerTypesExtraFinal === (undefined as any)) {
+        workerTypesExtraFinal = [];
+      }
     } else {
       workerTypeFinal = null;
+      workerTypesExtraFinal = [];
     }
 
     try {
@@ -378,8 +428,8 @@ export class UsersService {
           activo: dto.activo ?? true,
           empresa: role === Role.SUPERADMIN ? null : (empresa ?? null),
           workerType: workerTypeFinal,
+          workerTypesExtra: workerTypesExtraFinal,
 
-          // ✅ por defecto NO forzamos cambio (el admin ya setea una definitiva al crear)
           mustChangePassword: false,
           passwordResetAt: null,
         } as any,
@@ -393,6 +443,7 @@ export class UsersService {
           activo: true,
           empresa: true as any,
           workerType: true as any,
+          workerTypesExtra: true as any,
           mustChangePassword: true as any,
           passwordResetAt: true as any,
           createdAt: true,
@@ -440,6 +491,7 @@ export class UsersService {
     const skip = (page - 1) * limit;
 
     const where: any = {};
+    const and: any[] = [];
 
     if (typeof params.activo === "string") {
       if (params.activo === "true") where.activo = true;
@@ -464,18 +516,30 @@ export class UsersService {
         where.workerType = null;
         where.role = Role.TRABAJADOR;
       } else if (wt !== (undefined as any)) {
-        where.workerType = wt;
         where.role = Role.TRABAJADOR;
+
+        and.push({
+          OR: [
+            { workerType: wt },
+            { workerTypesExtra: { has: wt } },
+          ],
+        });
       }
     }
 
     if (q) {
-      where.OR = [
-        { email: { contains: q, mode: "insensitive" } },
-        { nombre: { contains: q, mode: "insensitive" } },
-        { apellido: { contains: q, mode: "insensitive" } },
-        { rut: { contains: q, mode: "insensitive" } },
-      ];
+      and.push({
+        OR: [
+          { email: { contains: q, mode: "insensitive" } },
+          { nombre: { contains: q, mode: "insensitive" } },
+          { apellido: { contains: q, mode: "insensitive" } },
+          { rut: { contains: q, mode: "insensitive" } },
+        ],
+      });
+    }
+
+    if (and.length) {
+      where.AND = and;
     }
 
     const [items, total] = await Promise.all([
@@ -494,6 +558,7 @@ export class UsersService {
           activo: true,
           empresa: true as any,
           workerType: true as any,
+          workerTypesExtra: true as any,
           mustChangePassword: true as any,
           passwordResetAt: true as any,
           createdAt: true,
@@ -527,6 +592,7 @@ export class UsersService {
         activo: true,
         empresa: true as any,
         workerType: true as any,
+        workerTypesExtra: true as any,
         mustChangePassword: true as any,
         passwordResetAt: true as any,
         createdAt: true,
@@ -560,6 +626,7 @@ export class UsersService {
         activo: true,
         empresa: true as any,
         workerType: true as any,
+        workerTypesExtra: true as any,
         mustChangePassword: true as any,
         passwordResetAt: true as any,
       },
@@ -607,7 +674,6 @@ export class UsersService {
         (dto as any).rut === null ? null : this.normalizeRut((dto as any).rut);
     }
 
-    // ✅ si admin cambia password => forzar cambio al próximo login
     if ((dto as any).password) {
       data.password = await bcrypt.hash((dto as any).password, 10);
       passwordChanged = true;
@@ -633,11 +699,23 @@ export class UsersService {
         ? data.empresa
         : ((beforeRaw as any).empresa ?? null);
 
+    const nextWorkerTypeFinal =
+      data.workerType !== undefined
+        ? data.workerType
+        : ((beforeRaw as any).workerType ?? null);
+
+    if ((dto as any).workerTypesExtra !== undefined) {
+      data.workerTypesExtra = this.normalizeWorkerTypesExtra(
+        (dto as any).workerTypesExtra,
+        nextWorkerTypeFinal
+      );
+    }
+
     if (nextRole === Role.SUPERADMIN) {
       data.empresa = null;
       data.workerType = null;
+      data.workerTypesExtra = [];
 
-      // ✅ superadmin no debería quedar forzado
       data.mustChangePassword = false;
     } else {
       if (!nextEmpresaFinal) {
@@ -649,6 +727,7 @@ export class UsersService {
 
     if (nextRole !== Role.TRABAJADOR) {
       data.workerType = null;
+      data.workerTypesExtra = [];
     }
 
     try {
@@ -665,6 +744,7 @@ export class UsersService {
           activo: true,
           empresa: true as any,
           workerType: true as any,
+          workerTypesExtra: true as any,
           mustChangePassword: true as any,
           passwordResetAt: true as any,
           createdAt: true,
@@ -721,6 +801,7 @@ export class UsersService {
         activo: true,
         empresa: true as any,
         workerType: true as any,
+        workerTypesExtra: true as any,
         mustChangePassword: true as any,
         passwordResetAt: true as any,
       },
@@ -750,7 +831,6 @@ export class UsersService {
       data: {
         password: hashed,
 
-        // ✅ CLAVE: forzar cambio de contraseña al próximo login
         mustChangePassword: true,
         passwordResetAt: new Date(),
       },
@@ -764,6 +844,7 @@ export class UsersService {
         activo: true,
         empresa: true as any,
         workerType: true as any,
+        workerTypesExtra: true as any,
         mustChangePassword: true as any,
         passwordResetAt: true as any,
         createdAt: true,
@@ -815,6 +896,7 @@ export class UsersService {
         activo: true,
         empresa: true as any,
         workerType: true as any,
+        workerTypesExtra: true as any,
         mustChangePassword: true as any,
         passwordResetAt: true as any,
       },
@@ -835,6 +917,7 @@ export class UsersService {
         activo: true,
         empresa: true as any,
         workerType: true as any,
+        workerTypesExtra: true as any,
         mustChangePassword: true as any,
         passwordResetAt: true as any,
         createdAt: true,
@@ -884,6 +967,7 @@ export class UsersService {
         activo: true,
         empresa: true as any,
         workerType: true as any,
+        workerTypesExtra: true as any,
         mustChangePassword: true as any,
         passwordResetAt: true as any,
       },
@@ -923,20 +1007,17 @@ export class UsersService {
     }
 
     try {
-      // 🔥 Evita duplicados por token
       const existing = await this.prisma.userFcmToken.findUnique({
         where: { token },
       });
 
       if (existing) {
-        // Si ya existe, actualiza userId (por si cambió)
         return this.prisma.userFcmToken.update({
           where: { token },
           data: { userId },
         });
       }
 
-      // 🔥 Crear nuevo token
       return this.prisma.userFcmToken.create({
         data: {
           userId,

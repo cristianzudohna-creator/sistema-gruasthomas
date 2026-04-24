@@ -62,6 +62,10 @@ export class CreateWorkOrderDto {
   solicitadoPor?: string;
 
   @IsOptional()
+@IsString()
+telefonoSolicitadoPor?: string;
+
+  @IsOptional()
   @IsString()
   direccion?: string;
 

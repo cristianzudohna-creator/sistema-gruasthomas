@@ -480,3 +480,19 @@
     align-items: flex-start;
   }
 }
+
+.wot-mobile-phone{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-top:8px;
+
+  font-size:28px;
+  font-weight:900;
+  color:#0f172a;
+  line-height:1.1;
+}
+
+.wot-mobile-phone strong{
+  font-weight:900;
+}

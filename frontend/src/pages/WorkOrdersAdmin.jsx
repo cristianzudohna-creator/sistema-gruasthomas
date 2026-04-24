@@ -170,6 +170,9 @@ function getFilenameFromContentDisposition(cd) {
 // =========================
 // ✅ PDF helpers
 // =========================
+// =========================
+// ✅ PDF helpers
+// =========================
 async function apiDownloadPdf(id) {
   const res = await fetch(`${API_URL}/work-orders/${id}/pdf`, {
     method: "GET",
@@ -195,6 +198,37 @@ async function apiDownloadPdf(id) {
   a.remove();
   window.URL.revokeObjectURL(url);
 }
+
+async function previewPdfById(id) {
+  if (!id) return;
+
+  const res = await fetch(`${API_URL}/work-orders/${id}/pdf`, {
+    method: "GET",
+    credentials: "include",
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+
+  if (!res.ok) {
+    const msg = await readError(res);
+    throw new Error(msg || `PDF -> ${res.status}`);
+  }
+
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(
+    new Blob([blob], { type: "application/pdf" })
+  );
+
+  window.open(url, "_blank", "noopener,noreferrer");
+
+  setTimeout(() => {
+    window.URL.revokeObjectURL(url);
+  }, 60000);
+}
+
+// =========================
+// ✅ PDF helpers
+// =========================
+
 
 // =========================
 // ✅ ZIP helpers
@@ -1443,15 +1477,24 @@ export default function WorkOrdersAdmin() {
                     <td style={{ textAlign: "right" }}>
                       <div style={{ display: "inline-flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
                         <button
-                          className="btn ghost"
-                          type="button"
-                          onClick={() => downloadPdfById(x.id)}
-                          disabled={disableOtherDownload}
-                          title="Descargar PDF de esta OT"
-                          style={disableOtherDownload ? { opacity: 0.6, cursor: "not-allowed" } : undefined}
-                        >
-                          {isDownloading ? "⏳ PDF..." : "📄 PDF"}
-                        </button>
+  className="btn ghost"
+  type="button"
+  onClick={() => previewPdfById(x.id)}
+  title="Vista previa del PDF"
+>
+  👁 Vista previa
+</button>
+
+<button
+  className="btn ghost"
+  type="button"
+  onClick={() => downloadPdfById(x.id)}
+  disabled={disableOtherDownload}
+  title="Descargar PDF de esta OT"
+  style={disableOtherDownload ? { opacity: 0.6, cursor: "not-allowed" } : undefined}
+>
+  {isDownloading ? "⏳ PDF..." : "📄 PDF"}
+</button>
 
                         {canFixReport ? (
                           <button className="btn" type="button" onClick={() => openFixReport(x)}>

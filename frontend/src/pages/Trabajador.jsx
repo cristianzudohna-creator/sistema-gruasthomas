@@ -90,6 +90,21 @@ function workerTypeLabel(v) {
   return map[t] || "Otro";
 }
 
+function hasWorkerType(user, type) {
+  const target = norm(type);
+  const main = norm(user?.workerType);
+  const extras = Array.isArray(user?.workerTypesExtra) ? user.workerTypesExtra : [];
+
+  return main === target || extras.some((x) => norm(x) === target);
+}
+
+function workerTypesExtraLabel(user) {
+  const extras = Array.isArray(user?.workerTypesExtra) ? user.workerTypesExtra : [];
+  if (!extras.length) return "";
+
+  return extras.map(workerTypeLabel).join(", ");
+}
+
 async function readError(res) {
   const ct = res.headers.get("content-type") || "";
   try {
@@ -294,8 +309,8 @@ export default function Trabajador() {
       if (empresaFilter === "NONE") all = all.filter((u) => !u.empresa);
 
       const trabajadores = all.filter((u) => norm(u.role) === "TRABAJADOR");
-      const operadores = trabajadores.filter((u) => norm(u.workerType) === "OPERADOR").length;
-      const riggers = trabajadores.filter((u) => norm(u.workerType) === "RIGGER").length;
+      const operadores = trabajadores.filter((u) => hasWorkerType(u, "OPERADOR")).length;
+const riggers = trabajadores.filter((u) => hasWorkerType(u, "RIGGER")).length;
 
       setStats({
         totalTrab: trabajadores.length,
@@ -740,6 +755,7 @@ export default function Trabajador() {
                   const canDelete = isSuperadmin && !cantDelete;
 
                   const canReset = isSuperadmin && !isMe;
+                  const extrasText = workerTypesExtraLabel(u);
 
                   return (
                     <tr key={u.id}>
@@ -757,10 +773,16 @@ export default function Trabajador() {
                       </td>
 
                       <td>
-                        <span className="mono" style={{ fontWeight: 800 }}>
-                          {workerTypeLabel(u.workerType)}
-                        </span>
-                      </td>
+  <span className="mono" style={{ fontWeight: 800 }}>
+    {workerTypeLabel(u.workerType)}
+  </span>
+
+  {extrasText ? (
+    <div style={{ marginTop: 4, fontSize: 12, fontWeight: 800, color: "#64748b" }}>
+      Extra: {extrasText}
+    </div>
+  ) : null}
+</td>
 
                       <td>
                         <span className="mono" style={{ fontWeight: 800 }}>

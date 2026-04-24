@@ -63,6 +63,32 @@ function pickWorkerType(user) {
   );
 }
 
+function fullName(user) {
+  return `${user?.nombre || ""}${user?.apellido ? " " + user.apellido : ""}`.trim();
+}
+
+function sameName(a, b) {
+  return norm(a) === norm(b);
+}
+
+function isOperatorAssignedToOt(ot, user) {
+  const userId = String(user?.id || "");
+  if (!userId) return false;
+
+  const assignedId =
+    String(ot?.assignedToId || "") ||
+    String(ot?.assignedTo?.id || "");
+
+  return assignedId === userId;
+}
+
+function isRiggerAssignedToOt(ot, user) {
+  const name = fullName(user);
+  if (!name) return false;
+
+  return sameName(ot?.rigger, name);
+}
+
 async function readError(res) {
   const contentType = res.headers.get("content-type") || "";
 
@@ -236,12 +262,14 @@ export default function WorkOrdersTrabajador() {
 
   const user = useMemo(() => getUserFromStorage(), []);
   const workerType = useMemo(() => pickWorkerType(user), [user]);
-  const isRigger = workerType === "RIGGER";
-  const isOperador =
-    workerType === "OPERADOR" ||
-    workerType === "CONDUCTOR" ||
-    workerType === "SUPERVISOR" ||
-    workerType === "SUPERVISOR_TERRENO";
+  const isRiggerPrincipal = workerType === "RIGGER";
+const isOperador =
+  workerType === "OPERADOR" ||
+  workerType === "CONDUCTOR" ||
+  workerType === "SUPERVISOR" ||
+  workerType === "SUPERVISOR_TERRENO";
+
+const isRigger = isRiggerPrincipal && !isOperador;
 
   async function load() {
     setLoading(true);
@@ -484,6 +512,12 @@ export default function WorkOrdersTrabajador() {
                   st === "APROBADA" ||
                   st === "CERRADA";
 
+                  const assignedAsOperator = isOperatorAssignedToOt(x, user);
+const assignedAsRigger = isRiggerAssignedToOt(x, user);
+
+const canCompleteThisOt =
+  assignedAsOperator && !assignedAsRigger;
+
                 const rejectReason = String(x.rejectReason || "").trim();
 
                 const operador = textOrDash(x.operador || x.conductor);
@@ -545,12 +579,23 @@ export default function WorkOrdersTrabajador() {
                     ) : null}
 
                     {!isRigger ? (
-                      <td className="wot-cell-strong">
-                        <div className="linea-2l" title={formatSolicitadoPor(x)}>
-                          {formatSolicitadoPor(x)}
-                        </div>
-                      </td>
-                    ) : null}
+  <td className="wot-cell-strong">
+    <div
+      className="linea-2l"
+      title={`${formatSolicitadoPor(x)}${
+        x.telefonoSolicitadoPor ? ` • ${x.telefonoSolicitadoPor}` : ""
+      }`}
+    >
+      {formatSolicitadoPor(x)}
+      {x.telefonoSolicitadoPor ? (
+        <span style={{ color: "#666", fontSize: 12, fontWeight: 800 }}>
+          {" "}
+          • 📞 {x.telefonoSolicitadoPor}
+        </span>
+      ) : null}
+    </div>
+  </td>
+) : null}
 
                     <td className="wot-cell-strong">
                       <div className="linea-2l" title={operador}>
@@ -601,7 +646,7 @@ export default function WorkOrdersTrabajador() {
                           👁 Ver detalle
                         </button>
 
-                        {!isRigger ? (
+                        {canCompleteThisOt ? (
                           <button
                             className="btn wot-action-btn wot-action-btn--primary"
                             type="button"
@@ -670,6 +715,12 @@ export default function WorkOrdersTrabajador() {
               st === "APROBADA" ||
               st === "CERRADA";
 
+              const assignedAsOperator = isOperatorAssignedToOt(x, user);
+const assignedAsRigger = isRiggerAssignedToOt(x, user);
+
+const canCompleteThisOt =
+  assignedAsOperator && !assignedAsRigger;
+
             const rejectReason = String(x.rejectReason || "").trim();
 
             const operador = textOrDash(x.operador || x.conductor);
@@ -721,11 +772,20 @@ export default function WorkOrdersTrabajador() {
                   ) : null}
 
                   {!isRigger ? (
-                    <div className="wot-mobile-item">
-                      <span className="wot-mobile-label">Solicitado por</span>
-                      <span className="wot-mobile-value">{formatSolicitadoPor(x)}</span>
-                    </div>
-                  ) : null}
+  <div className="wot-mobile-item">
+  <span className="wot-mobile-label">Solicitado por</span>
+
+  <span className="wot-mobile-value">
+    {formatSolicitadoPor(x)}
+  </span>
+
+  {x?.telefonoSolicitadoPor ? (
+  <div className="wot-mobile-phone">
+    📞 <strong>{x.telefonoSolicitadoPor}</strong>
+  </div>
+) : null}
+</div>
+) : null}
 
                   <div className="wot-mobile-item">
                     <span className="wot-mobile-label">Operador</span>
@@ -768,7 +828,7 @@ export default function WorkOrdersTrabajador() {
                     👁 Ver detalle
                   </button>
 
-                  {!isRigger ? (
+                  {canCompleteThisOt ? (
                     <button
                       className="btn wot-action-btn wot-action-btn--primary"
                       type="button"

@@ -243,7 +243,7 @@ model User {
 
   empresa    Empresa?
   workerType WorkerType?
-
+workerTypesExtra WorkerType[] @default([])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -280,6 +280,7 @@ model User {
 
   @@index([empresa])
   @@index([workerType])
+  @@index([workerTypesExtra])
 }
 
 model UserFcmToken {
@@ -548,6 +549,7 @@ model WorkOrder {
   cliente       String?
   rut           String?
   solicitadoPor String?
+  telefonoSolicitadoPor String?
   direccion     String?
   comuna        String?
   ciudad        String?

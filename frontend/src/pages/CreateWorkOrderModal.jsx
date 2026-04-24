@@ -274,6 +274,7 @@ function Resumen({ f, photosCount }) {
         <Row label="Cliente" value={v(f.cliente)} />
         <Row label="RUT" value={v(f.rut)} />
         <Row label="Solicitado por" value={v(f.solicitadoPor)} />
+        <Row label="Teléfono solicitado por" value={v(f.telefonoSolicitadoPor)} />
         <Row label="Dirección" value={v(f.direccion)} />
         <Row label="Comuna" value={v(f.comuna)} />
         <Row label="Ciudad" value={v(f.ciudad)} />
@@ -903,10 +904,18 @@ function WorkerAutocomplete({
 
       // ✅ filtro local para múltiples tipos
       if (allowedWorkerTypes.length > 0) {
-        list = list.filter((u) =>
-          allowedWorkerTypes.includes(normalizeEnum(u?.workerType))
-        );
-      }
+  list = list.filter((u) => {
+    const main = normalizeEnum(u?.workerType);
+    const extras = Array.isArray(u?.workerTypesExtra)
+      ? u.workerTypesExtra.map((x) => normalizeEnum(x))
+      : [];
+
+    return (
+      allowedWorkerTypes.includes(main) ||
+      extras.some((x) => allowedWorkerTypes.includes(x))
+    );
+  });
+}
 
       setItems(list);
 
@@ -1309,6 +1318,7 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
     cliente: "",
     rut: "",
     solicitadoPor: "",
+    telefonoSolicitadoPor: "",
     direccion: "",
     comuna: "",
     ciudad: "",
@@ -1393,6 +1403,7 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
       cliente: "",
       rut: "",
       solicitadoPor: "",
+      telefonoSolicitadoPor: "",
       direccion: "",
       comuna: "",
       ciudad: "",
@@ -1533,6 +1544,7 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
       addIf(payload, "cliente", f.cliente);
       addIf(payload, "rut", f.rut);
       addIf(payload, "solicitadoPor", f.solicitadoPor);
+      addIf(payload, "telefonoSolicitadoPor", f.telefonoSolicitadoPor);
 
       addIf(payload, "direccion", f.direccion);
       addIf(payload, "comuna", f.comuna);
@@ -1626,12 +1638,21 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
               />
 
               <LabeledInput
-                label="Solicitado por Sr. (opcional)"
+                label="Solicitado por Sr."
                 placeholder="Ej: Daniel Cerceda"
                 value={f.solicitadoPor}
                 onChange={(e) => setField("solicitadoPor", e.target.value)}
                 disabled={saving}
               />
+
+              <LabeledInput
+  label="Teléfono solicitado por Sr. (opcional)"
+  placeholder="Ej: +56 9 1234 5678"
+  value={f.telefonoSolicitadoPor}
+  onChange={(e) => setField("telefonoSolicitadoPor", e.target.value)}
+  disabled={saving}
+  type="tel"
+/>
 
               <div className="ot-span">
                 <LabeledInput

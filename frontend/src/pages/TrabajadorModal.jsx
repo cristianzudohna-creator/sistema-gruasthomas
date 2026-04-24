@@ -103,16 +103,17 @@ export default function TrabajadorModal({
   );
 
   const [form, setForm] = useState({
-    nombre: "",
-    apellido: "",
-    email: "",
-    rut: "",
-    role: "TRABAJADOR",
-    activo: true,
-    empresa: "",
-    workerType: "",
-    password: "",
-  });
+  nombre: "",
+  apellido: "",
+  email: "",
+  rut: "",
+  role: "TRABAJADOR",
+  activo: true,
+  empresa: "",
+  workerType: "",
+  workerTypesExtra: [],
+  password: "",
+});
 
   const [touched, setTouched] = useState({});
   const [serverError, setServerError] = useState("");
@@ -128,28 +129,32 @@ export default function TrabajadorModal({
 
     if (trabajador) {
       setForm({
-        nombre: trabajador.nombre || "",
-        apellido: trabajador.apellido || "",
-        email: trabajador.email || "",
-        rut: trabajador.rut || "",
-        role: trabajador.role || "TRABAJADOR",
-        activo: trabajador.activo ?? true,
-        empresa: trabajador.empresa || "",
-        workerType: trabajador.workerType || "",
-        password: "",
-      });
+  nombre: trabajador.nombre || "",
+  apellido: trabajador.apellido || "",
+  email: trabajador.email || "",
+  rut: trabajador.rut || "",
+  role: trabajador.role || "TRABAJADOR",
+  activo: trabajador.activo ?? true,
+  empresa: trabajador.empresa || "",
+  workerType: trabajador.workerType || "",
+  workerTypesExtra: Array.isArray(trabajador.workerTypesExtra)
+    ? trabajador.workerTypesExtra
+    : [],
+  password: "",
+});
     } else {
       setForm({
-        nombre: "",
-        apellido: "",
-        email: "",
-        rut: "",
-        role: "TRABAJADOR",
-        activo: true,
-        empresa: "",
-        workerType: "",
-        password: "",
-      });
+  nombre: "",
+  apellido: "",
+  email: "",
+  rut: "",
+  role: "TRABAJADOR",
+  activo: true,
+  empresa: "",
+  workerType: "",
+  workerTypesExtra: [],
+  password: "",
+});
     }
 
     setTouched({});
@@ -201,16 +206,19 @@ export default function TrabajadorModal({
 
     try {
       const payload = {
-        nombre: form.nombre.trim(),
-        apellido: form.apellido.trim(),
-        email: form.email.trim().toLowerCase(),
-        rut: form.rut || null,
-        role: form.role,
-        activo: form.activo,
-        empresa: isSuperadmin ? null : form.empresa,
-        workerType: isTrabajadorRole ? form.workerType || null : null,
-        ...(!isEdit && { password: form.password }),
-      };
+  nombre: form.nombre.trim(),
+  apellido: form.apellido.trim(),
+  email: form.email.trim().toLowerCase(),
+  rut: form.rut || null,
+  role: form.role,
+  activo: form.activo,
+  empresa: isSuperadmin ? null : form.empresa,
+  workerType: isTrabajadorRole ? form.workerType || null : null,
+  workerTypesExtra: isTrabajadorRole
+    ? form.workerTypesExtra || []
+    : [],
+  ...(!isEdit && { password: form.password }),
+};
 
       const endpoint = isEdit
         ? `${API_URL}/users/${trabajador.id}`
@@ -338,23 +346,80 @@ export default function TrabajadorModal({
         </div>
 
         <div className="gt-field">
-          <label>Tipo trabajador</label>
+  <label>Tipo trabajador principal</label>
 
-          <select
-            className="gt-select"
-            value={form.workerType}
-            disabled={!isTrabajadorRole}
-            onChange={(e) =>
-              setForm((s) => ({ ...s, workerType: e.target.value }))
-            }
-          >
-            {WORKER_TYPE_OPTIONS.map((opt) => (
-              <option key={opt.value || "EMPTY"} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
+  <select
+    className="gt-select"
+    value={form.workerType}
+    disabled={!isTrabajadorRole}
+    onChange={(e) =>
+      setForm((s) => ({ ...s, workerType: e.target.value }))
+    }
+  >
+    {WORKER_TYPE_OPTIONS.map((opt) => (
+      <option key={opt.value || "EMPTY"} value={opt.value}>
+        {opt.label}
+      </option>
+    ))}
+  </select>
+
+  {isTrabajadorRole ? (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
+        Funciones extra
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(2,minmax(0,1fr))",
+          gap: 8,
+        }}
+      >
+        {[
+          "OPERADOR",
+          "RIGGER",
+          "SUPERVISOR",
+          "SUPERVISOR_TERRENO",
+        ].map((tipo) => {
+          const checked = form.workerTypesExtra.includes(tipo);
+
+          return (
+            <label
+              key={tipo}
+              style={{
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                fontSize: 14,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={(e) => {
+                  const isOn = e.target.checked;
+
+                  setForm((s) => ({
+                    ...s,
+                    workerTypesExtra: isOn
+                      ? [...s.workerTypesExtra, tipo]
+                      : s.workerTypesExtra.filter((x) => x !== tipo),
+                  }));
+                }}
+              />
+
+              {tipo === "OPERADOR" && "Operador"}
+              {tipo === "RIGGER" && "Rigger"}
+              {tipo === "SUPERVISOR" && "Supervisor taller mecánico"}
+              {tipo === "SUPERVISOR_TERRENO" && "Supervisor terreno"}
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  ) : null}
+</div>
 
         <div className="gt-field">
           <label>Empresa</label>

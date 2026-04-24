@@ -22,62 +22,10 @@
 // - Audita adminUpdateReport (corrección)
 // - Audita approve/reject (aprobación y rechazo)
 //
-// ✅ NUEVO (CALENDARIO):
-// - Guarda diasProgramados (array de fechas ISO "YYYY-MM-DD") si viene en DTO
-// - En update: si no viene, no lo toca; si viene [] lo deja vacío.
-// - ✅ AÑADIDO AQUÍ: listCalendar + updateSchedule (para tus rutas del controller)
 //
-// ✅ NUEVO (OBRA):
-// - Al completar OT: validar HH:MM de inicioServicioObra y terminoServicioObra (obligatorios en el frontend)
-// - En PDF: mostrar "Hora Inicio Servicio en Obra" + "Hora Término Servicio en Obra"
-//
-// ✅ NUEVO (BORRADOR):
-// - saveDraft(): guarda workerReport parcial
-// - merge profundo con workerReport anterior
-// - deja status EN_PROCESO
-// - complete(): mezcla borrador previo + datos finales y recién marca COMPLETADA
-//
-// ✅ NUEVO (EXPORT MASIVO):
-// - exportPdfZipByFilters()
-// - filtra OT por fecha, operador, rigger y cliente
-// - ✅ SOLO exporta OTs APROBADAS
-// - ordena por fecha ASC
-// - genera ZIP con PDFs individuales
-// - nombre de ZIP automático incluyendo cliente
-//
-// ✅ NUEVO (EXCEL):
-// - exportApprovedExcel()
-// - filtra por rango de fechas
-// - ✅ SOLO OTs APROBADAS
-// - 2 hojas: OPERADORES y RIGGER
-// - plantilla completa
-// - ESTADO = Firmada
-// - EMPRESA = nombre del cliente
-// - OBSERVACIONES = vacío
-// - fórmulas como tu Excel real
-//
-// ✅ FIX EXCEL NUEVO:
-// - ENTRADA / SALIDA se guardan como hora pura de Excel (sin fecha 1900 visible)
-// - HR. COL si viene como "13:00" => se interpreta como 1 hora de colación
-// - TOTAL HORAS queda coherente con la OT
-// - HOJA OPERADORES con encabezado gris oscuro
-// - HOJA RIGGER con encabezado azul
-//
-// ✅ NUEVO (NOTIFICACIONES):
-// - Al completar la OT se notifica a usuarios SUPERADMIN y ADMINISTRADORA
-// - Se mantiene la notificación al operador al crear la OT
-// - ✅ NUEVO: también notifica al RIGGER cuando queda asignado en una OT
-// - ✅ NUEVO: al editar OT, si cambia operador/rigger/camión/obra, vuelve a notificar
-//
-// ✅ FIX EXCEL FECHA:
-// - FECHA usa diasProgramados[0] si existe
-// - si no existe, fallback a createdAt
-//
-// ✅ NUEVO AHORA (ZIP CLIENTE):
-// - exportPdfZipByFilters ahora acepta clientName
-// - filtra por cliente usando workOrder.cliente y client.nombre
-// - el nombre del ZIP también incluye el cliente
-// - el rango de fecha usa diasProgramados cuando corresponde
+// ✅ NUEVO AHORA:
+// - Soporte workerTypesExtra para OPERADOR/RIGGER
+// - Un usuario con workerType=OPERADOR y workerTypesExtra=[RIGGER] puede recibir/ver OT como operador y rigger
 
 import {
   BadRequestException,
@@ -388,6 +336,7 @@ export class WorkOrdersService {
 
       rut: wo.rut ?? null,
       solicitadoPor: (wo as any).solicitadoPor ?? null,
+      telefonoSolicitadoPor: (wo as any).telefonoSolicitadoPor ?? null,
 
       direccion: (wo as any).direccion ?? null,
       comuna: (wo as any).comuna ?? null,
@@ -436,6 +385,19 @@ export class WorkOrdersService {
     return String(actor?.workerType || "").toUpperCase();
   }
 
+  private hasWorkerType(user: any, workerType: string): boolean {
+    const target = String(workerType || "").toUpperCase();
+
+    const main = String(user?.workerType || "").toUpperCase();
+    if (main === target) return true;
+
+    const extras = Array.isArray(user?.workerTypesExtra)
+      ? user.workerTypesExtra
+      : [];
+
+    return extras.some((x: any) => String(x || "").toUpperCase() === target);
+  }
+
   private isGlobalRole(actor: any) {
     const r = this.roleUpper(actor);
     return r === "SUPERADMIN" || r === "CONTROL_FLOTA";
@@ -472,6 +434,7 @@ export class WorkOrdersService {
         role: true,
         empresa: true,
         workerType: true,
+        workerTypesExtra: true,
         nombre: true,
         apellido: true,
         activo: true,
@@ -916,7 +879,10 @@ export class WorkOrdersService {
         activo: true,
         empresa,
         role: "TRABAJADOR",
-        workerType: "RIGGER" as any,
+        OR: [
+          { workerType: "RIGGER" as any },
+          { workerTypesExtra: { has: "RIGGER" as any } },
+        ],
       },
       select: {
         id: true,
@@ -1500,6 +1466,7 @@ export class WorkOrdersService {
           role: true,
           empresa: true,
           workerType: true,
+          workerTypesExtra: true,
           nombre: true,
           apellido: true,
         },
@@ -1515,15 +1482,12 @@ export class WorkOrdersService {
         throw new BadRequestException("Operador seleccionado no tiene rol TRABAJADOR.");
       }
 
-      const wt = String((conductorUser as any).workerType || "").toUpperCase();
+      const isValidOperator =
+        this.hasWorkerType(conductorUser, "OPERADOR") ||
+        this.hasWorkerType(conductorUser, "SUPERVISOR") ||
+        this.hasWorkerType(conductorUser, "SUPERVISOR_TERRENO");
 
-      const allowedOperatorTypes = [
-        "OPERADOR",
-        "SUPERVISOR",
-        "SUPERVISOR_TERRENO",
-      ];
-
-      if (!allowedOperatorTypes.includes(wt)) {
+      if (!isValidOperator) {
         throw new BadRequestException(
           "El usuario seleccionado no es un tipo válido para Operador."
         );
@@ -1595,6 +1559,7 @@ export class WorkOrdersService {
       rut: rutNorm || cleanStr((dto as any).rut),
 
       solicitadoPor: cleanStr((dto as any).solicitadoPor),
+      telefonoSolicitadoPor: cleanStr((dto as any).telefonoSolicitadoPor),
 
       direccion: cleanStr((dto as any).direccion),
       comuna: cleanStr((dto as any).comuna),
@@ -1641,8 +1606,7 @@ export class WorkOrdersService {
 
     return created;
   }
-
-  async list(actor?: any) {
+    async list(actor?: any) {
     const whereEmpresa = await this.empresaWhereByActor(actor);
 
     const items = await this.prisma.workOrder.findMany({
@@ -1733,6 +1697,7 @@ export class WorkOrdersService {
           role: true,
           empresa: true,
           workerType: true,
+          workerTypesExtra: true,
           nombre: true,
           apellido: true,
         },
@@ -1748,14 +1713,12 @@ export class WorkOrdersService {
         throw new BadRequestException("Operador seleccionado no tiene rol TRABAJADOR.");
       }
 
-      const wt = String((conductorUser as any).workerType || "").toUpperCase();
-      const allowedOperatorTypes = [
-        "OPERADOR",
-        "SUPERVISOR",
-        "SUPERVISOR_TERRENO",
-      ];
+      const isValidOperator =
+        this.hasWorkerType(conductorUser, "OPERADOR") ||
+        this.hasWorkerType(conductorUser, "SUPERVISOR") ||
+        this.hasWorkerType(conductorUser, "SUPERVISOR_TERRENO");
 
-      if (!allowedOperatorTypes.includes(wt)) {
+      if (!isValidOperator) {
         throw new BadRequestException(
           "El usuario seleccionado no es un tipo válido para Operador."
         );
@@ -1790,6 +1753,7 @@ export class WorkOrdersService {
       rut: rutNorm || cleanStr((dto as any).rut),
 
       solicitadoPor: cleanStr((dto as any).solicitadoPor),
+      telefonoSolicitadoPor: cleanStr((dto as any).telefonoSolicitadoPor),
 
       direccion: cleanStr((dto as any).direccion),
       comuna: cleanStr((dto as any).comuna),
@@ -1999,7 +1963,7 @@ export class WorkOrdersService {
     if (include) statusIn.push(WorkOrderStatus.CERRADA);
 
     const fullName = this.buildFullName(fullUser);
-    const isRigger = this.workerTypeUpper(fullUser) === "RIGGER";
+    const isRigger = this.hasWorkerType(fullUser, "RIGGER");
 
     const whereOr: any[] = [{ assignedToId: fullUser.id }];
 
@@ -2029,6 +1993,7 @@ export class WorkOrdersService {
         cliente: true,
         rut: true,
         solicitadoPor: true,
+        telefonoSolicitadoPor: true,
         direccion: true,
         comuna: true,
         ciudad: true,
@@ -2063,7 +2028,7 @@ export class WorkOrdersService {
 
     const actor = await this.getActorOrThrowById(userId);
     const actorFullName = this.buildFullName(actor);
-    const isActorRigger = this.workerTypeUpper(actor) === "RIGGER";
+    const isActorRigger = this.hasWorkerType(actor, "RIGGER");
     const isAssignedOperator = exists.assignedToId && exists.assignedToId === userId;
     const isAssignedRigger =
       isActorRigger &&
@@ -2136,7 +2101,7 @@ export class WorkOrdersService {
 
     const actor = await this.getActorOrThrowById(userId);
     const actorFullName = this.buildFullName(actor);
-    const isActorRigger = this.workerTypeUpper(actor) === "RIGGER";
+    const isActorRigger = this.hasWorkerType(actor, "RIGGER");
     const isAssignedOperator = exists.assignedToId && exists.assignedToId === userId;
     const isAssignedRigger =
       isActorRigger &&
@@ -2202,8 +2167,7 @@ export class WorkOrdersService {
 
     return after;
   }
-
-  async adminUpdateReport(id: string, workerReport: any, comentarioFinal?: string, userId?: string) {
+    async adminUpdateReport(id: string, workerReport: any, comentarioFinal?: string, userId?: string) {
     if (!id) throw new BadRequestException("Falta id");
     if (!userId) throw new BadRequestException("No se detectó el usuario logueado.");
 
@@ -2570,6 +2534,8 @@ export class WorkOrdersService {
         }`.trim()
       : cleanStr((wo as any).createdBy?.email) || null;
     const solicitadoPor = solicitadoPorManual || solicitadoPorAuto || "—";
+    const telefonoSolicitadoPor =
+  cleanStr((wo as any).telefonoSolicitadoPor) || "—";
 
     const operador =
       cleanStr((wo as any).operador) || cleanStr((wo as any).conductor) || "—";
@@ -2776,8 +2742,20 @@ export class WorkOrdersService {
     y = twoColRow(y, "Señores", cliente, "Comuna", comuna);
     y = twoColRow(y, "Dirección", direccion, "Ciudad", ciudad);
     y = oneColFull(y, "R.U.T.", rut);
-    y = oneColFull(y, "Solicitado por", solicitadoPor);
-    y += 4;
+y += 4;
+
+fullLine(y);
+y += 8;
+
+y = twoColRow(
+  y,
+  "Solicitado por",
+  solicitadoPor,
+  "Teléfono",
+  telefonoSolicitadoPor
+);
+
+y += 4;
 
     fullLine(y);
     y += 10;
@@ -2934,71 +2912,3 @@ export class WorkOrdersService {
     return { buffer, filename };
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

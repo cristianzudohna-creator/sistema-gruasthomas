@@ -2,6 +2,8 @@
 // ✅ Cambio: rut sigue siendo opcional en update, PERO si viene debe ser string NO vacío
 // ✅ Motivo: evitar que alguien deje rut="" y después no pueda loguear
 // ✅ NUEVO: workerType contempla supervisor taller mecánico y supervisor de terreno
+// ✅ NUEVO AHORA:
+// - soporte workerTypesExtra WorkerType[]
 
 import {
   IsBoolean,
@@ -11,6 +13,7 @@ import {
   IsString,
   MinLength,
   IsNotEmpty,
+  IsArray,
 } from "class-validator";
 import { Role, Empresa, WorkerType } from "@prisma/client";
 
@@ -42,9 +45,7 @@ export class UpdateUserDto {
   activo?: boolean;
 
   // =========================
-  // ✅ empresa (OPCIONAL)
-  // - SUPERADMIN → null
-  // - otros roles → validación real se hace en el service
+  // empresa
   // =========================
   @IsOptional()
   @IsEnum(Empresa, {
@@ -53,9 +54,7 @@ export class UpdateUserDto {
   empresa?: Empresa;
 
   // =========================
-  // ✅ workerType (OPCIONAL)
-  // - solo aplica si role === TRABAJADOR
-  // - si no es TRABAJADOR → el service lo fuerza a null
+  // workerType principal
   // =========================
   @IsOptional()
   @IsEnum(WorkerType, {
@@ -65,14 +64,26 @@ export class UpdateUserDto {
   workerType?: WorkerType;
 
   // =========================
-  // ✅ RUT (si viene, no puede ser vacío)
+  // workerTypesExtra
+  // =========================
+  @IsOptional()
+  @IsArray()
+  @IsEnum(WorkerType, {
+    each: true,
+    message:
+      "workerTypesExtra debe contener valores válidos de WorkerType",
+  })
+  workerTypesExtra?: WorkerType[];
+
+  // =========================
+  // RUT
   // =========================
   @IsOptional()
   @IsString()
   @IsNotEmpty({ message: "rut no puede ser vacío" })
   rut?: string;
 
-  // ⚠️ No existen en Prisma → no se guardan (puedes borrarlos si quieres)
+  // ⚠️ No existen en Prisma → no se guardan
   @IsOptional()
   @IsString()
   telefono?: string;
