@@ -22,6 +22,7 @@ async function readError(res) {
       if (typeof m === "string" && m.trim()) return m;
       return JSON.stringify(data);
     }
+
     const t = await res.text();
     return t || `HTTP ${res.status}`;
   } catch {
@@ -74,11 +75,12 @@ export default function ForgotPassword() {
 
       const data = await res.json().catch(() => ({}));
 
+      setRut(rutClean);
+      setStep(2);
       setMsg(
         data?.message ||
-          "Solicitud registrada. Contacta a soporte para que te entregue el código de recuperación."
+          "Código solicitado correctamente. Ingresa el código recibido para restablecer la contraseña."
       );
-      setStep(2);
     } catch {
       setError("Error de conexión con el servidor");
     } finally {
@@ -157,11 +159,9 @@ export default function ForgotPassword() {
       setNewPassword("");
       setConfirm("");
 
-      // 🔥 REDIRECCIÓN AUTOMÁTICA AL LOGIN
       setTimeout(() => {
         navigate("/login", { replace: true });
       }, 1200);
-
     } catch {
       setError("Error de conexión con el servidor");
     } finally {
@@ -180,10 +180,13 @@ export default function ForgotPassword() {
                 alt="Grúas Thomas"
                 className="login-logo"
               />
+
               <div className="login-text">
                 <h2 className="login-title">Recuperar contraseña</h2>
                 <p className="login-subtitle">
-                  Ingresa tu RUT. Soporte te entregará un código de recuperación.
+                  {step === 1
+                    ? "Ingresa tu RUT. Soporte recibirá un código de recuperación."
+                    : "Ingresa el código recibido y define una nueva contraseña."}
                 </p>
               </div>
             </div>
@@ -204,17 +207,25 @@ export default function ForgotPassword() {
                 </div>
 
                 {error && <div className="error">{error}</div>}
+
                 {msg && (
-                  <div className="error" style={{
-                    background: "rgba(0,150,0,0.08)",
-                    borderColor: "rgba(0,150,0,0.25)",
-                    color: "#0a6b2b"
-                  }}>
+                  <div
+                    className="error"
+                    style={{
+                      background: "rgba(0,150,0,0.08)",
+                      borderColor: "rgba(0,150,0,0.25)",
+                      color: "#0a6b2b",
+                    }}
+                  >
                     {msg}
                   </div>
                 )}
 
-                <button className="btn btn-primary" disabled={loading}>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={loading}
+                >
                   {loading ? "Solicitando..." : "Solicitar código"}
                 </button>
 
@@ -226,7 +237,6 @@ export default function ForgotPassword() {
               </form>
             ) : (
               <form onSubmit={handleResetPassword}>
-
                 <div className="form-group">
                   <label className="label">RUT</label>
                   <input
@@ -255,6 +265,7 @@ export default function ForgotPassword() {
                     type="password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
+                    autoComplete="new-password"
                   />
                 </div>
 
@@ -265,25 +276,37 @@ export default function ForgotPassword() {
                     type="password"
                     value={confirm}
                     onChange={(e) => setConfirm(e.target.value)}
+                    autoComplete="new-password"
                   />
                 </div>
 
                 {error && <div className="error">{error}</div>}
+
                 {msg && (
-                  <div className="error" style={{
-                    background: "rgba(0,150,0,0.08)",
-                    borderColor: "rgba(0,150,0,0.25)",
-                    color: "#0a6b2b"
-                  }}>
+                  <div
+                    className="error"
+                    style={{
+                      background: "rgba(0,150,0,0.08)",
+                      borderColor: "rgba(0,150,0,0.25)",
+                      color: "#0a6b2b",
+                    }}
+                  >
                     {msg}
                   </div>
                 )}
 
-                <button className="btn btn-primary" disabled={loading}>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={loading}
+                >
                   {loading ? "Restableciendo..." : "Restablecer contraseña"}
                 </button>
 
-                <div className="login-actions" style={{justifyContent:"space-between"}}>
+                <div
+                  className="login-actions"
+                  style={{ justifyContent: "space-between" }}
+                >
                   <button
                     type="button"
                     className="login-link"
@@ -295,7 +318,12 @@ export default function ForgotPassword() {
                       setError("");
                       setMsg("");
                     }}
-                    style={{background:"transparent",border:"none",padding:0,cursor:"pointer"}}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                    }}
                   >
                     Solicitar otro código
                   </button>
@@ -304,7 +332,6 @@ export default function ForgotPassword() {
                     Volver al login
                   </Link>
                 </div>
-
               </form>
             )}
           </div>
