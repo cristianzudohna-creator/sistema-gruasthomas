@@ -473,7 +473,8 @@ export default function WorkOrdersAdmin() {
   const [downloadErr, setDownloadErr] = useState("");
 
   const [status, setStatus] = useState("ALL");
-  const [q, setQ] = useState("");
+const [q, setQ] = useState("");
+const [quickFilter, setQuickFilter] = useState("TOTAL");
 
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [refreshEvery, setRefreshEvery] = useState(15000);
@@ -929,37 +930,45 @@ export default function WorkOrdersAdmin() {
   }, [searchParams, items, loading]);
 
   const filtered = useMemo(() => {
-    const s = String(status || "ALL").toUpperCase();
-    const qq = q.trim().toLowerCase();
+  const s = String(status || "ALL").toUpperCase();
+  const qq = q.trim().toLowerCase();
+  const qf = String(quickFilter || "TOTAL").toUpperCase();
 
-    let list = Array.isArray(items) ? items : [];
+  let list = Array.isArray(items) ? items : [];
 
-    if (s !== "ALL") list = list.filter((x) => String(x?.status || "").toUpperCase() === s);
+  if (qf !== "TOTAL") {
+    list = list.filter((x) => String(x?.status || "").toUpperCase() === qf);
+  }
 
-    if (qq) {
-      list = list.filter((x) => {
-        const blob = [
-          x?.id,
-          x?.cliente,
-          x?.rut,
-          x?.giro,
-          x?.camion,
-          x?.conductor,
-          x?.operador,
-          x?.rigger,
-          x?.status,
-          x?.titulo,
-          x?.approvalComment,
-          x?.rejectReason,
-        ]
-          .map((v) => String(v || "").toLowerCase())
-          .join(" ");
-        return blob.includes(qq);
-      });
-    }
+  if (s !== "ALL") {
+    list = list.filter((x) => String(x?.status || "").toUpperCase() === s);
+  }
 
-    return list;
-  }, [items, status, q]);
+  if (qq) {
+    list = list.filter((x) => {
+      const blob = [
+        x?.id,
+        x?.cliente,
+        x?.rut,
+        x?.giro,
+        x?.camion,
+        x?.conductor,
+        x?.operador,
+        x?.rigger,
+        x?.status,
+        x?.titulo,
+        x?.approvalComment,
+        x?.rejectReason,
+      ]
+        .map((v) => String(v || "").toLowerCase())
+        .join(" ");
+
+      return blob.includes(qq);
+    });
+  }
+
+  return list;
+}, [items, status, q, quickFilter]);
 
   const stats = useMemo(() => {
     const total = items.length;
@@ -1045,31 +1054,66 @@ export default function WorkOrdersAdmin() {
       </div>
 
       <div className="woa-stats-grid">
-        <div className="panel woa-stat-card">
-          <div className="woa-stat-label">Total</div>
-          <div className="woa-stat-value">{stats.total}</div>
-        </div>
+  <button
+    type="button"
+    className={`panel woa-stat-card ${quickFilter === "TOTAL" ? "woa-stat-card--active" : ""}`}
+    onClick={() => {
+      setQuickFilter("TOTAL");
+      setStatus("ALL");
+    }}
+  >
+    <div className="woa-stat-label">Total</div>
+    <div className="woa-stat-value">{stats.total}</div>
+  </button>
 
-        <div className="panel woa-stat-card woa-stat-card--warn">
-          <div className="woa-stat-label">Pendientes visto bueno</div>
-          <div className="woa-stat-value">{stats.pendientesVB}</div>
-        </div>
+  <button
+    type="button"
+    className={`panel woa-stat-card woa-stat-card--warn ${quickFilter === "COMPLETADA" ? "woa-stat-card--active" : ""}`}
+    onClick={() => {
+      setQuickFilter("COMPLETADA");
+      setStatus("ALL");
+    }}
+  >
+    <div className="woa-stat-label">Pendientes visto bueno</div>
+    <div className="woa-stat-value">{stats.pendientesVB}</div>
+  </button>
 
-        <div className="panel woa-stat-card">
-          <div className="woa-stat-label">Abiertas</div>
-          <div className="woa-stat-value">{stats.abiertas}</div>
-        </div>
+  <button
+    type="button"
+    className={`panel woa-stat-card ${quickFilter === "ABIERTA" ? "woa-stat-card--active" : ""}`}
+    onClick={() => {
+      setQuickFilter("ABIERTA");
+      setStatus("ALL");
+    }}
+  >
+    <div className="woa-stat-label">Abiertas</div>
+    <div className="woa-stat-value">{stats.abiertas}</div>
+  </button>
 
-        <div className="panel woa-stat-card">
-          <div className="woa-stat-label">En proceso</div>
-          <div className="woa-stat-value">{stats.enProceso}</div>
-        </div>
+  <button
+    type="button"
+    className={`panel woa-stat-card ${quickFilter === "EN_PROCESO" ? "woa-stat-card--active" : ""}`}
+    onClick={() => {
+      setQuickFilter("EN_PROCESO");
+      setStatus("ALL");
+    }}
+  >
+    <div className="woa-stat-label">En proceso</div>
+    <div className="woa-stat-value">{stats.enProceso}</div>
+  </button>
 
-        <div className="panel woa-stat-card">
-          <div className="woa-stat-label">Aprobadas</div>
-          <div className="woa-stat-value">{stats.aprobadas}</div>
-        </div>
-      </div>
+  <button
+    type="button"
+    className={`panel woa-stat-card ${quickFilter === "APROBADA" ? "woa-stat-card--active" : ""}`}
+    onClick={() => {
+      setQuickFilter("APROBADA");
+      setStatus("ALL");
+    }}
+  >
+    <div className="woa-stat-label">Aprobadas</div>
+    <div className="woa-stat-value">{stats.aprobadas}</div>
+  </button>
+</div>
 
       <div className="panel woa-export-panel">
         <div className="panel-head woa-export-head">

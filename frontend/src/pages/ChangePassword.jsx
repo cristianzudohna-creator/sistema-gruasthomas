@@ -1,9 +1,8 @@
 // ✅ Archivo: frontend/src/pages/ChangePassword.jsx (COMPLETO)
-// ✅ FIX: al cambiar contraseña -> set user.mustChangePassword = false en localStorage
-// ✅ FIX NUEVO: credentials:"include" para móviles
-// ✅ FIX NUEVO: redirect real con window.location.replace()
-// ✅ FIX NUEVO: fallback correcto si localStorage.user viene vacío o corrupto
-// ✅ FIX NUEVO: mejor manejo de errores backend
+// ✅ SIN contraseña actual
+// ✅ Ojo profesional (SVG igual al login)
+// ✅ Confirmar sin ojo
+// ✅ Mantiene todos tus FIX anteriores
 
 import { useState } from "react";
 import "./Login.css";
@@ -13,9 +12,9 @@ function norm(v) {
 }
 
 export default function ChangePassword() {
-  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
@@ -26,7 +25,7 @@ export default function ChangePassword() {
     setError("");
     setOk("");
 
-    if (!currentPassword || !newPassword || !confirm) {
+    if (!newPassword || !confirm) {
       setError("Completa todos los campos");
       return;
     }
@@ -58,7 +57,6 @@ export default function ChangePassword() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          currentPassword,
           newPassword,
         }),
       });
@@ -85,48 +83,33 @@ export default function ChangePassword() {
       try {
         const raw = localStorage.getItem("user");
 
-        if (!raw) {
-          console.warn("⚠️ No hay user en localStorage");
-        } else {
+        if (raw) {
           const parsed = JSON.parse(raw);
           if (parsed && typeof parsed === "object") {
             parsed.mustChangePassword = false;
             localStorage.setItem("user", JSON.stringify(parsed));
-            console.log("✅ user actualizado:", parsed);
           }
         }
-      } catch (err) {
-        console.error("❌ Error actualizando user:", err);
-      }
+      } catch {}
 
-      // ✅ limpiar formulario
-      setCurrentPassword("");
       setNewPassword("");
       setConfirm("");
 
-      // ✅ calcular destino
       let to = "/";
 
       try {
         const user = JSON.parse(localStorage.getItem("user") || "null");
         const role = norm(user?.role);
 
-        if (role === "TRABAJADOR") {
-          to = "/trabajador";
-        } else if (
+        if (role === "TRABAJADOR") to = "/trabajador";
+        else if (
           role === "SUPERADMIN" ||
           role === "CONTROL_FLOTA" ||
           role === "ADMINISTRADORA"
-        ) {
+        )
           to = "/admin";
-        } else {
-          to = "/";
-        }
-      } catch {
-        to = "/";
-      }
+      } catch {}
 
-      // ✅ FIX REAL: navegación completa del navegador
       window.location.replace(to);
     } catch (err) {
       console.error("❌ Error change-password:", err);
@@ -151,7 +134,7 @@ export default function ChangePassword() {
               <div className="login-text">
                 <h2 className="login-title">Cambiar contraseña</h2>
                 <p className="login-subtitle">
-                  Ingresa tu contraseña actual y define una nueva.
+                  Define una nueva contraseña para tu cuenta.
                 </p>
               </div>
             </div>
@@ -159,40 +142,74 @@ export default function ChangePassword() {
 
           <div className="login-body">
             <form onSubmit={handleSubmit}>
+              {/* NUEVA CONTRASEÑA */}
               <div className="form-group">
-                <label className="label" htmlFor="currentPassword">
-                  Contraseña actual
-                </label>
-                <input
-                  id="currentPassword"
-                  className="input"
-                  type="password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  autoComplete="current-password"
-                />
+                <label className="label">Nueva contraseña</label>
+
+                <div style={{ position: "relative" }}>
+                  <input
+                    className="input"
+                    type={showNewPassword ? "text" : "password"}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    autoComplete="new-password"
+                    style={{ paddingRight: 44 }}
+                  />
+
+                  {/* 👁️ ICONO PRO */}
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword((v) => !v)}
+                    style={{
+                      position: "absolute",
+                      right: 12,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "transparent",
+                      border: "none",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {showNewPassword ? (
+                      // ojo cerrado
+                      <svg
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#6b7280"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M17.94 17.94A10.94 10.94 0 0112 19C7 19 2.73 16.11 1 12c.73-1.61 1.85-3.07 3.29-4.29M9.9 4.24A10.94 10.94 0 0112 5c5 0 9.27 2.89 11 7a10.94 10.94 0 01-2.16 3.19M1 1l22 22" />
+                      </svg>
+                    ) : (
+                      // ojo abierto
+                      <svg
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#6b7280"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
               </div>
 
+              {/* CONFIRMAR */}
               <div className="form-group">
-                <label className="label" htmlFor="newPassword">
-                  Nueva contraseña
-                </label>
-                <input
-                  id="newPassword"
-                  className="input"
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  autoComplete="new-password"
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="label" htmlFor="confirm">
+                <label className="label">
                   Confirmar nueva contraseña
                 </label>
                 <input
-                  id="confirm"
                   className="input"
                   type="password"
                   value={confirm}
@@ -226,10 +243,11 @@ export default function ChangePassword() {
             </form>
           </div>
 
-          <div className="login-footer">Consejo: usa una contraseña segura.</div>
+          <div className="login-footer">
+            Consejo: usa una contraseña segura.
+          </div>
         </div>
       </div>
     </div>
   );
 }
-

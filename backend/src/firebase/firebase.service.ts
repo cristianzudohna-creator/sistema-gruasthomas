@@ -1,3 +1,14 @@
+// ✅ Archivo: src/firebase/firebase.service.ts (COMPLETO)
+// ✅ Firebase Admin inicializado desde firebase-service-account.json
+// ✅ Envío a token directo
+// ✅ Envío a usuario por UserFcmToken
+// ✅ Limpieza automática de tokens inválidos
+// ✅ NUEVO:
+// - sendToUser() compatible con auth.service.ts
+// - sendPushToUser() alias compatible
+// - notifyUser() alias compatible
+// - sendNotificationToUser() ahora acepta url string o payload con link/data
+
 import { Injectable } from "@nestjs/common";
 import * as admin from "firebase-admin";
 import * as path from "path";
@@ -11,6 +22,16 @@ type NotificationResult = {
   failedCount: number;
   message: string;
 };
+
+type PushOptions =
+  | string
+  | {
+      title?: string;
+      body?: string;
+      url?: string;
+      link?: string;
+      data?: Record<string, any>;
+    };
 
 @Injectable()
 export class FirebaseService {
@@ -43,10 +64,7 @@ export class FirebaseService {
   private buildFinalUrl(url = "/trabajador"): string {
     const cleanUrl = String(url || "").trim() || "/trabajador";
 
-    if (
-      cleanUrl.startsWith("http://") ||
-      cleanUrl.startsWith("https://")
-    ) {
+    if (cleanUrl.startsWith("http://") || cleanUrl.startsWith("https://")) {
       return cleanUrl;
     }
 
@@ -55,13 +73,51 @@ export class FirebaseService {
     }`;
   }
 
+  private normalizeOptions(options?: PushOptions) {
+    if (!options) {
+      return {
+        url: "/trabajador",
+        data: {},
+      };
+    }
+
+    if (typeof options === "string") {
+      return {
+        url: options,
+        data: {},
+      };
+    }
+
+    return {
+      url: options.link || options.url || "/trabajador",
+      data: options.data || {},
+    };
+  }
+
+  private stringifyData(data: Record<string, any>) {
+    const out: Record<string, string> = {};
+
+    for (const [key, value] of Object.entries(data || {})) {
+      if (value === undefined || value === null) continue;
+
+      if (typeof value === "string") {
+        out[key] = value;
+      } else {
+        out[key] = JSON.stringify(value);
+      }
+    }
+
+    return out;
+  }
+
   private buildPayload(
     token: string,
     title: string,
     body: string,
-    url = "/trabajador"
+    options: PushOptions = "/trabajador"
   ): admin.messaging.Message {
-    const finalUrl = this.buildFinalUrl(url);
+    const normalized = this.normalizeOptions(options);
+    const finalUrl = this.buildFinalUrl(normalized.url);
     const iconUrl = `${this.getBaseUrl()}/logo-thomas.png`;
 
     return {
@@ -87,6 +143,8 @@ export class FirebaseService {
         title: String(title || ""),
         body: String(body || ""),
         url: finalUrl,
+        link: finalUrl,
+        ...this.stringifyData(normalized.data),
       },
     };
   }
@@ -126,7 +184,7 @@ export class FirebaseService {
     token: string,
     title: string,
     body: string,
-    url = "/trabajador"
+    url: PushOptions = "/trabajador"
   ): Promise<NotificationResult> {
     if (!token) {
       console.log("⚠️ Token FCM vacío");
@@ -143,7 +201,7 @@ export class FirebaseService {
 
     try {
       console.log("📤 Enviando notificación a token directo...");
-      console.log("📤 URL final:", this.buildFinalUrl(url));
+      console.log("📤 URL final:", payload.data?.url);
 
       const result = await admin.messaging().send(payload);
 
@@ -177,7 +235,7 @@ export class FirebaseService {
     userId: string,
     title: string,
     body: string,
-    url = "/trabajador"
+    url: PushOptions = "/trabajador"
   ): Promise<NotificationResult> {
     if (!userId) {
       console.log("⚠️ userId vacío al enviar notificación");
@@ -222,7 +280,7 @@ export class FirebaseService {
 
         try {
           console.log(`📤 Enviando a token ${item.id}...`);
-          console.log("📤 URL final:", this.buildFinalUrl(url));
+          console.log("📤 URL final:", payload.data?.url);
 
           const result = await admin.messaging().send(payload);
 
@@ -259,5 +317,56 @@ export class FirebaseService {
         message: error?.message || "Error enviando notificaciones al usuario",
       };
     }
+  }
+
+  // ✅ NUEVO: compatible con auth.service.ts
+  async sendToUser(
+    userId: string,
+    payload: {
+      title: string;
+      body: string;
+      link?: string;
+      url?: string;
+      data?: Record<string, any>;
+    }
+  ): Promise<NotificationResult> {
+    return this.sendNotificationToUser(
+      userId,
+      payload.title,
+      payload.body,
+      {
+        link: payload.link,
+        url: payload.url,
+        data: payload.data,
+      }
+    );
+  }
+
+  // ✅ Alias compatible
+  async sendPushToUser(
+    userId: string,
+    payload: {
+      title: string;
+      body: string;
+      link?: string;
+      url?: string;
+      data?: Record<string, any>;
+    }
+  ): Promise<NotificationResult> {
+    return this.sendToUser(userId, payload);
+  }
+
+  // ✅ Alias compatible
+  async notifyUser(
+    userId: string,
+    payload: {
+      title: string;
+      body: string;
+      link?: string;
+      url?: string;
+      data?: Record<string, any>;
+    }
+  ): Promise<NotificationResult> {
+    return this.sendToUser(userId, payload);
   }
 }

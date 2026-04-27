@@ -301,3 +301,18 @@
     justify-content: flex-start;
   }
 }
+.woa-stat-card {
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.woa-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
+}
+
+.woa-stat-card--active {
+  border: 2px solid #f5b301 !important;
+  box-shadow: 0 0 0 4px rgba(245, 179, 1, 0.16);
+}

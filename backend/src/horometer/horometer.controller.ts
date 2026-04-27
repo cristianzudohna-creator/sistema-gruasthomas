@@ -1,3 +1,6 @@
+// ✅ Archivo: src/horometer/horometer.controller.ts (COMPLETO)
+// ✅ NUEVO: GET /horometer/export para exportar Excel de horómetros
+
 import {
   BadRequestException,
   Body,
@@ -6,10 +9,12 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from "@nestjs/common";
+import type { Response } from "express";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { diskStorage } from "multer";
 import { extname, join } from "path";
@@ -20,7 +25,6 @@ import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { RolesGuard } from "../auth/roles.guard";
 import { Roles } from "../auth/roles.decorator";
 
-// ✅ asegura carpeta uploads/horometer
 function ensureUploadsFolder() {
   const dir = join(process.cwd(), "uploads", "horometer");
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -28,7 +32,6 @@ function ensureUploadsFolder() {
 }
 
 function safeImageExt(file: Express.Multer.File) {
-  // fallback por mimetype (por si viene sin extensión)
   const byMime: Record<string, string> = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
@@ -68,14 +71,9 @@ function photoFilter(
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class HorometerController {
   constructor(private readonly horometer: HorometerService) {
-    // ✅ crea carpeta una vez al inicializar el controller
     ensureUploadsFolder();
   }
 
-  // =========================
-  // TRABAJADOR: crear registro
-  // (si quieres, CONTROL_FLOTA también podría crear, pero normalmente NO)
-  // =========================
   @Post()
   @Roles("TRABAJADOR", "ADMIN", "SUPERADMIN", "CONTROL_FLOTA")
   @UseInterceptors(
@@ -98,7 +96,9 @@ export class HorometerController {
 
     const horasNum = Number(String(body?.horas ?? "").trim());
     if (!Number.isFinite(horasNum) || horasNum < 0) {
-      throw new BadRequestException("horas debe ser un número entero válido (>= 0)");
+      throw new BadRequestException(
+        "horas debe ser un número entero válido (>= 0)"
+      );
     }
 
     return this.horometer.createRecord({
@@ -112,10 +112,33 @@ export class HorometerController {
     });
   }
 
-  // =========================
-  // LISTAR registros (CONTROL_FLOTA / SUPERADMIN / ADMIN)
-  // ✅ CONTROL_FLOTA ahora puede ver TODO (THOMAS + INSPROTEL)
-  // =========================
+  // ✅ IMPORTANTE: export va antes de @Get() para evitar conflicto
+  @Get("export")
+  @Roles("SUPERADMIN", "CONTROL_FLOTA", "ADMIN")
+  async exportExcel(
+    @Res() res: Response,
+    @Query("q") q?: string,
+    @Query("empresa") empresa?: "ALL" | "GRUAS_THOMAS" | "INSPROTEL"
+  ) {
+    const buffer = await this.horometer.exportAdminExcel({
+      q,
+      empresa: empresa || "ALL",
+    });
+
+    const fileName = `horometros-${new Date()
+      .toISOString()
+      .slice(0, 10)}.xlsx`;
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.setHeader("Content-Length", buffer.length);
+
+    return res.send(buffer);
+  }
+
   @Get()
   @Roles("SUPERADMIN", "CONTROL_FLOTA", "ADMIN")
   async list(
@@ -131,7 +154,10 @@ export class HorometerController {
       q,
       empresa: empresa || "ALL",
       page: Number.isFinite(pageNum) && pageNum > 0 ? pageNum : 1,
-      limit: Number.isFinite(limitNum) && limitNum > 0 ? Math.min(limitNum, 50) : 10,
+      limit:
+        Number.isFinite(limitNum) && limitNum > 0
+          ? Math.min(limitNum, 50)
+          : 10,
     });
   }
 }

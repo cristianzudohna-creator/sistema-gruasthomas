@@ -925,6 +925,49 @@ export default function Camiones() {
     }
   }
 
+  async function exportHorometrosExcel() {
+  const emp = scopeToEmpresaParam();
+
+  try {
+    setExporting(true);
+
+    const params = new URLSearchParams();
+    params.set("empresa", emp || "ALL");
+
+    if (exportScope === "VISTA" && search.trim()) {
+      params.set("q", search.trim());
+    }
+
+    const res = await fetch(`${API_URL}/horometer/export?${params.toString()}`, {
+      method: "GET",
+      credentials: "include",
+      headers: tokenHeaders(),
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(txt || `Error ${res.status}`);
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `horometros_${scopeToLabelForFile()}_${todayStamp()}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    window.URL.revokeObjectURL(url);
+  } catch (e) {
+    alert(e?.message || "No se pudo exportar horómetros.");
+    console.error(e);
+  } finally {
+    setExporting(false);
+  }
+}
+
   const tabAllActive = empresaFilter === "ALL";
   const tabThomasActive = empresaFilter === "GRUAS_THOMAS";
   const tabInsActive = empresaFilter === "INSPROTEL";
@@ -1114,6 +1157,16 @@ export default function Camiones() {
             >
               {exporting ? "Exportando..." : "Exportar Mantenciones"}
             </ActionButton>
+
+            <ActionButton
+  variant="ghost"
+  type="button"
+  onClick={exportHorometrosExcel}
+  disabled={loading || exporting}
+  title="Exporta registros de horómetro con patente, fecha y horas"
+>
+  {exporting ? "Exportando..." : "Exportar Horómetros"}
+</ActionButton>
 
             <ActionButton
               variant="primary"

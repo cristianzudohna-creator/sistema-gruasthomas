@@ -1,7 +1,7 @@
 // ✅ Archivo: src/auth/auth.controller.ts (COMPLETO)
 // ✅ Login usa RUT + password
 // ✅ Change password usa req.user.id
-// ✅ NUEVO:
+// ✅ Recuperación:
 // - forgot-password => recuperación por RUT
 // - reset-password => reset con RUT + código + nueva contraseña
 
@@ -28,7 +28,7 @@ export class AuthController {
 
   // ✅ Login
   @Post("login")
-  login(@Req() req: Request, @Body() dto: LoginDto) {
+  async login(@Req() req: Request, @Body() dto: LoginDto) {
     return this.authService.login(dto.rut, dto.password, req);
   }
 
@@ -44,17 +44,17 @@ export class AuthController {
     return this.authService.changePassword(userId, dto);
   }
 
-  // ✅ NUEVO: solicitar recuperación por RUT
+  // ✅ Solicitar recuperación por RUT
   // body: { rut: "195657955" }
   @Post("forgot-password")
-  forgotPassword(@Req() req: Request, @Body() dto: ForgotPasswordDto) {
+  async forgotPassword(@Req() req: Request, @Body() dto: ForgotPasswordDto) {
     return this.authService.requestPasswordResetByRut(dto.rut, req);
   }
 
-  // ✅ NUEVO: restablecer con RUT + código
+  // ✅ Restablecer con RUT + código
   // body: { rut, code, newPassword }
   @Post("reset-password")
-  resetPassword(@Req() req: Request, @Body() dto: ResetPasswordDto) {
+  async resetPassword(@Req() req: Request, @Body() dto: ResetPasswordDto) {
     return this.authService.resetPasswordWithCode(
       dto.rut,
       dto.code,

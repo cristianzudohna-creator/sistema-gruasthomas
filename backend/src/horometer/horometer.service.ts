@@ -9,6 +9,7 @@ import { AuditService } from "../audit/audit.service";
 import { AuditAction, AuditEntity, Empresa } from "@prisma/client";
 import { rename, mkdir } from "fs/promises";
 import { join, extname } from "path";
+import * as ExcelJS from "exceljs";
 
 // ✅ NUEVO: alertas horómetro
 import { HorometerAlertsService } from "../alerts/horometer-alerts.service";
@@ -20,12 +21,8 @@ export class HorometerService {
   constructor(
     private prisma: PrismaService,
     private audit: AuditService,
-    private horometerAlerts: HorometerAlertsService // ✅ NUEVO
+    private horometerAlerts: HorometerAlertsService
   ) {}
-
-  // =========================================================
-  // HELPERS
-  // =========================================================
 
   private safeActor(actor?: Actor) {
     return actor?.id && actor?.email ? { id: actor.id, email: actor.email } : null;
@@ -40,12 +37,10 @@ export class HorometerService {
     const ext = extname(oldPath || "").toLowerCase() || "";
     const stamp = Date.now();
     const rand = Math.random().toString(16).slice(2);
-    // ✅ guardamos con slash inicial para que sea URL usable también
     return `/uploads/archive/horometer/${stamp}-${rand}${ext}`;
   }
 
   private toDiskPath(pathOrUrl: string) {
-    // ✅ soporta "/uploads/..." o "uploads/..."
     const clean = String(pathOrUrl || "").replace(/^\/+/, "");
     return join(process.cwd(), clean);
   }
@@ -56,9 +51,30 @@ export class HorometerService {
     return p.startsWith("/uploads/horometer/") || p.startsWith("uploads/horometer/");
   }
 
-  // =========================================================
-  // CREATE RECORD (AUDITA)
-  // =========================================================
+  private fmtDate(value: any) {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+
+    return d.toLocaleDateString("es-CL", {
+      timeZone: "America/Santiago",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+  }
+
+  private fmtTime(value: any) {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+
+    return d.toLocaleTimeString("es-CL", {
+      timeZone: "America/Santiago",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
 
   async createRecord(params: {
     vehicleId: string;
@@ -111,7 +127,6 @@ export class HorometerService {
       }
     }
 
-    // ✅ IMPORTANTE: url con slash para el frontend
     const fotoUrl = `/uploads/horometer/${file.filename}`;
     const filePath = fotoUrl;
 
@@ -119,17 +134,13 @@ export class HorometerService {
       data: {
         vehicleId: vehicle.id,
         trabajadorId: usuario.id,
-
         trabajadorNombre: usuario.nombre,
         trabajadorApellido: usuario.apellido,
         trabajadorRut: usuario.rut ?? null,
         trabajadorEmail: usuario.email,
-
         empresa: vehicle.empresa as Empresa,
-
         horas,
         comentario: String(comentario ?? "").trim() || null,
-
         fotoUrl,
         filePath,
         originalName: file.originalname,
@@ -141,7 +152,6 @@ export class HorometerService {
       },
     });
 
-    // ✅ AUDITORÍA (bien “presentable”)
     await this.audit.log({
       entity: AuditEntity.VEHICLE,
       entityId: vehicle.id,
@@ -170,22 +180,15 @@ export class HorometerService {
       },
     });
 
-    // ✅ NUEVO: disparar alerta automática (NO rompe el flujo si falla)
     try {
       await this.horometerAlerts.onHorometerCreated({
         vehicleId: vehicle.id,
         horas,
       });
-    } catch {
-      // silencioso: el registro de horómetro igual debe quedar creado
-    }
+    } catch {}
 
     return created;
   }
-
-  // =========================================================
-  // LIST ADMIN GLOBAL
-  // =========================================================
 
   async listAdmin(params: {
     q?: string;
@@ -240,9 +243,110 @@ export class HorometerService {
     };
   }
 
-  // =========================================================
-  // LIST POR VEHÍCULO (ADMIN)
-  // =========================================================
+  // ✅ NUEVO: EXPORTAR EXCEL HORÓMETROS
+  async exportAdminExcel(params: {
+    q?: string;
+    empresa?: "ALL" | "GRUAS_THOMAS" | "INSPROTEL";
+  }) {
+    const where: any = {};
+
+    if (params.empresa && params.empresa !== "ALL") {
+      where.empresa = params.empresa;
+    }
+
+    if (params.q?.trim()) {
+      const q = params.q.trim();
+      where.OR = [
+        { trabajadorNombre: { contains: q, mode: "insensitive" } },
+        { trabajadorApellido: { contains: q, mode: "insensitive" } },
+        { trabajadorEmail: { contains: q, mode: "insensitive" } },
+        { trabajadorRut: { contains: q, mode: "insensitive" } },
+        { vehicle: { patente: { contains: q, mode: "insensitive" } } },
+      ];
+    }
+
+    const rows = await this.prisma.horometerRecord.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      include: {
+        vehicle: {
+          select: {
+            id: true,
+            patente: true,
+            marcaModelo: true,
+            empresa: true,
+          },
+        },
+      },
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "Sistema Grúas Thomas";
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet("Horómetros");
+
+    sheet.columns = [
+  { header: "EMPRESA", key: "empresa", width: 18 },
+  { header: "PATENTE", key: "patente", width: 18 },
+  { header: "MARCA / MODELO", key: "marcaModelo", width: 32 },
+  { header: "FECHA INGRESO", key: "fecha", width: 18 },
+  { header: "HORA INGRESO", key: "hora", width: 16 },
+  { header: "HORAS", key: "horas", width: 12 },
+];
+
+    sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    sheet.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF1F2937" },
+    };
+    sheet.getRow(1).alignment = { vertical: "middle", horizontal: "center" };
+
+    rows.forEach((item: any) => {
+  sheet.addRow({
+    empresa: item.empresa || item.vehicle?.empresa || "",
+    patente: item.vehicle?.patente || "",
+    marcaModelo: item.vehicle?.marcaModelo || "",
+    fecha: this.fmtDate(item.createdAt),
+    hora: this.fmtTime(item.createdAt),
+    horas: item.horas ?? "",
+  });
+
+      sheet.addRow({
+        empresa: item.empresa || item.vehicle?.empresa || "",
+        patente: item.vehicle?.patente || "",
+        marcaModelo: item.vehicle?.marcaModelo || "",
+        fecha: this.fmtDate(item.createdAt),
+        hora: this.fmtTime(item.createdAt),
+        horas: item.horas ?? "",
+        rut: item.trabajadorRut || "",
+        correo: item.trabajadorEmail || "",
+        comentario: item.comentario || "",
+      });
+    });
+
+    sheet.eachRow((row) => {
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFE5E7EB" } },
+          left: { style: "thin", color: { argb: "FFE5E7EB" } },
+          bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
+          right: { style: "thin", color: { argb: "FFE5E7EB" } },
+        };
+        cell.alignment = { vertical: "middle", wrapText: true };
+      });
+    });
+
+    sheet.views = [{ state: "frozen", ySplit: 1 }];
+    sheet.autoFilter = {
+      from: "A1",
+      to: "F1",
+    };
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer as ArrayBuffer);
+  }
 
   async listByVehicleAdmin(params: { vehicleId: string; page?: number; limit?: number }) {
     const vehicleId = String(params.vehicleId || "").trim();
@@ -276,10 +380,6 @@ export class HorometerService {
     };
   }
 
-  // =========================================================
-  // DELETE CON RESPALDO + AUDITORÍA
-  // =========================================================
-
   async remove(id: string, actor: Actor) {
     if (!actor?.id) throw new BadRequestException("No autorizado");
 
@@ -296,7 +396,6 @@ export class HorometerService {
 
     let archivedUrl: string | null = null;
 
-    // ✅ 1) mover archivo físico a archive si aplica
     try {
       if (this.isPhysicalHorometerFile(oldFilePath)) {
         await this.ensureArchiveDir();
@@ -309,7 +408,6 @@ export class HorometerService {
       archivedUrl = null;
     }
 
-    // ✅ 2) auditoría con snapshot completo
     await this.audit.log({
       entity: AuditEntity.VEHICLE,
       entityId: current.vehicleId,
@@ -349,7 +447,6 @@ export class HorometerService {
       },
     });
 
-    // ✅ 3) borrar registro BD
     await this.prisma.horometerRecord.delete({ where: { id } });
 
     return { ok: true, archivedUrl };
