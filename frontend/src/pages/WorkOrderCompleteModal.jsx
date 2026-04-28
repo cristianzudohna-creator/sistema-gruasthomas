@@ -167,14 +167,9 @@ function Resumen({ f, firmaOk, mode, recibi }) {
         <Row label="Hora llegada planta" value={normalizeText(f.llegadaPlanta) || "—"} />
         <Row label="Horas colación (opcional)" value={normalizeText(f.colacion) || "—"} />
 
-        <Row
-          label="Km salida planta (opcional)"
-          value={normalizeText(f.kmSalidaPlanta) || "—"}
-        />
-        <Row
-          label="Km llegada planta (opcional)"
-          value={normalizeText(f.kmLlegadaPlanta) || "—"}
-        />
+        <Row label="Km salida planta" value={normalizeText(f.kmSalidaPlanta) || "—"} />
+        
+        <Row label="Km llegada planta" value={normalizeText(f.kmLlegadaPlanta) || "—"} />
 
         <Row
           label="Movimientos / ¿Qué se hizo?"
@@ -713,6 +708,24 @@ export default function WorkOrderCompleteModal({
       }
     }
 
+    if (!normalizeText(f.kmSalidaPlanta)) {
+  e.kmSalidaPlanta = "Obligatorio";
+} else {
+  const n = Number(f.kmSalidaPlanta);
+  if (isNaN(n) || n < 0) {
+    e.kmSalidaPlanta = "Debe ser un número válido";
+  }
+}
+
+if (!normalizeText(f.kmLlegadaPlanta)) {
+  e.kmLlegadaPlanta = "Obligatorio";
+} else {
+  const n = Number(f.kmLlegadaPlanta);
+  if (isNaN(n) || n < 0) {
+    e.kmLlegadaPlanta = "Debe ser un número válido";
+  }
+}
+
     if (!normalizeText(f.movimientos)) e.movimientos = "Obligatorio";
 
     if (!isAdmin) {
@@ -1049,24 +1062,24 @@ export default function WorkOrderCompleteModal({
                   )}
                 </div>
 
-                <div className="wocm-km-grid">
-                  <LabeledInput
-                    label="Km salida planta (opcional)"
-                    placeholder="Ej: 123456"
-                    value={f.kmSalidaPlanta}
-                    onChange={(e) => setField("kmSalidaPlanta", e.target.value)}
-                    disabled={saving || savingDraft}
-                  />
-                </div>
+                <LabeledInput
+  label="Km salida planta"
+  placeholder="Ej: 123456"
+  value={f.kmSalidaPlanta}
+  onChange={(e) => setField("kmSalidaPlanta", e.target.value)}
+  disabled={saving || savingDraft}
+  error={errors.kmSalidaPlanta}
+/>
 
                 <div className="wocm-km-grid">
                   <LabeledInput
-                    label="Km llegada planta (opcional)"
-                    placeholder="Ej: 124500"
-                    value={f.kmLlegadaPlanta}
-                    onChange={(e) => setField("kmLlegadaPlanta", e.target.value)}
-                    disabled={saving || savingDraft}
-                  />
+  label="Km llegada planta"
+  placeholder="Ej: 124500"
+  value={f.kmLlegadaPlanta}
+  onChange={(e) => setField("kmLlegadaPlanta", e.target.value)}
+  disabled={saving || savingDraft}
+  error={errors.kmLlegadaPlanta}
+/>
                 </div>
               </div>
             </Box>
