@@ -22,18 +22,22 @@ const RAW_API_URL = import.meta.env.VITE_API_URL || "/api";
 const API_URL = RAW_API_URL.replace(/\/+$/, "");
 
 // ✅ Base real para archivos
+// ✅ Base real para archivos
 function getFilesBaseUrl() {
-  if (/^https?:\/\//i.test(API_URL)) {
-    return API_URL.replace(/\/api$/, "");
+  if (typeof window === "undefined") return "";
+
+  const origin = window.location.origin;
+
+  // ✅ Local Vite: localhost:5173 => backend localhost:3000
+  if (
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1"
+  ) {
+    return "http://localhost:3000";
   }
 
-  // local con Vite
-  if (typeof window !== "undefined") {
-    const host = window.location.hostname || "localhost";
-    return `http://${host}:3000`;
-  }
-
-  return "";
+  // ✅ Producción: mismo dominio
+  return origin;
 }
 
 const FILES_URL = getFilesBaseUrl();
@@ -134,11 +138,15 @@ function buildFileUrl(path) {
   if (/^data:image\//i.test(clean)) return clean;
   if (/^https?:\/\//i.test(clean)) return clean;
 
-  if (clean.startsWith("/")) {
+  if (clean.startsWith("/uploads/")) {
     return `${FILES_URL}${clean}`;
   }
 
-  return `${FILES_URL}/${clean}`;
+  if (clean.startsWith("uploads/")) {
+    return `${FILES_URL}/${clean}`;
+  }
+
+  return `${FILES_URL}/uploads/workshop-parts/${clean}`;
 }
 
 function isImageLike(value) {
