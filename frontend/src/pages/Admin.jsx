@@ -1,17 +1,9 @@
 // ✅ Archivo: src/pages/Admin.jsx
 // ✅ COMPLETO - RESPONSIVE PRO + PERMISOS AJUSTADOS + SOLICITUD INSUMOS
-// ✅ Menú "Clientes" SOLO SUPERADMIN + ADMINISTRADORA
-// ✅ Sidebar responsive (toggle, ESC, lock scroll, close on route change)
-// ✅ AJUSTE: CONTROL_FLOTA YA NO VE:
-//    - Órdenes de trabajo
-//    - Incidentes / Taller
-//    - Horas Extras
-// ✅ Menú "Repuestos / Solicitudes" SOLO SUPERADMIN + TRABAJADOR ADQUISICIONES
-// ✅ Menú "Horas Extras (PDF)" para ADMINISTRADORA + SUPERADMIN
-// ✅ FIX: ADQUISICIONES YA NO VE "Firmar Horas Extras"
-// ✅ NUEVO: "Solicitud de insumos" para SUPERADMIN + JEFE_TALLER + SUPERVISOR
-// ✅ NUEVO: "Compras de insumos" para SUPERADMIN
-// ✅ NUEVO: "Reporte ingreso con fallas" para CONTROL_FLOTA + SUPERADMIN
+// ✅ Mantención taller:
+//    - "Mantenimiento taller" SOLO SUPERADMIN + CONTROL_FLOTA
+//    - "Gestionar mantenciones" SOLO SUPERADMIN + JEFE_TALLER + SUPERVISOR
+//    - "Firmar mantenciones" SOLO SUPERADMIN + ADMINISTRADORA
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useNavigate, useLocation, Link } from "react-router-dom";
@@ -89,25 +81,21 @@ export default function Admin() {
   const isAdministradora = role === "ADMINISTRADORA";
   const isAdquisiciones =
     role === "TRABAJADOR" && workerType === "ADQUISICIONES";
+
   const isJefeTaller =
     role === "TRABAJADOR" &&
     (workerType === "JEFE_TALLER" || workerType === "SUPERVISOR");
 
   const canSeeDashboard = isSuperadmin;
   const canSeeCamiones = isSuperadmin || isControlFlota;
-
   const canSeeWorkOrders = isSuperadmin || isAdministradora;
-
   const canSeeTrabajadores = isSuperadmin;
   const canSeeAuditoria = isSuperadmin;
   const canSeeConfiguracion = isSuperadmin;
   const canSeePapelera = isSuperadmin;
   const canSeePapeleraOt = isSuperadmin;
-
   const canSeeClientes = isSuperadmin || isAdministradora;
-
   const canSeeIncidentes = isSuperadmin || isJefeTaller;
-
   const canSeeRepuestos = isSuperadmin || isAdquisiciones;
 
   const canSeeExtraHours =
@@ -115,15 +103,13 @@ export default function Admin() {
     (role === "TRABAJADOR" && workerType !== "ADQUISICIONES");
 
   const canSeeExtraHoursAdmin = isSuperadmin || isAdministradora;
-
-  // ✅ Solicitud de insumos
   const canSeeSolicitudInsumos = isSuperadmin || isJefeTaller;
-
-  // ✅ Compras de insumos
   const canSeeComprasInsumos = isSuperadmin;
-
-  // ✅ NUEVO: crear reporte de ingreso con fallas
   const canSeeVehicleFailureReportsCreate = isSuperadmin || isControlFlota;
+
+  const canSeeWorkshopMaintenance = isSuperadmin || isControlFlota;
+  const canSeeWorkshopMaintenanceManager = isSuperadmin || isJefeTaller;
+  const canSeeWorkshopMaintenanceAdmin = isSuperadmin || isAdministradora;
 
   const isDashboard = path === "/admin";
 
@@ -133,6 +119,14 @@ export default function Admin() {
   const isWorkOrders = path.startsWith("/admin/ordenes-trabajo");
   const isWorkOrdersEliminados = path.startsWith(
     "/admin/ordenes-trabajo-eliminadas"
+  );
+
+  const isWorkshopMaintenance = path.startsWith("/admin/mantenimiento-taller");
+  const isWorkshopMaintenanceManager = path.startsWith(
+    "/admin/gestionar-mantenciones"
+  );
+  const isWorkshopMaintenanceAdmin = path.startsWith(
+    "/admin/firmar-mantenciones"
   );
 
   const isIncidentes = path.startsWith("/admin/incidentes");
@@ -163,7 +157,7 @@ export default function Admin() {
     if (isAdministradora) return "ADMINISTRADORA";
     if (isAdquisiciones) return "ADQUISICIONES";
     if (workerType === "JEFE_TALLER") return "JEFE DE TALLER";
-    if (workerType === "SUPERVISOR") return "SUPERVISOR";
+    if (workerType === "SUPERVISOR") return "SUPERVISOR TALLER MECÁNICO";
     if (role) return role;
     return "Usuario";
   }, [
@@ -184,7 +178,7 @@ export default function Admin() {
     }
 
     if (isJefeTaller) {
-      navigate("/admin/incidentes", { replace: true });
+      navigate("/admin/gestionar-mantenciones", { replace: true });
       return;
     }
 
@@ -194,7 +188,7 @@ export default function Admin() {
     }
 
     if (isAdministradora) {
-      navigate("/admin/ordenes-trabajo", { replace: true });
+      navigate("/admin/firmar-mantenciones", { replace: true });
       return;
     }
 
@@ -243,6 +237,10 @@ export default function Admin() {
 
     if (isWorkOrdersEliminados) return "Órdenes eliminadas";
     if (isWorkOrders) return "Órdenes de trabajo";
+
+    if (isWorkshopMaintenance) return "Mantenimiento taller";
+    if (isWorkshopMaintenanceManager) return "Gestionar mantenciones";
+    if (isWorkshopMaintenanceAdmin) return "Firmar mantenciones";
 
     if (isSolicitudInsumos) return "Solicitud de insumos";
     if (isComprasInsumos) return "Compras de insumos";
@@ -362,7 +360,9 @@ export default function Admin() {
 
           {canSeeVehicleFailureReportsCreate ? (
             <button
-              className={`sb-item ${isVehicleFailureReportsCreate ? "active" : ""}`}
+              className={`sb-item ${
+                isVehicleFailureReportsCreate ? "active" : ""
+              }`}
               type="button"
               onClick={() => {
                 setSidebarOpen(false);
@@ -388,6 +388,55 @@ export default function Admin() {
             >
               <span className="sb-ico" aria-hidden="true">🧾</span>
               <span>Órdenes de trabajo</span>
+            </button>
+          ) : null}
+
+          {canSeeWorkshopMaintenance ? (
+            <button
+              className={`sb-item ${isWorkshopMaintenance ? "active" : ""}`}
+              type="button"
+              onClick={() => {
+                setSidebarOpen(false);
+                navigate("/admin/mantenimiento-taller");
+              }}
+              title="Crear y revisar mantenciones de taller"
+            >
+              <span className="sb-ico" aria-hidden="true">🛠️</span>
+              <span>Mantenimiento taller</span>
+            </button>
+          ) : null}
+
+          {canSeeWorkshopMaintenanceManager ? (
+            <button
+              className={`sb-item ${
+                isWorkshopMaintenanceManager ? "active" : ""
+              }`}
+              type="button"
+              onClick={() => {
+                setSidebarOpen(false);
+                navigate("/admin/gestionar-mantenciones");
+              }}
+              title="Asignar y gestionar mantenciones"
+            >
+              <span className="sb-ico" aria-hidden="true">🧰</span>
+              <span>Gestionar mantenciones</span>
+            </button>
+          ) : null}
+
+          {canSeeWorkshopMaintenanceAdmin ? (
+            <button
+              className={`sb-item ${
+                isWorkshopMaintenanceAdmin ? "active" : ""
+              }`}
+              type="button"
+              onClick={() => {
+                setSidebarOpen(false);
+                navigate("/admin/firmar-mantenciones");
+              }}
+              title="Firmar mantenciones de taller"
+            >
+              <span className="sb-ico" aria-hidden="true">✍️</span>
+              <span>Firmar mantenciones</span>
             </button>
           ) : null}
 
@@ -638,7 +687,6 @@ export default function Admin() {
     </div>
   );
 }
-
 
 
 

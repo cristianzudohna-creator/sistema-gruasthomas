@@ -1,0 +1,388 @@
+.wm-page-card {
+  display: grid;
+  gap: 18px;
+}
+
+.wm-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.wm-title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 900;
+  color: #111827;
+}
+
+.wm-subtitle,
+.wm-modal-subtitle {
+  margin: 6px 0 0;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.wm-actions-top,
+.wm-card-actions,
+.wm-modal-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wm-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.wm-stat {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #fff;
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.wm-stat span {
+  display: block;
+  color: #64748b;
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.wm-stat b {
+  display: block;
+  margin-top: 6px;
+  font-size: 28px;
+  color: #111827;
+}
+
+.wm-stat--blue {
+  border-color: rgba(37, 99, 235, 0.18);
+}
+
+.wm-stat--yellow {
+  border-color: rgba(245, 158, 11, 0.24);
+}
+
+.wm-stat--green {
+  border-color: rgba(22, 163, 74, 0.2);
+}
+
+.wm-toolbar {
+  display: flex;
+}
+
+.wm-search {
+  width: 100%;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 14px;
+  padding: 13px 14px;
+  outline: none;
+  font-weight: 700;
+  background: #fff;
+}
+
+.wm-list {
+  display: grid;
+  gap: 14px;
+}
+
+.wm-card {
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 22px;
+  padding: 18px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.07);
+  display: grid;
+  gap: 14px;
+}
+
+.wm-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.wm-code {
+  color: #b45309;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+}
+
+.wm-card h2 {
+  margin: 4px 0 0;
+  font-size: 20px;
+  color: #111827;
+}
+
+.wm-desc {
+  margin: 0;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.wm-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.wm-meta > div,
+.wm-detail-block {
+  background: rgba(15, 23, 42, 0.035);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.wm-meta b,
+.wm-detail-block b {
+  display: block;
+  font-size: 12px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 5px;
+}
+
+.wm-meta span {
+  display: block;
+  color: #111827;
+  font-weight: 800;
+  word-break: break-word;
+}
+
+.wm-details {
+  display: grid;
+  gap: 10px;
+}
+
+.wm-detail-block ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.wm-detail-block li,
+.wm-detail-block p {
+  color: #1f2937;
+  line-height: 1.5;
+}
+
+.wm-signatures {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wm-signature-chip {
+  border: 1px solid rgba(22, 163, 74, 0.18);
+  background: rgba(22, 163, 74, 0.08);
+  border-radius: 14px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 2px;
+  min-width: 180px;
+}
+
+.wm-signature-chip b {
+  color: #166534;
+  font-size: 12px;
+}
+
+.wm-signature-chip span {
+  color: #111827;
+  font-weight: 800;
+}
+
+.wm-signature-chip small {
+  color: #64748b;
+}
+
+.wm-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.wm-pill--default {
+  color: #334155;
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+
+.wm-pill--blue {
+  color: #1d4ed8;
+  background: rgba(37, 99, 235, 0.1);
+  border-color: rgba(37, 99, 235, 0.18);
+}
+
+.wm-pill--yellow {
+  color: #92400e;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.24);
+}
+
+.wm-pill--green {
+  color: #166534;
+  background: rgba(22, 163, 74, 0.1);
+  border-color: rgba(22, 163, 74, 0.2);
+}
+
+.wm-pill--red {
+  color: #991b1b;
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.wm-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.wm-modal {
+  width: min(680px, 100%);
+  max-height: 92vh;
+  overflow: auto;
+  background: #fff;
+  border-radius: 22px;
+  padding: 22px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
+  display: grid;
+  gap: 14px;
+}
+
+.wm-modal--wide {
+  width: min(860px, 100%);
+}
+
+.wm-modal h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 22px;
+}
+
+.wm-modal label {
+  display: grid;
+  gap: 7px;
+  font-weight: 900;
+  color: #334155;
+}
+
+.wm-modal input,
+.wm-modal select,
+.wm-modal textarea {
+  width: 100%;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  border-radius: 14px;
+  padding: 12px;
+  outline: none;
+  font: inherit;
+  background: #fff;
+}
+
+.wm-modal textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.wm-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.wm-modal-actions {
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+@media (max-width: 900px) {
+  .wm-header {
+    flex-direction: column;
+  }
+
+  .wm-actions-top {
+    width: 100%;
+  }
+
+  .wm-actions-top button {
+    flex: 1;
+  }
+
+  .wm-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .wm-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .wm-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .wm-title {
+    font-size: 23px;
+  }
+
+  .wm-subtitle {
+    font-size: 14px;
+  }
+
+  .wm-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .wm-card {
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .wm-card-top {
+    flex-direction: column;
+  }
+
+  .wm-card h2 {
+    font-size: 18px;
+  }
+
+  .wm-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .wm-card-actions button,
+  .wm-modal-actions button {
+    width: 100%;
+  }
+
+  .wm-modal-backdrop {
+    align-items: end;
+    padding: 0;
+  }
+
+  .wm-modal {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 22px 22px 0 0;
+    padding: 18px;
+  }
+}

@@ -1002,85 +1002,98 @@ if (!normalizeText(f.kmLlegadaPlanta)) {
 
             <Box title="Detalle de horas">
               <div className="ot-grid-2">
-                <LabeledInput
-                  label="Hora salida planta"
-                  placeholder="Ej: 20:30"
-                  value={f.salidaPlanta}
-                  onChange={(e) => setField("salidaPlanta", e.target.value)}
-                  disabled={saving || savingDraft}
-                  error={errors.salidaPlanta}
-                />
+                <Box title="Detalle de horas">
+  <div className="ot-grid-2">
+    <LabeledInput
+      label="Hora salida planta"
+      placeholder="Ej: 20:30"
+      value={f.salidaPlanta}
+      onChange={(e) => setField("salidaPlanta", e.target.value)}
+      disabled={saving || savingDraft}
+      error={errors.salidaPlanta}
+    />
 
-                <LabeledInput
-                  label="Hora llegada faena"
-                  placeholder="Ej: 21:00"
-                  value={f.llegadaFaena}
-                  onChange={(e) => setField("llegadaFaena", e.target.value)}
-                  disabled={saving || savingDraft}
-                  error={errors.llegadaFaena}
-                />
+    <LabeledInput
+      label="Km salida planta"
+      placeholder="Ej: 123456"
+      value={f.kmSalidaPlanta}
+      onChange={(e) => setField("kmSalidaPlanta", e.target.value)}
+      disabled={saving || savingDraft}
+      error={errors.kmSalidaPlanta}
+    />
 
-                <LabeledInput
-                  label="Hora salida faena"
-                  placeholder="Ej: 05:00"
-                  value={f.salidaFaena}
-                  onChange={(e) => setField("salidaFaena", e.target.value)}
-                  disabled={saving || savingDraft}
-                  error={errors.salidaFaena}
-                />
+    <LabeledInput
+      label="Hora llegada faena"
+      placeholder="Ej: 21:00"
+      value={f.llegadaFaena}
+      onChange={(e) => setField("llegadaFaena", e.target.value)}
+      disabled={saving || savingDraft}
+      error={errors.llegadaFaena}
+    />
 
-                <LabeledInput
-                  label="Hora llegada planta"
-                  placeholder="Ej: 06:00"
-                  value={f.llegadaPlanta}
-                  onChange={(e) => setField("llegadaPlanta", e.target.value)}
-                  disabled={saving || savingDraft}
-                  error={errors.llegadaPlanta}
-                />
+    <div>
+      <div className="wocm-label">
+        Horas de colación (opcional)
+      </div>
 
-                <div>
-                  <div className="wocm-label">Horas de colación (opcional)</div>
+      <input
+        type="number"
+        min="0"
+        max="12"
+        step="1"
+        className="gt-input"
+        placeholder="Ej: 1"
+        value={f.colacion ?? ""}
+        onChange={(e) =>
+          setField(
+            "colacion",
+            e.target.value === "" ? "" : Number(e.target.value)
+          )
+        }
+        disabled={saving || savingDraft}
+      />
 
-                  <input
-                    type="number"
-                    min="0"
-                    max="12"
-                    step="1"
-                    className="gt-input"
-                    placeholder="Ej: 1"
-                    value={f.colacion ?? ""}
-                    onChange={(e) =>
-                      setField("colacion", e.target.value === "" ? "" : Number(e.target.value))
-                    }
-                    disabled={saving || savingDraft}
-                  />
+      <div className="wocm-help">
+        Cantidad de horas (ej: 1, 2, 3)
+      </div>
 
-                  <div className="wocm-help">Cantidad de horas (ej: 1, 2, 3)</div>
+      {errors.colacion && (
+        <div className="wocm-inline-error">
+          {errors.colacion}
+        </div>
+      )}
+    </div>
 
-                  {errors.colacion && (
-                    <div className="wocm-inline-error">{errors.colacion}</div>
-                  )}
-                </div>
+    <LabeledInput
+      label="Hora salida faena"
+      placeholder="Ej: 05:00"
+      value={f.salidaFaena}
+      onChange={(e) => setField("salidaFaena", e.target.value)}
+      disabled={saving || savingDraft}
+      error={errors.salidaFaena}
+    />
 
-                <LabeledInput
-  label="Km salida planta"
-  placeholder="Ej: 123456"
-  value={f.kmSalidaPlanta}
-  onChange={(e) => setField("kmSalidaPlanta", e.target.value)}
-  disabled={saving || savingDraft}
-  error={errors.kmSalidaPlanta}
-/>
+    <LabeledInput
+      label="Hora llegada planta"
+      placeholder="Ej: 06:00"
+      value={f.llegadaPlanta}
+      onChange={(e) => setField("llegadaPlanta", e.target.value)}
+      disabled={saving || savingDraft}
+      error={errors.llegadaPlanta}
+    />
 
-                <div className="wocm-km-grid">
-                  <LabeledInput
-  label="Km llegada planta"
-  placeholder="Ej: 124500"
-  value={f.kmLlegadaPlanta}
-  onChange={(e) => setField("kmLlegadaPlanta", e.target.value)}
-  disabled={saving || savingDraft}
-  error={errors.kmLlegadaPlanta}
-/>
-                </div>
+    <div className="wocm-km-grid">
+      <LabeledInput
+        label="Km llegada planta"
+        placeholder="Ej: 124500"
+        value={f.kmLlegadaPlanta}
+        onChange={(e) => setField("kmLlegadaPlanta", e.target.value)}
+        disabled={saving || savingDraft}
+        error={errors.kmLlegadaPlanta}
+      />
+    </div>
+  </div>
+</Box>
               </div>
             </Box>
 

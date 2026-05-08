@@ -377,9 +377,18 @@ export class UsersService {
   // ======================
 
   async create(dto: CreateUserDto, actor: any = null, meta: any = null) {
-    const email = dto.email.trim().toLowerCase();
-    const passwordHash = await bcrypt.hash(dto.password, 10);
-    const role = (dto.role ?? Role.TRABAJADOR) as Role;
+  const rutClean = this.normalizeRut(dto.rut);
+
+  if (!rutClean) {
+    throw new BadRequestException("El RUT es obligatorio.");
+  }
+
+  const email =
+    dto.email?.trim()?.toLowerCase() ||
+    `${rutClean}@sin-correo.local`;
+
+  const passwordHash = await bcrypt.hash(dto.password, 10);
+  const role = (dto.role ?? Role.TRABAJADOR) as Role;
 
     const empresa = this.normalizeEmpresa((dto as any).empresa);
     const workerTypeInput = this.normalizeWorkerType((dto as any).workerType);
@@ -423,7 +432,7 @@ export class UsersService {
           password: passwordHash,
           nombre: dto.nombre.trim(),
           apellido: dto.apellido.trim(),
-          rut: dto.rut ? this.normalizeRut(dto.rut) : null,
+          rut: rutClean,
           role,
           activo: dto.activo ?? true,
           empresa: role === Role.SUPERADMIN ? null : (empresa ?? null),

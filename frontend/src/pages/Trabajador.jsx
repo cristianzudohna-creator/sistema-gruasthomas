@@ -16,6 +16,7 @@ import TrabajadorModal from "./TrabajadorModal";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import Modal from "../components/ui/Modal";
 import "./Admin.css";
+import "./Trabajador.css";
 
 // ✅ API dinámico
 // 1) VITE_API_URL (recomendado)
@@ -594,8 +595,9 @@ const riggers = trabajadores.filter((u) => hasWorkerType(u, "RIGGER")).length;
 
         {/* ✅ FILTROS */}
         <div
-          style={{
-            marginBottom: 14,
+  className="trab-filters"
+  style={{
+    marginBottom: 14,
             display: "grid",
             gap: 12,
             alignItems: "center",
@@ -726,23 +728,21 @@ const riggers = trabajadores.filter((u) => hasWorkerType(u, "RIGGER")).length;
           </div>
         ) : null}
 
-        <div className="table-wrap">
-          <table className="table">
+        <div className="trab-table-wrap">
+  <table className="table trab-table">
             <thead>
               <tr>
-                <th>Nombre</th>
-                <th>Email</th>
-                <th>Rol</th>
-                <th>Tipo</th>
-                <th>Empresa</th>
-                <th style={{ textAlign: "right" }}>Acciones</th>
-              </tr>
+  <th>Nombre</th>
+  <th>Tipo</th>
+  <th>Empresa</th>
+  <th style={{ textAlign: "right" }}>Acciones</th>
+</tr>
             </thead>
 
             <tbody>
               {items.length === 0 && !loading ? (
                 <tr>
-                  <td colSpan={6} className="empty">
+                  <td colSpan={4} className="empty">
                     No hay resultados para este filtro.
                   </td>
                 </tr>
@@ -764,12 +764,6 @@ const riggers = trabajadores.filter((u) => hasWorkerType(u, "RIGGER")).length;
                         {isMe ? (
                           <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 900, color: "#555" }}>(Tú)</span>
                         ) : null}
-                      </td>
-
-                      <td className="mono">{u.email}</td>
-
-                      <td>
-                        <span className="role-pill">{roleLabel(u.role)}</span>
                       </td>
 
                       <td>

@@ -3,6 +3,10 @@
 // - CONTROL_FLOTA ahora puede usar GET /users para autocomplete de Operador/Rigger
 // - También puede usar GET /users/:id por compatibilidad futura
 //
+// ✅ FIX NUEVO:
+// - JEFE_TALLER / SUPERVISOR ahora pueden usar GET /users
+// - necesario para asignar mantenciones
+//
 // ✅ Nuevo: endpoint SOLO SUPERADMIN para resetear contraseña de un usuario
 // - PATCH /users/:id/reset-password
 // - Puede: setear una contraseña temporal (si no se manda, el backend la genera)
@@ -35,17 +39,20 @@ import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 
 function getActorId(actor: any) {
-  return actor?.id || actor?.sub || null; // según cómo armes el JWT
+  return actor?.id || actor?.sub || null;
 }
 
 function pickSelfUpdate(dto: any) {
-  // ✅ Campos que SÍ puede editar el usuario en "Mi cuenta"
-  // (no role, no empresa, no activo, no email, no workerType, etc.)
   const allowed = ["nombre", "apellido", "rut", "telefono"];
+
   const out: any = {};
+
   for (const k of allowed) {
-    if (dto?.[k] !== undefined) out[k] = dto[k];
+    if (dto?.[k] !== undefined) {
+      out[k] = dto[k];
+    }
   }
+
   return out;
 }
 
@@ -58,35 +65,44 @@ export class UsersController {
   // ✅ PERFIL PROPIO (ME)
   // =========================
 
-  // ✅ cualquiera logueado puede ver su perfil
   @Get("me")
   @Roles("TRABAJADOR", "CONTROL_FLOTA", "ADMINISTRADORA", "SUPERADMIN")
   async me(@Req() req: Request) {
     const actor: any = (req as any).user ?? null;
+
     const id = getActorId(actor);
-    if (!id) throw new BadRequestException("Actor inválido.");
+
+    if (!id) {
+      throw new BadRequestException("Actor inválido.");
+    }
+
     return this.usersService.findOne(String(id));
   }
 
-  // ✅ cualquiera logueado puede editar SOLO SUS DATOS personales
   @Patch("me")
   @Roles("TRABAJADOR", "CONTROL_FLOTA", "ADMINISTRADORA", "SUPERADMIN")
   async updateMe(@Req() req: Request, @Body() dto: UpdateUserDto) {
     const actor: any = (req as any).user ?? null;
+
     const id = getActorId(actor);
-    if (!id) throw new BadRequestException("Actor inválido.");
+
+    if (!id) {
+      throw new BadRequestException("Actor inválido.");
+    }
 
     const safeDto: any = pickSelfUpdate(dto);
 
-    // ✅ si no mandó nada editable, no hacemos update “vacío”
     if (Object.keys(safeDto).length === 0) {
       throw new BadRequestException(
         "No enviaste campos editables (nombre, apellido, rut, telefono)."
       );
     }
 
-    // ✅ CORRECTO: usar updateMe (aplica reglas de self)
-    return this.usersService.updateMe(safeDto, { id: String(id) }, { self: true });
+    return this.usersService.updateMe(
+      safeDto,
+      { id: String(id) },
+      { self: true }
+    );
   }
 
   // =========================
@@ -100,6 +116,7 @@ export class UsersController {
     @Body() body: { token: string }
   ) {
     const actor: any = (req as any).user ?? null;
+
     const id = getActorId(actor);
 
     if (!id) {
@@ -121,12 +138,20 @@ export class UsersController {
   @Roles("ADMINISTRADORA", "SUPERADMIN")
   create(@Req() req: Request, @Body() dto: CreateUserDto) {
     const actor = (req as any).user ?? null;
+
     return this.usersService.create(dto, actor);
   }
 
-  // ✅ FIX: agregar CONTROL_FLOTA para autocomplete de operadores/riggers
+  // ✅ FIX:
+  // - CONTROL_FLOTA puede usar autocomplete
+  // - JEFE_TALLER / SUPERVISOR pueden asignar mantenciones
   @Get()
-  @Roles("CONTROL_FLOTA", "ADMINISTRADORA", "SUPERADMIN")
+  @Roles(
+    "TRABAJADOR",
+    "CONTROL_FLOTA",
+    "ADMINISTRADORA",
+    "SUPERADMIN"
+  )
   findAll(
     @Query("q") q?: string,
     @Query("activo") activo?: string,
@@ -147,9 +172,15 @@ export class UsersController {
     } as any);
   }
 
-  // ✅ FIX: también permitir CONTROL_FLOTA en lectura puntual
+  // ✅ FIX:
+  // - permitir lectura puntual a jefe/supervisor
   @Get(":id")
-  @Roles("CONTROL_FLOTA", "ADMINISTRADORA", "SUPERADMIN")
+  @Roles(
+    "TRABAJADOR",
+    "CONTROL_FLOTA",
+    "ADMINISTRADORA",
+    "SUPERADMIN"
+  )
   findOne(@Param("id") id: string) {
     return this.usersService.findOne(id);
   }
@@ -162,6 +193,7 @@ export class UsersController {
     @Body() dto: UpdateUserDto
   ) {
     const actor = (req as any).user ?? null;
+
     return this.usersService.update(id, dto, actor);
   }
 
@@ -169,11 +201,11 @@ export class UsersController {
   @Roles("ADMINISTRADORA", "SUPERADMIN")
   toggle(@Req() req: Request, @Param("id") id: string) {
     const actor = (req as any).user ?? null;
+
     return this.usersService.toggle(id, actor);
   }
 
-  // ✅ NUEVO: RESET PASSWORD (SOLO SUPERADMIN)
-  // Body opcional: { newPassword?: string }
+  // ✅ RESET PASSWORD
   @Patch(":id/reset-password")
   @Roles("SUPERADMIN")
   resetPassword(
@@ -182,14 +214,20 @@ export class UsersController {
     @Body() body: { newPassword?: string }
   ) {
     const actor = (req as any).user ?? null;
-    return this.usersService.resetPasswordBySuperadmin(id, body?.newPassword, actor);
+
+    return this.usersService.resetPasswordBySuperadmin(
+      id,
+      body?.newPassword,
+      actor
+    );
   }
 
-  // ✅ ELIMINAR USUARIO (SOLO SUPERADMIN)
+  // ✅ ELIMINAR USUARIO
   @Delete(":id")
   @Roles("SUPERADMIN")
   remove(@Req() req: Request, @Param("id") id: string) {
     const actor = (req as any).user ?? null;
+
     return this.usersService.remove(id, actor);
   }
 }

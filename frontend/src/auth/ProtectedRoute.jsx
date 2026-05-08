@@ -38,7 +38,7 @@ function defaultHomeByRole(user) {
     role === "TRABAJADOR" &&
     (workerType === "JEFE_TALLER" || workerType === "SUPERVISOR")
   ) {
-    return "/admin/incidentes";
+    return "/admin/gestionar-mantenciones";
   }
 
   if (role === "TRABAJADOR") return "/trabajador";
@@ -82,6 +82,15 @@ function canAccessSpecialRoute(user, pathname) {
   ) {
     return true;
   }
+
+  // ✅ JEFE_TALLER + SUPERVISOR → Gestionar mantenciones
+if (
+  role === "TRABAJADOR" &&
+  (workerType === "JEFE_TALLER" || workerType === "SUPERVISOR") &&
+  path.startsWith("/admin/gestionar-mantenciones")
+) {
+  return true;
+}
 
   // ADQUISICIONES
   if (

@@ -33,8 +33,11 @@ import { ScheduleModule } from "@nestjs/schedule";
 // ✅ FIREBASE
 import { FirebaseModule } from "./firebase/firebase.module";
 
-// ✅ NUEVO: reporte de ingreso de vehículos con fallas
+// ✅ Reporte de ingreso de vehículos con fallas
 import { VehicleFailureReportsModule } from "./vehicle-failure-reports/vehicle-failure-reports.module";
+
+// ✅ NUEVO: tareas de mantenimiento taller con firmas
+import { WorkshopMaintenanceModule } from "./workshop-maintenance/workshop-maintenance.module";
 
 @Module({
   imports: [
@@ -51,9 +54,11 @@ import { VehicleFailureReportsModule } from "./vehicle-failure-reports/vehicle-f
     ClientsModule,
     WorkshopModule,
 
-    // ✅ NUEVO
     FirebaseModule,
     VehicleFailureReportsModule,
+
+    // ✅ NUEVO
+    WorkshopMaintenanceModule,
   ],
   controllers: [AppController],
   providers: [AppService],

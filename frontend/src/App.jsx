@@ -29,26 +29,20 @@ import WorkOrdersTrabajador from "./pages/WorkOrdersTrabajador";
 import VehiclesDeleted from "./pages/VehiclesDeleted";
 import WorkOrdersDeleted from "./pages/WorkOrdersDeleted";
 
-// ✅ Taller
 import WorkshopTasksWorker from "./pages/WorkshopTasksWorker";
 import WorkshopMyTasks from "./pages/WorkshopMyTasks";
 
-// ✅ Horas Extras (trabajador / jefe)
-import ExtraHours from "./pages/ExtraHours";
+import WorkshopMaintenance from "./pages/WorkshopMaintenance";
+import WorkshopMaintenanceManager from "./pages/WorkshopMaintenanceManager";
+import MyWorkshopMaintenances from "./pages/MyWorkshopMaintenances";
 
-// ✅ NUEVO: ADMINISTRADORA
+import ExtraHours from "./pages/ExtraHours";
 import AdminExtraHours from "./pages/AdminExtraHours";
 
-// ✅ NUEVO: Solicitud de insumos
 import WorkshopSuppliesRequest from "./pages/WorkshopSuppliesRequest";
-
-// ✅ NUEVO: PREVENCIÓN compras de insumos
 import PreventionSupplies from "./pages/PreventionSupplies";
-
-// ✅ NUEVO: reporte de ingreso con fallas
 import VehicleFailureReportsCreate from "./pages/VehicleFailureReportsCreate";
 
-// ✅ Firebase foreground notifications
 import { onMessage } from "firebase/messaging";
 import { getMessagingInstance } from "./firebase";
 
@@ -64,16 +58,10 @@ function NotificationListener() {
         if (!messaging) return;
 
         unsubscribe = onMessage(messaging, (payload) => {
-          console.log("🔥 Notificación recibida en foreground:", payload);
-
           const rawUrl = payload?.data?.url || payload?.fcmOptions?.link || "";
-
           const finalUrl = String(rawUrl || "").trim();
 
-          if (!finalUrl) {
-            console.log("ℹ️ La notificación no trae URL. No se navega.");
-            return;
-          }
+          if (!finalUrl) return;
 
           try {
             const urlObj =
@@ -81,23 +69,12 @@ function NotificationListener() {
                 ? new URL(finalUrl)
                 : new URL(finalUrl, window.location.origin);
 
-            const sameOrigin = urlObj.origin === window.location.origin;
-
-            if (!sameOrigin) {
-              console.log("ℹ️ URL externa detectada. No se navega:", finalUrl);
-              return;
-            }
+            if (urlObj.origin !== window.location.origin) return;
 
             const pathToNavigate =
               `${urlObj.pathname}${urlObj.search}${urlObj.hash}`.trim();
 
-            if (!pathToNavigate) {
-              console.log("ℹ️ Ruta vacía. No se navega.");
-              return;
-            }
-
-            console.log("➡️ Navegando a:", pathToNavigate);
-            navigate(pathToNavigate);
+            if (pathToNavigate) navigate(pathToNavigate);
           } catch (error) {
             console.error("❌ Error resolviendo URL de notificación:", error);
           }
@@ -110,9 +87,7 @@ function NotificationListener() {
     initForegroundNotifications();
 
     return () => {
-      if (typeof unsubscribe === "function") {
-        unsubscribe();
-      }
+      if (typeof unsubscribe === "function") unsubscribe();
     };
   }, [navigate]);
 
@@ -125,11 +100,9 @@ export default function App() {
       <NotificationListener />
 
       <Routes>
-        {/* Login */}
         <Route path="/" element={<Login />} />
         <Route path="/login" element={<Login />} />
 
-        {/* Cambiar contraseña */}
         <Route
           path="/cambiar-contrasena"
           element={
@@ -139,12 +112,16 @@ export default function App() {
           }
         />
 
-        {/* ================= ADMIN ================= */}
         <Route
           path="/admin"
           element={
             <ProtectedRoute
-              role={["CONTROL_FLOTA", "ADMINISTRADORA", "SUPERADMIN"]}
+              role={[
+                "CONTROL_FLOTA",
+                "ADMINISTRADORA",
+                "SUPERADMIN",
+                "TRABAJADOR",
+              ]}
             >
               <Admin />
             </ProtectedRoute>
@@ -191,9 +168,38 @@ export default function App() {
           />
 
           <Route
-            path="incidentes"
+            path="mantenimiento-taller"
             element={
               <ProtectedRoute role={["CONTROL_FLOTA", "SUPERADMIN"]}>
+                <WorkshopMaintenance />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="gestionar-mantenciones"
+            element={
+              <ProtectedRoute role={["SUPERADMIN", "TRABAJADOR"]}>
+                <WorkshopMaintenanceManager />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="firmar-mantenciones"
+            element={
+              <ProtectedRoute role={["ADMINISTRADORA", "SUPERADMIN"]}>
+                <WorkshopMaintenance />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="incidentes"
+            element={
+              <ProtectedRoute
+                role={["CONTROL_FLOTA", "SUPERADMIN", "TRABAJADOR"]}
+              >
                 <Incidents />
               </ProtectedRoute>
             }
@@ -208,7 +214,6 @@ export default function App() {
             }
           />
 
-          {/* ✅ Solicitud de insumos */}
           <Route
             path="solicitud-insumos"
             element={
@@ -218,7 +223,6 @@ export default function App() {
             }
           />
 
-          {/* ✅ NUEVO: Compras de insumos para SUPERADMIN */}
           <Route
             path="prevencion-insumos"
             element={
@@ -228,7 +232,6 @@ export default function App() {
             }
           />
 
-          {/* ✅ NUEVO: crear reporte de ingreso con fallas */}
           <Route
             path="reportes-fallas-vehiculos/nuevo"
             element={
@@ -281,8 +284,6 @@ export default function App() {
             }
           />
 
-          {/* ================= HORAS EXTRAS ================= */}
-
           <Route
             path="horas-extras"
             element={
@@ -304,7 +305,6 @@ export default function App() {
           />
         </Route>
 
-        {/* ================= TRABAJADOR ================= */}
         <Route
           path="/trabajador"
           element={
@@ -314,10 +314,7 @@ export default function App() {
           }
         />
 
-        <Route
-          path="/trabajador/horometro"
-          element={<Navigate to="/trabajador" replace />}
-        />
+        <Route path="/trabajador/horometro" element={<Navigate to="/trabajador" replace />} />
 
         <Route
           path="/trabajador/ordenes-trabajo"
@@ -337,7 +334,6 @@ export default function App() {
           }
         />
 
-        {/* Taller trabajador */}
         <Route
           path="/trabajador/tareas-taller"
           element={
@@ -356,7 +352,24 @@ export default function App() {
           }
         />
 
-        {/* Horas extras trabajador */}
+        <Route
+          path="/trabajador/gestionar-mantenciones"
+          element={
+            <ProtectedRoute role={["TRABAJADOR"]}>
+              <WorkshopMaintenanceManager />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/trabajador/mis-mantenciones"
+          element={
+            <ProtectedRoute role={["TRABAJADOR"]}>
+              <MyWorkshopMaintenances />
+            </ProtectedRoute>
+          }
+        />
+
         <Route
           path="/trabajador/horas-extras"
           element={
@@ -366,7 +379,6 @@ export default function App() {
           }
         />
 
-        {/* ✅ PREVENCIÓN - compras de insumos */}
         <Route
           path="/trabajador/prevencion-insumos"
           element={
@@ -376,11 +388,9 @@ export default function App() {
           }
         />
 
-        {/* Recuperación contraseña */}
         <Route path="/olvide-contrasena" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* Catch-all */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

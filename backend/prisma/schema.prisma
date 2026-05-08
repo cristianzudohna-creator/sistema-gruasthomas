@@ -1,45 +1,4 @@
-// ✅ Archivo: prisma/schema.prisma (COMPLETO)
-// ✅ NUEVO:
-// - PasswordResetRequest para recuperación por RUT + código
-// - relación inversa en User: passwordResetRequests
-// - módulo base de Incidentes + Taller + Repuestos usados
-// - WorkshopTaskAssignment para múltiples personas en una tarea
-// - WorkshopTask.codigo único
-// - WorkerType incluye ADQUISICIONES
-// - WorkshopTaskStatus incluye EN_COMPRA, COMPRADO, ENTREGADO
-// ✅ pensado para funcionar en local y producción
-//
-// ✅ NUEVO AHORA:
-// - WorkshopExtraHourStatus
-// - WorkshopExtraHourReport
-// - relación en User para reportes de horas extras creados
-// - relación en User para reportes firmados por JEFE_TALLER
-// ✅ FIX NUEVO:
-// - VehicleIncident.fotoUrl para guardar evidencia/foto del incidente
-//
-// ✅ NUEVO AHORA:
-// - UserFcmToken para múltiples dispositivos por usuario
-// - User.fcmTokens relación inversa
-// - se elimina el uso de fcmToken único en User
-//
-// ✅ NUEVO AHORA:
-// - WorkshopSupplyRequestStatus
-// - WorkshopSupplyRequest
-// - flujo de solicitud LIBRE de insumos para PREVENCION
-// - solicitadoPor / compradoPor
-// - sin relación con WorkshopTask
-// - sin cantidad
-// - con foto
-//
-// ✅ NUEVO AHORA:
-// - VehicleFailureReportStatus
-// - VehicleFailureReport
-// - VehicleFailureReportEvidence
-// - reporte de ingreso de vehículo con fallas
-// - creado por CONTROL_FLOTA o SUPERADMIN
-// - guarda patente, nombre de quien lo trajo, descripción, fecha automática
-// - múltiples fotos de evidencia
-// - preparado para asignación posterior a taller
+// ✅ Archivo: prisma/schema.prisma (PARTE 1/2)
 
 datasource db {
   provider = "postgresql"
@@ -69,6 +28,9 @@ enum AuditEntity {
   VEHICLE_INCIDENT
   WORKSHOP_TASK
   VEHICLE_FAILURE_REPORT
+
+  // ✅ NUEVO
+  WORKSHOP_MAINTENANCE_TASK
 }
 
 enum AuditAction {
@@ -109,11 +71,6 @@ enum Empresa {
   INSPROTEL
 }
 
-/**
- * ✅ estado operativo del vehículo
- * - OPERATIVO: sí debe generar alertas
- * - EN_PANA / PARADO: NO debe generar alertas
- */
 enum VehicleOperationalStatus {
   OPERATIVO
   EN_PANA
@@ -197,7 +154,6 @@ enum WorkshopTaskAssignmentRole {
   APOYO
 }
 
-// ✅ NUEVO: solicitudes de insumos libres
 enum WorkshopSupplyRequestStatus {
   PENDIENTE
   COMPRADO
@@ -228,6 +184,28 @@ enum VehicleFailureReportStatus {
   CANCELADO
 }
 
+// =========================
+// ✅ NUEVO: MANTENIMIENTO TALLER
+// =========================
+
+enum WorkshopMaintenanceTaskStatus {
+  PENDIENTE_ASIGNACION
+  ASIGNADA
+  EN_PROCESO
+  ESPERANDO_FIRMA_TALLER
+  ESPERANDO_FIRMA_CONTROL_FLOTA
+  ESPERANDO_FIRMA_ADMINISTRADORA
+  FINALIZADA
+  RECHAZADA
+  CANCELADA
+}
+
+enum WorkshopMaintenanceSignatureRole {
+  TALLER
+  CONTROL_FLOTA
+  ADMINISTRADORA
+}
+
 model User {
   id       String  @id @default(uuid())
   email    String  @unique
@@ -241,42 +219,48 @@ model User {
   mustChangePassword Boolean   @default(false)
   passwordResetAt    DateTime?
 
-  empresa    Empresa?
-  workerType WorkerType?
-workerTypesExtra WorkerType[] @default([])
+  empresa Empresa?
+
+  workerType       WorkerType?
+  workerTypesExtra WorkerType[] @default([])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  passwordResetTokens      PasswordResetToken[]
-  passwordResetRequests    PasswordResetRequest[]
-  auditLogs                AuditLog[]
-  fcmTokens                UserFcmToken[]
+  passwordResetTokens   PasswordResetToken[]
+  passwordResetRequests PasswordResetRequest[]
+  auditLogs             AuditLog[]
+  fcmTokens             UserFcmToken[]
 
   horometers HorometerRecord[] @relation("UserHorometers")
 
-  workOrdersCreated   WorkOrder[]         @relation("WorkOrderCreatedBy")
-  workOrdersAssigned  WorkOrder[]         @relation("WorkOrderAssignedTo")
-  workOrdersCompleted WorkOrder[]         @relation("WorkOrderCompletedBy")
-  workOrdersApproved  WorkOrder[]         @relation("WorkOrderApprovedBy")
-  workOrderEvidences  WorkOrderEvidence[]
+  workOrdersCreated   WorkOrder[] @relation("WorkOrderCreatedBy")
+  workOrdersAssigned  WorkOrder[] @relation("WorkOrderAssignedTo")
+  workOrdersCompleted WorkOrder[] @relation("WorkOrderCompletedBy")
+  workOrdersApproved  WorkOrder[] @relation("WorkOrderApprovedBy")
 
-  reportedIncidents       VehicleIncident[]         @relation("VehicleIncidentReportedBy")
-  workshopTasksCreated    WorkshopTask[]            @relation("WorkshopTaskCreatedBy")
-  workshopTasksAssigned   WorkshopTask[]            @relation("WorkshopTaskAssignedTo")
-  workshopTasksClosed     WorkshopTask[]            @relation("WorkshopTaskClosedBy")
+  workOrderEvidences WorkOrderEvidence[]
+
+  reportedIncidents       VehicleIncident[] @relation("VehicleIncidentReportedBy")
+  workshopTasksCreated    WorkshopTask[] @relation("WorkshopTaskCreatedBy")
+  workshopTasksAssigned   WorkshopTask[] @relation("WorkshopTaskAssignedTo")
+  workshopTasksClosed     WorkshopTask[] @relation("WorkshopTaskClosedBy")
   workshopTaskAssignments WorkshopTaskAssignment[]
 
-  // ✅ NUEVO: solicitudes de insumos libres
   supplyRequestsCreated WorkshopSupplyRequest[] @relation("WorkshopSupplyRequestedBy")
   supplyRequestsBought  WorkshopSupplyRequest[] @relation("WorkshopSupplyBoughtBy")
 
   extraHourReports       WorkshopExtraHourReport[] @relation("WorkshopExtraHourTrabajador")
   signedExtraHourReports WorkshopExtraHourReport[] @relation("WorkshopExtraHourSignedBy")
 
-  // ✅ NUEVO: reportes de ingreso con fallas
-  vehicleFailureReportsCreated  VehicleFailureReport[]         @relation("VehicleFailureReportCreatedBy")
-  vehicleFailureReportsAssigned VehicleFailureReport[]         @relation("VehicleFailureReportAssignedTo")
+  vehicleFailureReportsCreated  VehicleFailureReport[] @relation("VehicleFailureReportCreatedBy")
+  vehicleFailureReportsAssigned VehicleFailureReport[] @relation("VehicleFailureReportAssignedTo")
   vehicleFailureReportEvidences VehicleFailureReportEvidence[] @relation("VehicleFailureReportEvidenceUploadedBy")
+
+  // ✅ NUEVO
+  workshopMaintenanceTasksCreated  WorkshopMaintenanceTask[] @relation("WorkshopMaintenanceTaskCreatedBy")
+  workshopMaintenanceTasksAssigned WorkshopMaintenanceTask[] @relation("WorkshopMaintenanceTaskAssignedTo")
+  workshopMaintenanceSignatures    WorkshopMaintenanceSignature[] @relation("WorkshopMaintenanceSignatureSignedBy")
 
   @@index([empresa])
   @@index([workerType])
@@ -377,14 +361,18 @@ model Vehicle {
   horometerPlan HorometerMaintenancePlan?
   workOrders    WorkOrder[]
 
-  incidents           VehicleIncident[]
-  workshopTasks       WorkshopTask[]
-  failureReports      VehicleFailureReport[]
+  incidents      VehicleIncident[]
+  workshopTasks  WorkshopTask[]
+  failureReports VehicleFailureReport[]
+
+  // ✅ NUEVO
+  workshopMaintenanceTasks WorkshopMaintenanceTask[]
 
   @@index([empresa])
   @@index([estadoOperativo])
   @@index([activo])
 }
+// ✅ Archivo: prisma/schema.prisma (PARTE 2/2)
 
 model VehicleDocument {
   id               String       @id @default(uuid())
@@ -440,7 +428,7 @@ model HorometerRecord {
   vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
 
   trabajadorId String
-  trabajador   User   @relation("UserHorometers", fields: [trabajadorId], references: [id], onDelete: Restrict)
+  trabajador   User @relation("UserHorometers", fields: [trabajadorId], references: [id], onDelete: Restrict)
 
   trabajadorNombre   String
   trabajadorApellido String
@@ -480,10 +468,6 @@ model CompanySettings {
   createdAt DateTime @default(now())
 }
 
-// =========================
-// CLIENTES
-// =========================
-
 model Client {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
@@ -506,10 +490,6 @@ model Client {
   @@index([empresa])
   @@index([nombre])
 }
-
-// =========================
-// ORDENES DE TRABAJO
-// =========================
 
 enum WorkOrderStatus {
   ABIERTA
@@ -546,13 +526,13 @@ model WorkOrder {
   clientId String?
   client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
 
-  cliente       String?
-  rut           String?
-  solicitadoPor String?
+  cliente               String?
+  rut                   String?
+  solicitadoPor         String?
   telefonoSolicitadoPor String?
-  direccion     String?
-  comuna        String?
-  ciudad        String?
+  direccion             String?
+  comuna                String?
+  ciudad                String?
 
   telefonoCliente String?
   direccionFaena  String?
@@ -565,7 +545,8 @@ model WorkOrder {
   conductor String?
   operador  String?
   rigger    String?
-  sinJib    Boolean @default(false)
+
+  sinJib Boolean @default(false)
 
   diasTrabajo     String[] @default([])
   diasProgramados String[] @default([])
@@ -581,7 +562,7 @@ model WorkOrder {
   vehicle   Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
 
   createdById String
-  createdBy   User   @relation("WorkOrderCreatedBy", fields: [createdById], references: [id])
+  createdBy   User @relation("WorkOrderCreatedBy", fields: [createdById], references: [id])
 
   assignedToId String?
   assignedTo   User? @relation("WorkOrderAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
@@ -591,7 +572,8 @@ model WorkOrder {
   horasTrabajo    Int?
   comentarioFinal String?
 
-  workerReport  Json?
+  workerReport Json?
+
   completedAt   DateTime?
   completedById String?
   completedBy   User? @relation("WorkOrderCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
@@ -646,7 +628,7 @@ model WorkOrderEvidence {
   workOrder   WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
 
   uploadedById String
-  uploadedBy   User   @relation(fields: [uploadedById], references: [id])
+  uploadedBy   User @relation(fields: [uploadedById], references: [id])
 
   fileUrl      String
   filePath     String
@@ -681,10 +663,6 @@ model AlertDispatchLog {
   @@index([thresholdDays])
 }
 
-// =========================
-// PLAN DE MANTENCIÓN POR HORÓMETRO
-// =========================
-
 model HorometerMaintenancePlan {
   id String @id @default(uuid())
 
@@ -704,10 +682,6 @@ model HorometerMaintenancePlan {
   @@index([enabled])
   @@index([nextDueHours])
 }
-
-// =========================
-// INCIDENTES DE VEHÍCULOS
-// =========================
 
 model VehicleIncident {
   id        String   @id @default(uuid())
@@ -754,10 +728,6 @@ model VehicleIncident {
   @@index([reportadoEn])
   @@index([cerradoEn])
 }
-
-// =========================
-// TAREAS DE TALLER
-// =========================
 
 model WorkshopTask {
   id        String   @id @default(uuid())
@@ -817,10 +787,6 @@ model WorkshopTask {
   @@index([closedAt])
 }
 
-// =========================
-// ASIGNACIONES DE TALLER
-// =========================
-
 model WorkshopTaskAssignment {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
@@ -836,12 +802,9 @@ model WorkshopTaskAssignment {
   @@index([workshopTaskId])
   @@index([userId])
   @@index([role])
+
   @@unique([workshopTaskId, userId], name: "workshop_task_assignment_unique")
 }
-
-// =========================
-// REPUESTOS USADOS EN TALLER
-// =========================
 
 model WorkshopTaskPart {
   id        String   @id @default(uuid())
@@ -861,11 +824,6 @@ model WorkshopTaskPart {
   @@index([workshopTaskId])
   @@index([nombre])
 }
-
-// =========================
-// SOLICITUDES LIBRES DE INSUMOS TALLER -> PREVENCION
-// =========================
-
 model WorkshopSupplyRequest {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
@@ -901,10 +859,6 @@ model WorkshopSupplyRequest {
   @@index([compradoAt])
   @@index([nombre])
 }
-
-// =========================
-// HORAS EXTRAS TALLER
-// =========================
 
 model WorkshopExtraHourReport {
   id        String   @id @default(uuid())
@@ -950,10 +904,6 @@ model WorkshopExtraHourReport {
   @@index([firmadoPorId])
 }
 
-// =========================
-// REPORTE DE INGRESO CON FALLAS
-// =========================
-
 model VehicleFailureReport {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
@@ -964,10 +914,8 @@ model VehicleFailureReport {
   vehicleId String
   vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
 
-  // ✅ guardamos también la patente en el reporte
   patente String
 
-  // ✅ nombre de quien trajo el vehículo
   traidoPorNombre String
 
   descripcion String
@@ -1015,4 +963,90 @@ model VehicleFailureReportEvidence {
   @@index([reportId])
   @@index([uploadedById])
   @@index([createdAt])
+}
+
+// =========================
+// ✅ NUEVO: TAREAS DE MANTENIMIENTO TALLER CON FIRMAS
+// =========================
+
+model WorkshopMaintenanceTask {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  empresa Empresa
+
+  codigo String @unique
+
+  vehicleId String
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  patenteSnapshot String
+
+  createdById String
+  createdBy   User @relation("WorkshopMaintenanceTaskCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  assignedToId String?
+  assignedTo   User? @relation("WorkshopMaintenanceTaskAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  assignedAt DateTime?
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  status WorkshopMaintenanceTaskStatus @default(PENDIENTE_ASIGNACION)
+
+  titulo      String
+  descripcion String?
+
+  kilometraje Int?
+  horas       Int?
+  fecha       DateTime?
+
+  trabajosRealizados   String[] @default([])
+  repuestosLubricantes String[] @default([])
+  codigosFiltros       String[] @default([])
+
+  observaciones String?
+
+  rechazoMotivo String?
+
+  signatures WorkshopMaintenanceSignature[]
+
+  @@index([empresa])
+  @@index([codigo])
+  @@index([vehicleId])
+  @@index([createdById])
+  @@index([assignedToId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([assignedAt])
+  @@index([finishedAt])
+}
+
+model WorkshopMaintenanceSignature {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  taskId String
+  task   WorkshopMaintenanceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  role WorkshopMaintenanceSignatureRole
+
+  signedById String
+  signedBy   User @relation("WorkshopMaintenanceSignatureSignedBy", fields: [signedById], references: [id], onDelete: Restrict)
+
+  signedAt DateTime @default(now())
+
+  firmaDataUrl String @db.Text
+
+  nombreFirmante String?
+  rutFirmante    String?
+  cargoFirmante  String?
+
+  @@index([taskId])
+  @@index([role])
+  @@index([signedById])
+  @@index([signedAt])
+
+  @@unique([taskId, role], name: "workshop_maintenance_signature_unique")
 }

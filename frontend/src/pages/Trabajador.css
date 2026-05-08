@@ -1,0 +1,141 @@
+.trab-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #fff;
+}
+
+.trab-table {
+  width: 100%;
+  min-width: 820px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.trab-table thead th {
+  background: #f8fafc;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 16px 14px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.trab-table tbody td {
+  padding: 16px 14px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.07);
+  vertical-align: middle;
+}
+
+.trab-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.trab-table tbody tr:hover {
+  background: #f9fafb;
+}
+
+.trab-table .table-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.trab-table .gt-btn {
+  min-height: 40px;
+  border-radius: 14px;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .trab-table-wrap {
+    border: none;
+    background: transparent;
+    overflow: visible;
+  }
+
+  .trab-table {
+    min-width: 0;
+    border-collapse: collapse;
+  }
+
+  .trab-table thead {
+    display: none;
+  }
+
+  .trab-table,
+  .trab-table tbody,
+  .trab-table tr,
+  .trab-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .trab-table tbody tr {
+    margin-bottom: 14px;
+    padding: 14px;
+    border-radius: 18px;
+    background: #fff;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+  }
+
+  .trab-table tbody td {
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+  }
+
+  .trab-table tbody td:last-child {
+    border-bottom: none;
+  }
+
+  .trab-table tbody td:nth-child(1)::before {
+    content: "Nombre";
+  }
+
+  .trab-table tbody td:nth-child(2)::before {
+    content: "Tipo";
+  }
+
+  .trab-table tbody td:nth-child(3)::before {
+    content: "Empresa";
+  }
+
+  .trab-table tbody td::before {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 11px;
+    font-weight: 900;
+    color: #64748b;
+    text-transform: uppercase;
+  }
+
+  .trab-table td[style*="text-align"] {
+    text-align: left !important;
+  }
+
+  .trab-table .table-actions {
+    justify-content: stretch;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .trab-table .gt-btn {
+    width: 100%;
+  }
+}
+.trab-filters {
+  padding: 18px 18px 16px;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  background: #fff;
+}
+
+.trab-table-wrap {
+  margin-top: 18px;
+}

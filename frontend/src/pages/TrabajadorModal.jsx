@@ -13,10 +13,6 @@ function authHeaders() {
   };
 }
 
-function isValidEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
 function isValidRutLike(rut) {
   const value = String(rut || "").trim();
 
@@ -79,7 +75,7 @@ export default function TrabajadorModal({
 
   const WORKER_TYPE_OPTIONS = useMemo(
     () => [
-      { value: "", label: "Selecciona tipo (opcional)" },
+      { value: "", label: "Selecciona tipo" },
       { value: "CONDUCTOR", label: "Conductor" },
       { value: "OPERADOR", label: "Operador" },
       { value: "RIGGER", label: "Rigger" },
@@ -168,10 +164,6 @@ export default function TrabajadorModal({
     if (!form.nombre.trim()) e.nombre = "Nombre obligatorio.";
     if (!form.apellido.trim()) e.apellido = "Apellido obligatorio.";
 
-    const email = form.email.trim().toLowerCase();
-    if (!email) e.email = "Email obligatorio.";
-    else if (!isValidEmail(email)) e.email = "Email inválido.";
-
     if (form.rut && !isValidRutLike(form.rut)) {
       e.rut = "RUT inválido.";
     }
@@ -208,7 +200,7 @@ export default function TrabajadorModal({
       const payload = {
   nombre: form.nombre.trim(),
   apellido: form.apellido.trim(),
-  email: form.email.trim().toLowerCase(),
+  email: form.email?.trim()?.toLowerCase() || undefined,
   rut: form.rut || null,
   role: form.role,
   activo: form.activo,
@@ -313,14 +305,6 @@ export default function TrabajadorModal({
         />
 
         <Field
-          label="Email"
-          value={form.email}
-          error={touched.email ? errors.email : ""}
-          onBlur={() => markTouched("email")}
-          onChange={(v) => setForm((s) => ({ ...s, email: v }))}
-        />
-
-        <Field
           label="RUT"
           value={form.rut}
           error={touched.rut ? errors.rut : ""}
@@ -376,12 +360,7 @@ export default function TrabajadorModal({
           gap: 8,
         }}
       >
-        {[
-          "OPERADOR",
-          "RIGGER",
-          "SUPERVISOR",
-          "SUPERVISOR_TERRENO",
-        ].map((tipo) => {
+        {["RIGGER"].map((tipo) => {
           const checked = form.workerTypesExtra.includes(tipo);
 
           return (
@@ -409,10 +388,7 @@ export default function TrabajadorModal({
                 }}
               />
 
-              {tipo === "OPERADOR" && "Operador"}
               {tipo === "RIGGER" && "Rigger"}
-              {tipo === "SUPERVISOR" && "Supervisor taller mecánico"}
-              {tipo === "SUPERVISOR_TERRENO" && "Supervisor terreno"}
             </label>
           );
         })}

@@ -1,10 +1,3 @@
-// ✅ Archivo: src/auth/dto/create-user.dto.ts (COMPLETO)
-// ✅ Cambio: rut ahora es OBLIGATORIO
-// ✅ Motivo: todos ingresan con RUT
-// ✅ FIX: mensaje de workerType actualizado para incluir supervisor taller mecánico y supervisor de terreno
-// ✅ NUEVO AHORA:
-// - soporte workerTypesExtra WorkerType[]
-
 import {
   IsBoolean,
   IsEmail,
@@ -18,8 +11,10 @@ import {
 import { Role, Empresa, WorkerType } from "@prisma/client";
 
 export class CreateUserDto {
+  // ✅ EMAIL AHORA OPCIONAL
+  @IsOptional()
   @IsEmail()
-  email: string;
+  email?: string;
 
   @IsString()
   @MinLength(8)
@@ -33,7 +28,7 @@ export class CreateUserDto {
   @IsNotEmpty()
   apellido: string;
 
-  // ✅ RUT AHORA OBLIGATORIO
+  // ✅ RUT OBLIGATORIO
   @IsString()
   @IsNotEmpty({ message: "El RUT es obligatorio" })
   rut: string;
@@ -46,38 +41,21 @@ export class CreateUserDto {
   @IsBoolean()
   activo?: boolean;
 
-  // =========================
-  // empresa
-  // =========================
   @IsOptional()
   @IsEnum(Empresa, {
     message: "empresa debe ser GRUAS_THOMAS o INSPROTEL",
   })
   empresa?: Empresa;
 
-  // =========================
-  // workerType principal
-  // =========================
   @IsOptional()
-  @IsEnum(WorkerType, {
-    message:
-      "workerType debe ser un valor válido del sistema, por ejemplo: CONDUCTOR, RIGGER, OPERADOR, MECANICO, JEFE_TALLER, SUPERVISOR, SUPERVISOR_TERRENO u OTRO",
-  })
+  @IsEnum(WorkerType)
   workerType?: WorkerType;
 
-  // =========================
-  // workerTypesExtra
-  // =========================
   @IsOptional()
   @IsArray()
-  @IsEnum(WorkerType, {
-    each: true,
-    message:
-      "workerTypesExtra debe contener valores válidos de WorkerType",
-  })
+  @IsEnum(WorkerType, { each: true })
   workerTypesExtra?: WorkerType[];
 
-  // ⚠️ No existen en Prisma → no se guardan
   @IsOptional()
   @IsString()
   telefono?: string;

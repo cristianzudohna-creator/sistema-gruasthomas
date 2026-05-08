@@ -1,14 +1,9 @@
 // ✅ Archivo: src/pages/PortalTrabajador.jsx
-// ✅ COMPLETO + CARD PREVENCIÓN COMPRAS INSUMOS
-// ✅ FIX:
-// - mostrar "Supervisor taller mecánico" en vez de "SUPERVISOR"
-// - agregar "Supervisor de terreno"
-// - Supervisor de terreno SOLO puede usar:
-//   1) Órdenes de trabajo
-//   2) Reportar incidente
-// - Supervisor taller mecánico también puede ver Órdenes de trabajo
-// ✅ AJUSTE:
-// - texto de Órdenes de trabajo mejorado para RIGGER / OPERADOR
+// ✅ COMPLETO + CARD MIS MANTENCIONES
+// ✅ NUEVO:
+// - card "Mis mantenciones" para JEFE_TALLER, SUPERVISOR, MECANICO,
+//   AYUDANTE_DE_MECANICO y MECANICO_HIDRAULICO
+// - navega a /trabajador/mis-mantenciones
 
 import { useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
@@ -135,8 +130,7 @@ export default function PortalTrabajador() {
       !isPrevencion &&
       workerType !== "SUPERVISOR");
 
-  const canRequestSupplies =
-    role === "SUPERADMIN" || isJefeTaller;
+  const canRequestSupplies = role === "SUPERADMIN" || isJefeTaller;
 
   const canManageSupplies =
     role === "TRABAJADOR" && workerType === "PREVENCION";
@@ -171,7 +165,7 @@ export default function PortalTrabajador() {
               {isPrevencion
                 ? "Acceso rápido para reportar incidentes y gestionar compras de insumos"
                 : isWorkshopWorker
-                ? "Acceso rápido a incidentes, tareas, horas extras y órdenes de trabajo"
+                ? "Acceso rápido a incidentes, tareas, mantenciones, horas extras y órdenes de trabajo"
                 : isSupervisorTerreno
                 ? "Acceso rápido a órdenes de trabajo y reporte de incidentes"
                 : workerType === "RIGGER"
@@ -316,6 +310,24 @@ export default function PortalTrabajador() {
                 </div>
 
                 <div className="ptw-card__cta">Ver tareas →</div>
+              </button>
+
+              <button
+                className="ptw-card"
+                onClick={() => navigate("/trabajador/mis-mantenciones")}
+              >
+                <div className="ptw-card__top">
+                  <div className="ptw-icon">🧰</div>
+                  <div>
+                    <div className="ptw-card__title">Mis mantenciones</div>
+                    <div className="ptw-card__sub">
+                      Ver mantenciones asignadas y completar formulario
+                    </div>
+                  </div>
+                  <div className="ptw-badge">Disponible</div>
+                </div>
+
+                <div className="ptw-card__cta">Ver mantenciones →</div>
               </button>
 
               {canUseExtraHours && (
