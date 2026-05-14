@@ -806,19 +806,32 @@ export default function Camiones() {
     return "vista";
   }
   function toExcelRowsVehicles(list) {
-    return (list || []).map((v) => ({
-      Empresa: empresaLabel(v.empresa || "GRUAS_THOMAS"),
-      Patente: fixText(v.patente || ""),
-      Marca: fixText(v.marca || ""),
-      Modelo: fixText(v.modelo || ""),
-      "Tipo de vehículo": displayTipoVehiculo(v.tipoVehiculo || ""),
-    }));
-  }
+  return (list || []).map((v) => ({
+    Empresa: empresaLabel(v.empresa || "GRUAS_THOMAS"),
+
+    Patente: fixText(v.patente || ""),
+
+    Marca: fixText(v.marca || ""),
+
+    Modelo: fixText(v.modelo || ""),
+
+    Año: v.year ?? "",
+
+    "Tipo de vehículo": displayTipoVehiculo(v.tipoVehiculo || ""),
+  }));
+}
   function exportExcelSheet(rows, sheetName, fileBase) {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(rows);
 
-    ws["!cols"] = [{ wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 22 }];
+    ws["!cols"] = [
+  { wch: 18 }, // Empresa
+  { wch: 14 }, // Patente
+  { wch: 14 }, // Marca
+  { wch: 20 }, // Modelo
+  { wch: 10 }, // Año
+  { wch: 22 }, // Tipo vehículo
+];
 
     const ref = ws["!ref"] || "A1:A1";
     const range = XLSX.utils.decode_range(ref);
