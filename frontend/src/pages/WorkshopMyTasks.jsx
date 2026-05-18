@@ -1097,29 +1097,6 @@ const [statusFilter, setStatusFilter] = useState("ALL");
 
   useEffect(() => {
   loadTasks();
-
-  function handleRefresh() {
-    loadTasks();
-  }
-
-  function handleVisibilityChange() {
-    if (document.visibilityState === "visible") {
-      loadTasks();
-    }
-  }
-
-  window.addEventListener("focus", handleRefresh);
-  document.addEventListener("visibilitychange", handleVisibilityChange);
-
-  const interval = setInterval(() => {
-    loadTasks();
-  }, 15000);
-
-  return () => {
-    window.removeEventListener("focus", handleRefresh);
-    document.removeEventListener("visibilitychange", handleVisibilityChange);
-    clearInterval(interval);
-  };
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
 
