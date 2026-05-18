@@ -12,8 +12,8 @@ async function bootstrap() {
   // ============================
   // BODY LIMIT (FOTOS BASE64)
   // ============================
-  app.use(json({ limit: "50mb" }));
-  app.use(urlencoded({ limit: "50mb", extended: true }));
+  app.use(json({ limit: "125mb" }));
+  app.use(urlencoded({ limit: "125mb", extended: true }));
 
   // ============================
   // VALIDACIÓN GLOBAL
