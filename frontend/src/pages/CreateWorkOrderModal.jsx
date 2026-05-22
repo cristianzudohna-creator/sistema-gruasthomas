@@ -1,41 +1,10 @@
 // ✅ Archivo: frontend/src/pages/CreateWorkOrderModal.jsx (COMPLETO)
-// ✅ SUPERADMIN FIX:
-// - Superadmin ve operadores/riggers de INSPROTEL + GRUAS_THOMAS SIN elegir empresa
-// - Se detecta SUPERADMIN desde el JWT (access_token) para NO depender de /company/me
-// - Para roles normales (ADMINISTRADORA / CONTROL_FLOTA / etc.) sigue filtrando por empresa como antes
-//
-// ✅ Calendario: seleccionar días con click (fechas ISO)
-// ✅ Se elimina "Días (texto)" y el "Interpretado como..."
-// ✅ "Días programado" deja de ser título grande en negrita (queda como label normal)
-// ✅ Resumen muestra días programados
-// ✅ Payload envía:
-//    - diasProgramados: ["2026-02-19", ...]  (nuevo)
-//    - diasTrabajo: ["LUN","MIE",...]        (compat con backend actual)
-//
-// ✅ FIX UI: dropdown de WorkerAutocomplete (Operador/Rigger) se renderiza FIXED
-//    para que NO se vea “muy abajo” dentro del modal con scroll.
-//
-// ✅ FIX PATENTES: VehicleAutocomplete usa apiGet (/vehicles) con Authorization
-//
-// ✅ FIX GRAVE:
-// - NO se cierra el dropdown al usar la barra de scroll
-// - Se elimina cierre por onBlur
-// - Se usa pointerdown CAPTURE + composedPath para detectar click “afuera” real
-//
-// ✅ FIX NUEVO:
-// - Cliente y Patente YA NO se cierran al escribir
-// - Se eliminó el auto-cierre por scroll en esos dos autocompletes
-//
-// ✅ FIX UI NUEVO:
-// - Textarea de descripción sin resize manual
-// - Alto fijo + scroll interno
-//
-// ✅ CAMBIO NUEVO:
-// - "Detalle del servicio" YA NO es obligatorio
-//
-// ✅ NUEVO:
-// - En "Operador" ahora aparecen usuarios con workerType:
-//   OPERADOR, SUPERVISOR y SUPERVISOR_TERRENO
+// ✅ NUEVO: autocompletado navegador en:
+// - Solicitado por Sr.
+// - Teléfono solicitado por Sr.
+// - Dirección
+// - Obra/Tramo
+// - Horario de llegada
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -47,9 +16,6 @@ function getToken() {
   return localStorage.getItem("access_token") || "";
 }
 
-/* =========================
-   ✅ SUPERADMIN: leer rol desde JWT
-========================= */
 function parseJwtPayload(token) {
   try {
     const parts = String(token || "").split(".");
@@ -86,7 +52,6 @@ function isSuperadminRole(roleStr) {
   return r.includes("SUPERADMIN") || r.includes("SUPER_ADMIN");
 }
 
-// ✅ lee error como JSON o texto y lo convierte a mensaje útil
 async function readError(res) {
   const contentType = res.headers.get("content-type") || "";
 
@@ -122,7 +87,6 @@ async function apiGet(path) {
   return res.json();
 }
 
-// ✅ subir fotos (multipart)
 async function apiUploadWorkOrderPhotos(workOrderId, files) {
   const fd = new FormData();
   for (const f of files) fd.append("photos", f);
@@ -145,9 +109,6 @@ async function apiUploadWorkOrderPhotos(workOrderId, files) {
   return res.json();
 }
 
-/* =========================
-   Utils
-========================= */
 function normalizeText(s) {
   return String(s || "").trim();
 }
@@ -161,7 +122,6 @@ function addIf(obj, key, value) {
   if (v) obj[key] = v;
 }
 
-// ✅ validaciones simples
 function isValidHora(h) {
   const v = normalizeText(h);
   if (!v) return false;
@@ -174,11 +134,8 @@ function isValidRut(rut) {
   return /^[0-9]{7,8}-?[0-9kK]{1}$/.test(v);
 }
 
-/* =========================
-   Días programados (fechas)
-========================= */
 const WEEKDAYS_SHORT = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
-const DOW_CODE = ["DOM", "LUN", "MAR", "MIE", "JUE", "VIE", "SAB"]; // JS: 0=DOM
+const DOW_CODE = ["DOM", "LUN", "MAR", "MIE", "JUE", "VIE", "SAB"];
 
 function isValidISODate(s) {
   const v = String(s || "").trim();
@@ -224,9 +181,6 @@ function uniqueSortedISO(arr) {
   return out;
 }
 
-/* =========================
-   UI helpers
-========================= */
 function Row({ label, value }) {
   return (
     <div
@@ -301,6 +255,8 @@ function LabeledInput({
   error,
   className = "",
   type = "text",
+  name = "",
+  autoComplete = "off",
 }) {
   const errStyle = error
     ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220, 38, 38, .15)" }
@@ -327,6 +283,8 @@ function LabeledInput({
         disabled={disabled}
         style={errStyle}
         type={type}
+        name={name}
+        autoComplete={autoComplete}
       />
     </div>
   );
@@ -377,9 +335,6 @@ function LabeledTextarea({
   );
 }
 
-/* =========================
-   Mini Calendar (multi-select)
-========================= */
 function monthNameEs(year, month0) {
   const names = [
     "Enero",
@@ -435,7 +390,6 @@ function MiniCalendarMulti({ valueISO, onChangeISO, disabled, error }) {
     const d = new Date(arr[0] + "T00:00:00");
     setViewY(d.getFullYear());
     setViewM(d.getMonth());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [valueISO?.length]);
 
   const matrix = useMemo(() => buildCalendarMatrix(viewY, viewM), [viewY, viewM]);
@@ -469,25 +423,6 @@ function MiniCalendarMulti({ valueISO, onChangeISO, disabled, error }) {
     ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220, 38, 38, .15)" }
     : undefined;
 
-  const headerBtnStyle = {
-    height: 34,
-    padding: "0 10px",
-    borderRadius: 12,
-    border: "1px solid rgba(0,0,0,0.10)",
-    background: "#fff",
-    cursor: disabled ? "not-allowed" : "pointer",
-    fontWeight: 900,
-    opacity: disabled ? 0.5 : 1,
-  };
-
-  const dayHeaderStyle = {
-    fontSize: 12,
-    fontWeight: 900,
-    opacity: 0.65,
-    textAlign: "center",
-    padding: "8px 0",
-  };
-
   return (
     <div>
       <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.75, marginBottom: 6 }}>
@@ -505,20 +440,20 @@ function MiniCalendarMulti({ valueISO, onChangeISO, disabled, error }) {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-          <button type="button" onClick={prevMonth} disabled={disabled} style={headerBtnStyle}>
+          <button type="button" onClick={prevMonth} disabled={disabled}>
             ←
           </button>
 
           <div style={{ fontWeight: 900, opacity: 0.85 }}>{monthNameEs(viewY, viewM)}</div>
 
-          <button type="button" onClick={nextMonth} disabled={disabled} style={headerBtnStyle}>
+          <button type="button" onClick={nextMonth} disabled={disabled}>
             →
           </button>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", marginTop: 10 }}>
           {WEEKDAYS_SHORT.map((w) => (
-            <div key={w} style={dayHeaderStyle}>
+            <div key={w} style={{ fontSize: 12, fontWeight: 900, opacity: 0.65, textAlign: "center", padding: "8px 0" }}>
               {w}
             </div>
           ))}
@@ -550,7 +485,6 @@ function MiniCalendarMulti({ valueISO, onChangeISO, disabled, error }) {
                       opacity: disabled ? 0.5 : 1,
                       position: "relative",
                     }}
-                    title={`${dowLabelFromISO(iso)} ${fmtDDMMYYYYFromISO(iso)}`}
                   >
                     {d.getDate()}
                     {isToday ? (
@@ -573,39 +507,11 @@ function MiniCalendarMulti({ valueISO, onChangeISO, disabled, error }) {
             </div>
           ))}
         </div>
-
-        <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
-          Click para marcar / desmarcar. (Puedes seleccionar varios días)
-        </div>
-
-        {uniqueSortedISO(valueISO).length > 0 ? (
-          <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {uniqueSortedISO(valueISO).slice(0, 14).map((iso) => (
-              <span
-                key={iso}
-                style={{
-                  padding: "6px 10px",
-                  borderRadius: 999,
-                  border: "1px solid rgba(0,0,0,0.12)",
-                  fontSize: 12,
-                  fontWeight: 900,
-                  opacity: 0.85,
-                  background: "rgba(0,0,0,0.03)",
-                }}
-              >
-                {dowLabelFromISO(iso)} {fmtDDMMYYYYFromISO(iso)}
-              </span>
-            ))}
-          </div>
-        ) : null}
       </div>
     </div>
   );
 }
 
-/* =========================
-   Autocomplete (clientes)
-========================= */
 function ClientAutocomplete({
   label,
   placeholder,
@@ -673,10 +579,6 @@ function ClientAutocomplete({
     setTimeout(() => inputRef.current?.blur?.(), 0);
   }
 
-  function onKeyDown(e) {
-    if (e.key === "Escape") setOpen(false);
-  }
-
   useEffect(() => {
     function onDocPointerDown(ev) {
       if (!open) return;
@@ -704,7 +606,6 @@ function ClientAutocomplete({
       setItems([]);
       setTip("Escribe para buscar clientes (nombre / rut).");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, empresa]);
 
   return (
@@ -722,7 +623,9 @@ function ClientAutocomplete({
         onChange={onInputChange}
         disabled={disabled}
         onFocus={() => setOpen(true)}
-        onKeyDown={onKeyDown}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setOpen(false);
+        }}
         onBlur={() => {}}
         style={error ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220, 38, 38, .15)" } : undefined}
       />
@@ -783,12 +686,8 @@ function ClientAutocomplete({
                 );
               })
             ) : (
-              <div style={{ padding: 12, opacity: 0.85 }}>{tip || "Escribe para buscar clientes (nombre / rut)."}</div>
+              <div style={{ padding: 12, opacity: 0.85 }}>{tip}</div>
             )}
-          </div>
-
-          <div style={{ padding: "10px 12px", fontSize: 12, opacity: 0.7, borderTop: "1px solid rgba(0,0,0,0.06)" }}>
-            Si no aparece, puedes escribirlo manual.
           </div>
         </div>
       ) : null}
@@ -796,9 +695,6 @@ function ClientAutocomplete({
   );
 }
 
-/* =========================
-   Autocomplete (trabajadores)
-========================= */
 function WorkerAutocomplete({
   label,
   placeholder,
@@ -820,7 +716,6 @@ function WorkerAutocomplete({
   const [items, setItems] = useState([]);
   const [tip, setTip] = useState("");
   const debounceRef = useRef(null);
-
   const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
 
   const allowedWorkerTypes = useMemo(() => {
@@ -884,7 +779,6 @@ function WorkerAutocomplete({
       qs.set("q", query);
       qs.set("limit", "20");
 
-      // ✅ solo usamos query backend si viene un solo tipo
       if (allowedWorkerTypes.length === 1) {
         qs.set("workerType", allowedWorkerTypes[0]);
       }
@@ -902,20 +796,19 @@ function WorkerAutocomplete({
         list = list.filter((u) => String(u?.empresa || "").toUpperCase() === empUp);
       }
 
-      // ✅ filtro local para múltiples tipos
       if (allowedWorkerTypes.length > 0) {
-  list = list.filter((u) => {
-    const main = normalizeEnum(u?.workerType);
-    const extras = Array.isArray(u?.workerTypesExtra)
-      ? u.workerTypesExtra.map((x) => normalizeEnum(x))
-      : [];
+        list = list.filter((u) => {
+          const main = normalizeEnum(u?.workerType);
+          const extras = Array.isArray(u?.workerTypesExtra)
+            ? u.workerTypesExtra.map((x) => normalizeEnum(x))
+            : [];
 
-    return (
-      allowedWorkerTypes.includes(main) ||
-      extras.some((x) => allowedWorkerTypes.includes(x))
-    );
-  });
-}
+          return (
+            allowedWorkerTypes.includes(main) ||
+            extras.some((x) => allowedWorkerTypes.includes(x))
+          );
+        });
+      }
 
       setItems(list);
 
@@ -963,10 +856,6 @@ function WorkerAutocomplete({
     setTimeout(() => inputRef.current?.blur?.(), 0);
   }
 
-  function onKeyDown(e) {
-    if (e.key === "Escape") setOpen(false);
-  }
-
   useEffect(() => {
     function onDocPointerDown(ev) {
       if (!open) return;
@@ -995,7 +884,6 @@ function WorkerAutocomplete({
       setItems([]);
       setTip("Escribe para buscar (nombre / apellido / rut).");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, empresa, allowSuperadminBoth, JSON.stringify(allowedWorkerTypes)]);
 
   return (
@@ -1016,7 +904,9 @@ function WorkerAutocomplete({
           setOpen(true);
           setTimeout(updatePos, 0);
         }}
-        onKeyDown={onKeyDown}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setOpen(false);
+        }}
         onBlur={() => {}}
         style={error ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220, 38, 38, .15)" } : undefined}
       />
@@ -1081,19 +971,12 @@ function WorkerAutocomplete({
               <div style={{ padding: 12, opacity: 0.85 }}>{tip || "Escribe para buscar (nombre / apellido / rut)."}</div>
             )}
           </div>
-
-          <div style={{ padding: "10px 12px", fontSize: 12, opacity: 0.7, borderTop: "1px solid rgba(0,0,0,0.06)" }}>
-            Si no aparece, busca otro.
-          </div>
         </div>
       ) : null}
     </div>
   );
 }
 
-/* =========================
-   Autocomplete (vehículos / patentes)
-========================= */
 function VehicleAutocomplete({
   label,
   placeholder,
@@ -1163,10 +1046,6 @@ function VehicleAutocomplete({
     setTimeout(() => inputRef.current?.blur?.(), 0);
   }
 
-  function onKeyDown(e) {
-    if (e.key === "Escape") setOpen(false);
-  }
-
   useEffect(() => {
     function onDocPointerDown(ev) {
       if (!open) return;
@@ -1194,7 +1073,6 @@ function VehicleAutocomplete({
       setItems([]);
       setTip("Escribe para buscar por patente (ej: AB).");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, empresa]);
 
   return (
@@ -1212,7 +1090,9 @@ function VehicleAutocomplete({
         onChange={onInputChange}
         disabled={disabled}
         onFocus={() => setOpen(true)}
-        onKeyDown={onKeyDown}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setOpen(false);
+        }}
         onBlur={() => {}}
         style={error ? { borderColor: "#dc2626", boxShadow: "0 0 0 2px rgba(220, 38, 38, .15)" } : undefined}
       />
@@ -1272,19 +1152,12 @@ function VehicleAutocomplete({
               <div style={{ padding: 12, opacity: 0.85 }}>{tip || "Escribe para buscar por patente."}</div>
             )}
           </div>
-
-          <div style={{ padding: "10px 12px", fontSize: 12, opacity: 0.7, borderTop: "1px solid rgba(0,0,0,0.06)" }}>
-            Si no aparece, puedes escribir la patente manual.
-          </div>
         </div>
       ) : null}
     </div>
   );
 }
 
-/* =========================
-   Componente principal
-========================= */
 export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost }) {
   const [saving, setSaving] = useState(false);
   const [formErr, setFormErr] = useState("");
@@ -1609,7 +1482,6 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
         <form id="ot-form" onSubmit={handleSubmit} className="gt-form-grid">
           {formErr ? <div className="gt-error">{formErr}</div> : null}
 
-          {/* ===== CLIENTE ===== */}
           <div className="ot-box">
             <div className="ot-box-title">Datos del cliente</div>
 
@@ -1643,16 +1515,20 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
                 value={f.solicitadoPor}
                 onChange={(e) => setField("solicitadoPor", e.target.value)}
                 disabled={saving}
+                name="solicitadoPor"
+                autoComplete="name"
               />
 
               <LabeledInput
-  label="Teléfono solicitado por Sr. (opcional)"
-  placeholder="Ej: +56 9 1234 5678"
-  value={f.telefonoSolicitadoPor}
-  onChange={(e) => setField("telefonoSolicitadoPor", e.target.value)}
-  disabled={saving}
-  type="tel"
-/>
+                label="Teléfono solicitado por Sr. (opcional)"
+                placeholder="Ej: +56 9 1234 5678"
+                value={f.telefonoSolicitadoPor}
+                onChange={(e) => setField("telefonoSolicitadoPor", e.target.value)}
+                disabled={saving}
+                type="tel"
+                name="telefonoSolicitadoPor"
+                autoComplete="tel"
+              />
 
               <div className="ot-span">
                 <LabeledInput
@@ -1662,6 +1538,8 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
                   onChange={(e) => setField("direccion", e.target.value)}
                   disabled={saving}
                   error={errors.direccion}
+                  name="direccion"
+                  autoComplete="street-address"
                 />
               </div>
 
@@ -1685,7 +1563,6 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
             </div>
           </div>
 
-          {/* ===== UBICACIÓN ===== */}
           <div className="ot-box">
             <div className="ot-box-title">Ubicación</div>
 
@@ -1697,6 +1574,8 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
                   value={f.direccionFaena}
                   onChange={(e) => setField("direccionFaena", e.target.value)}
                   disabled={saving}
+                  name="obraTramo"
+                  autoComplete="on"
                 />
               </div>
 
@@ -1717,15 +1596,15 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
                 onChange={(e) => setField("horario", e.target.value)}
                 disabled={saving}
                 error={errors.horario}
+                name="horarioLlegada"
+                autoComplete="on"
               />
             </div>
           </div>
 
-          {/* ===== EQUIPO ===== */}
           <div className="ot-box">
             <div className="ot-box-title">Equipo</div>
 
-            {/* fila 1 */}
             <div className="ot-grid-2">
               <VehicleAutocomplete
                 label="Patente"
@@ -1769,7 +1648,6 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
               />
             </div>
 
-            {/* fila 2 */}
             <div className="ot-grid-2" style={{ marginTop: 12 }}>
               <WorkerAutocomplete
                 label="Rigger (opcional)"
@@ -1798,7 +1676,6 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
               <div />
             </div>
 
-            {/* calendario abajo, igual que editar */}
             <div style={{ marginTop: 14 }}>
               <MiniCalendarMulti
                 valueISO={f.diasProgramados}
@@ -1809,7 +1686,6 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
             </div>
           </div>
 
-          {/* ✅ FOTOS */}
           <div className="ot-box">
             <div className="ot-box-title">Fotos (opcional)</div>
 
@@ -1884,7 +1760,6 @@ export default function CreateWorkOrderModal({ open, onClose, onCreated, apiPost
             ) : null}
           </div>
 
-          {/* ===== DESCRIPCIÓN ===== */}
           <div className="ot-box">
             <div className="ot-box-title">Descripción</div>
 
