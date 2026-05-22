@@ -43,6 +43,9 @@ import WorkshopSuppliesRequest from "./pages/WorkshopSuppliesRequest";
 import PreventionSupplies from "./pages/PreventionSupplies";
 import VehicleFailureReportsCreate from "./pages/VehicleFailureReportsCreate";
 
+// ✅ NUEVO: COTIZACIONES
+import Quotations from "./pages/Quotations";
+
 import { onMessage } from "firebase/messaging";
 import { getMessagingInstance } from "./firebase";
 
@@ -163,6 +166,16 @@ export default function App() {
                 role={["CONTROL_FLOTA", "ADMINISTRADORA", "SUPERADMIN"]}
               >
                 <WorkOrdersAdmin />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ✅ NUEVO: COTIZACIONES */}
+          <Route
+            path="cotizaciones"
+            element={
+              <ProtectedRoute role={["ADMINISTRADORA", "SUPERADMIN"]}>
+                <Quotations />
               </ProtectedRoute>
             }
           />
@@ -314,7 +327,10 @@ export default function App() {
           }
         />
 
-        <Route path="/trabajador/horometro" element={<Navigate to="/trabajador" replace />} />
+        <Route
+          path="/trabajador/horometro"
+          element={<Navigate to="/trabajador" replace />}
+        />
 
         <Route
           path="/trabajador/ordenes-trabajo"

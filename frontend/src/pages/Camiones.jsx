@@ -1320,6 +1320,61 @@ export default function Camiones() {
           </table>
         </div>
 
+        <div className="cam-mobile-list">
+  {paged.map((t) => {
+    const marcaModelo = fixText(`${t.marca || ""} ${t.modelo || ""}`.trim() || "-");
+
+    return (
+      <div className="cam-mobile-card" key={`mobile-${t.id || t.patente}`}>
+        <div className="cam-mobile-card-top">
+          <img
+            src={empresaLogo(t.empresa)}
+            alt={empresaLabel(t.empresa)}
+            className="cam-mobile-logo"
+          />
+
+          <div>
+            <div className="cam-mobile-patente">{fixText(t.patente)}</div>
+            <div className="cam-mobile-empresa">{empresaLabel(t.empresa)}</div>
+          </div>
+
+          <OperationalPill estadoOperativo={t.estadoOperativo} />
+        </div>
+
+        <div className="cam-mobile-info">
+          <div>
+            <span>Marca / Modelo</span>
+            <strong>{marcaModelo}</strong>
+          </div>
+
+          <div>
+            <span>Tipo</span>
+            <strong>{displayTipoVehiculo(t.tipoVehiculo || "")}</strong>
+          </div>
+        </div>
+
+        <div className="cam-mobile-actions">
+          <ActionButton variant="ghost" type="button" onClick={() => openDetailModal(t)}>
+            Ver
+          </ActionButton>
+
+          <ActionButton variant="ghost" type="button" onClick={() => openHorometer(t)}>
+            Horómetro
+          </ActionButton>
+        </div>
+      </div>
+    );
+  })}
+
+  {!loading && paged.length === 0 && (
+    <div className="empty">
+      {vehicles.length === 0
+        ? "No hay vehículos registrados."
+        : "No hay vehículos para este filtro."}
+    </div>
+  )}
+</div>
+
         <div className="panel-foot">
           <span className="muted">
             Mostrando {(safePage - 1) * pageSize + (paged.length ? 1 : 0)}–{(safePage - 1) * pageSize + paged.length} de{" "}

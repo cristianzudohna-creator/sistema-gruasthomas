@@ -1,15 +1,15 @@
 // ✅ Archivo: src/pages/DocumentsModal.jsx
+// ✅ FIX MOBILE:
+// - En teléfono muestra documentos como tarjetas
+// - En escritorio mantiene tabla
+// - Evita scroll lateral en móvil
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import { fixText } from "../utils/fixText";
 
-/* =========================
-   Menú Acciones (NO se corta)
-   - se posiciona con altura REAL del menú
-   - abre arriba o abajo según espacio
-   ========================= */
-function ActionsMenu({ disabled, options }) {
+function ActionsMenu({ disabled, options, compact = false }) {
   const btnRef = useRef(null);
   const menuRef = useRef(null);
   const [open, setOpen] = useState(false);
@@ -18,7 +18,7 @@ function ActionsMenu({ disabled, options }) {
     top: 0,
     left: 0,
     width: 220,
-    placement: "bottom", // "bottom" | "top"
+    placement: "bottom",
   });
 
   function close() {
@@ -30,7 +30,7 @@ function ActionsMenu({ disabled, options }) {
     if (!btn) return;
 
     const r = btn.getBoundingClientRect();
-    const width = 230;
+    const width = compact ? 210 : 230;
     const gap = 10;
 
     let left = r.right - width;
@@ -57,28 +57,21 @@ function ActionsMenu({ disabled, options }) {
     setPos({ top, left, width, placement });
   }
 
-  function openMenu() {
-    if (disabled) return;
-    setOpen(true);
-  }
-
   function toggle() {
     if (disabled) return;
-    if (!open) openMenu();
+    if (!open) setOpen(true);
     else close();
   }
 
   useEffect(() => {
     if (!open) return;
     compute({ useRealMenuHeight: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const t = setTimeout(() => compute({ useRealMenuHeight: true }), 0);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, options?.length]);
 
   useEffect(() => {
@@ -86,7 +79,9 @@ function ActionsMenu({ disabled, options }) {
 
     const onDown = (e) => {
       if (!menuRef.current || !btnRef.current) return;
-      if (!menuRef.current.contains(e.target) && !btnRef.current.contains(e.target)) close();
+      if (!menuRef.current.contains(e.target) && !btnRef.current.contains(e.target)) {
+        close();
+      }
     };
 
     const onKey = (e) => {
@@ -106,7 +101,6 @@ function ActionsMenu({ disabled, options }) {
       window.removeEventListener("resize", onReposition);
       window.removeEventListener("scroll", onReposition, true);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   return (
@@ -119,13 +113,13 @@ function ActionsMenu({ disabled, options }) {
         title="Acciones"
         aria-label="Acciones"
         style={{
-          height: 36,
-          width: 46,
+          height: compact ? 34 : 36,
+          width: compact ? 42 : 46,
           borderRadius: 12,
           border: "1px solid rgba(0,0,0,.12)",
           background: "#fff",
           cursor: disabled ? "not-allowed" : "pointer",
-          fontSize: 20,
+          fontSize: compact ? 18 : 20,
           fontWeight: 900,
           display: "grid",
           placeItems: "center",
@@ -150,22 +144,20 @@ function ActionsMenu({ disabled, options }) {
             padding: 6,
           }}
         >
-          {(options || []).map((op, idx) => {
-            return (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => {
-                  close();
-                  op.onClick?.();
-                }}
-                disabled={!!op.disabled}
-                style={menuItemStyle(op)}
-              >
-                {fixText(op.label)}
-              </button>
-            );
-          })}
+          {(options || []).map((op, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => {
+                close();
+                op.onClick?.();
+              }}
+              disabled={!!op.disabled}
+              style={menuItemStyle(op)}
+            >
+              {fixText(op.label)}
+            </button>
+          ))}
         </div>
       )}
     </>
@@ -189,9 +181,6 @@ function menuItemStyle(op) {
   };
 }
 
-/* =========================
-   Labels para tipos (ENUM -> texto bonito)
-   ========================= */
 const DOCUMENT_TYPE_LABELS = {
   SOAP: "SOAP",
   REVISION_TECNICA: "Revisión técnica",
@@ -202,9 +191,6 @@ const DOCUMENT_TYPE_LABELS = {
   OTRO: "Otro",
 };
 
-/* =========================
-   DocumentsModal
-   ========================= */
 export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
   const API_URL = (apiUrl || "/api").replace(/\/+$/, "");
 
@@ -231,13 +217,18 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
   const [toDelete, setToDelete] = useState(null);
 
   const [modalWidth, setModalWidth] = useState(980);
+  const [isMobile, setIsMobile] = useState(false);
+
   useEffect(() => {
     function compute() {
       const w = window.innerWidth || 1200;
+      setIsMobile(w <= 720);
+
       if (w >= 1100) return setModalWidth(980);
       if (w >= 900) return setModalWidth(900);
       setModalWidth(Math.max(320, Math.floor(w * 0.96)));
     }
+
     compute();
     window.addEventListener("resize", compute);
     return () => window.removeEventListener("resize", compute);
@@ -324,8 +315,8 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
   function getExtensionFromMimeType(contentType) {
     const ct = String(contentType || "").toLowerCase();
     if (ct.includes("pdf")) return "pdf";
-    if (ct.includes("word")) return "doc";
     if (ct.includes("officedocument.wordprocessingml.document")) return "docx";
+    if (ct.includes("word")) return "doc";
     return "";
   }
 
@@ -426,9 +417,7 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
 
       flashSuccess(`✅ Archivo preparado para compartir: ${fileName}`);
     } catch (e) {
-      if (e?.name === "AbortError") {
-        return;
-      }
+      if (e?.name === "AbortError") return;
       console.error("handleShare error:", e);
       setError(fixText(e?.message || "No se pudo compartir el archivo."));
     } finally {
@@ -482,10 +471,12 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
       setError("Debes indicar el tipo de documento.");
       return false;
     }
+
     if (!sinVencimiento && !fechaVencimiento) {
       setError("Debes seleccionar la fecha de vencimiento o marcar “Sin vencimiento”.");
       return false;
     }
+
     return true;
   }
 
@@ -506,6 +497,7 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
 
     if (kind === "create") {
       if (!file) return setError("Debes seleccionar un archivo (PDF/DOC/DOCX).");
+
       try {
         validateFileExtOrThrow(file);
       } catch (e) {
@@ -527,6 +519,7 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
 
   async function confirmSave() {
     if (!pendingSave?.kind) return;
+
     try {
       if (pendingSave.kind === "create") await doCreateDoc();
       else await doUpdateDoc();
@@ -588,8 +581,10 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
         fd.append("file", file);
         fd.append("type", "OTRO");
         fd.append("nombre", nombre.trim());
+
         if (!sinVencimiento && fechaVencimiento) fd.append("fechaVencimiento", fechaVencimiento);
         else fd.append("fechaVencimiento", "");
+
         if (observacion.trim()) fd.append("observacion", observacion.trim());
 
         const res = await fetch(`${API_URL}/vehicles/documents/${editingDocId}/upload`, {
@@ -646,6 +641,7 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
 
   function askDelete(doc) {
     if (!doc?.id) return;
+
     setSuccess("");
     setError("");
     setToDelete(doc);
@@ -688,11 +684,7 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
     setMode("edit");
     setEditingDocId(doc.id);
 
-    setNombre(
-      String(doc.type || "").toUpperCase() === "OTRO"
-        ? fixText(doc.nombre || "")
-        : fixText(doc.type || "")
-    );
+    setNombre(String(doc.type || "").toUpperCase() === "OTRO" ? fixText(doc.nombre || "") : fixText(doc.type || ""));
 
     const fv = isoToDateInput(doc.fechaVencimiento);
     setFechaVencimiento(fv);
@@ -759,6 +751,42 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
   }, [toDelete]);
 
   const canUseNativeShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
+
+  function getDocOptions(d) {
+    const fileUrl = d?.archivoUrl ? toAbsoluteFileUrl(d.archivoUrl) : "";
+    const rowBusy = actionLoadingId === d.id;
+
+    return [
+      fileUrl
+        ? {
+            label: rowBusy ? "Procesando..." : "Descargar",
+            onClick: () => handleDownload(d),
+            disabled: rowBusy,
+          }
+        : { label: "Sin archivo", disabled: true },
+
+      fileUrl && canUseNativeShare
+        ? {
+            label: rowBusy ? "Procesando..." : "Compartir",
+            onClick: () => handleShare(d),
+            disabled: rowBusy,
+          }
+        : {
+            label: "Compartir no disponible",
+            disabled: true,
+          },
+
+      fileUrl
+        ? {
+            label: "Abrir archivo",
+            onClick: () => window.open(fileUrl, "_blank", "noopener,noreferrer"),
+          }
+        : { label: "Sin archivo", disabled: true },
+
+      { label: "Editar", onClick: () => onEditClick(d) },
+      { label: "Eliminar", danger: true, onClick: () => askDelete(d) },
+    ];
+  }
 
   return (
     <>
@@ -830,6 +858,7 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
                     onChange={(e) => setFechaVencimiento(e.target.value)}
                     disabled={saving || sinVencimiento}
                   />
+
                   <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 13 }}>
                     <input
                       type="checkbox"
@@ -855,6 +884,7 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
                     disabled={saving}
                     required={mode === "add"}
                   />
+
                   {file?.name && (
                     <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
                       Seleccionado: <b>{fixText(file.name)}</b> ({Math.round((file.size || 0) / 1024)} KB)
@@ -895,91 +925,146 @@ export default function DocumentsModal({ open, onClose, vehicle, apiUrl }) {
               </div>
             )}
 
-            <div className="gt-docs-wrap">
-              <table className="gt-docs-table" style={{ width: "100%" }}>
-                <thead>
-                  <tr>
-                    <th className="col-tipo" style={{ textAlign: "left" }}>
-                      Tipo
-                    </th>
-                    <th className="col-vence">Vence</th>
-                    <th className="col-estado">Estado</th>
-                    <th className="col-actions">Acciones</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {Array.isArray(docs) &&
-                    docs.map((d) => {
-                      const fileUrl = d?.archivoUrl ? toAbsoluteFileUrl(d.archivoUrl) : "";
-                      const vence = displayVence(d);
-                      const rowBusy = actionLoadingId === d.id;
-
-                      return (
-                        <tr key={d.id}>
-                          <td className="col-tipo" title={displayTipo(d)}>
-                            {displayTipo(d)}
-                          </td>
-
-                          <td className="col-vence" title={vence}>
-                            <span className="vence-text">{vence}</span>
-                          </td>
-
-                          <td className="col-estado">
-                            <span className={pillClass(d.estado)} title={fixText(d.observacion || "")}>
-                              {pillLabel(d.estado)}
-                            </span>
-                          </td>
-
-                          <td className="col-actions">
-                            <ActionsMenu
-                              disabled={saving || rowBusy}
-                              options={[
-                                fileUrl
-                                  ? {
-                                      label: rowBusy ? "Procesando..." : "Descargar",
-                                      onClick: () => handleDownload(d),
-                                      disabled: rowBusy,
-                                    }
-                                  : { label: "Sin archivo", disabled: true },
-
-                                fileUrl && canUseNativeShare
-                                  ? {
-                                      label: rowBusy ? "Procesando..." : "Compartir",
-                                      onClick: () => handleShare(d),
-                                      disabled: rowBusy,
-                                    }
-                                  : {
-                                      label: "Compartir no disponible",
-                                      disabled: true,
-                                    },
-
-                                fileUrl
-                                  ? {
-                                      label: "Abrir archivo",
-                                      onClick: () => window.open(fileUrl, "_blank", "noopener,noreferrer"),
-                                    }
-                                  : { label: "Sin archivo", disabled: true },
-
-                                { label: "Editar", onClick: () => onEditClick(d) },
-                                { label: "Eliminar", danger: true, onClick: () => askDelete(d) },
-                              ]}
-                            />
-                          </td>
-                        </tr>
-                      );
-                    })}
-
-                  {!loading && (!Array.isArray(docs) || docs.length === 0) && (
+            {!isMobile && (
+              <div className="gt-docs-wrap" style={{ width: "100%", overflowX: "hidden" }}>
+                <table className="gt-docs-table" style={{ width: "100%", tableLayout: "fixed" }}>
+                  <thead>
                     <tr>
-                      <td colSpan={4} className="empty">
-                        Este vehículo no tiene documentos todavía.
-                      </td>
+                      <th className="col-tipo" style={{ textAlign: "left" }}>
+                        Tipo
+                      </th>
+                      <th className="col-vence">Vence</th>
+                      <th className="col-estado">Estado</th>
+                      <th className="col-actions">Acciones</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+
+                  <tbody>
+                    {Array.isArray(docs) &&
+                      docs.map((d) => {
+                        const vence = displayVence(d);
+                        const rowBusy = actionLoadingId === d.id;
+
+                        return (
+                          <tr key={d.id}>
+                            <td className="col-tipo" title={displayTipo(d)}>
+                              {displayTipo(d)}
+                            </td>
+
+                            <td className="col-vence" title={vence}>
+                              <span className="vence-text">{vence}</span>
+                            </td>
+
+                            <td className="col-estado">
+                              <span className={pillClass(d.estado)} title={fixText(d.observacion || "")}>
+                                {pillLabel(d.estado)}
+                              </span>
+                            </td>
+
+                            <td className="col-actions">
+                              <ActionsMenu disabled={saving || rowBusy} options={getDocOptions(d)} />
+                            </td>
+                          </tr>
+                        );
+                      })}
+
+                    {!loading && (!Array.isArray(docs) || docs.length === 0) && (
+                      <tr>
+                        <td colSpan={4} className="empty">
+                          Este vehículo no tiene documentos todavía.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {isMobile && (
+              <div style={{ display: "grid", gap: 12 }}>
+                {Array.isArray(docs) &&
+                  docs.map((d) => {
+                    const vence = displayVence(d);
+                    const rowBusy = actionLoadingId === d.id;
+
+                    return (
+                      <div
+                        key={d.id}
+                        style={{
+                          border: "1px solid rgba(0,0,0,.08)",
+                          borderRadius: 16,
+                          background: "#fff",
+                          padding: 12,
+                          boxShadow: "0 8px 18px rgba(0,0,0,.05)",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div
+                              style={{
+                                fontSize: 13,
+                                fontWeight: 900,
+                                color: "rgba(0,0,0,.55)",
+                                marginBottom: 4,
+                              }}
+                            >
+                              Tipo
+                            </div>
+
+                            <div
+                              style={{
+                                fontSize: 15,
+                                fontWeight: 900,
+                                color: "#111",
+                                wordBreak: "break-word",
+                              }}
+                            >
+                              {displayTipo(d)}
+                            </div>
+                          </div>
+
+                          <ActionsMenu disabled={saving || rowBusy} options={getDocOptions(d)} compact />
+                        </div>
+
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "1fr auto",
+                            gap: 10,
+                            alignItems: "center",
+                            marginTop: 12,
+                            paddingTop: 12,
+                            borderTop: "1px solid rgba(0,0,0,.06)",
+                          }}
+                        >
+                          <div>
+                            <div
+                              style={{
+                                fontSize: 12,
+                                fontWeight: 900,
+                                color: "rgba(0,0,0,.55)",
+                                marginBottom: 4,
+                              }}
+                            >
+                              Vence
+                            </div>
+
+                            <div style={{ fontSize: 14, fontWeight: 800 }}>{vence}</div>
+                          </div>
+
+                          <span className={pillClass(d.estado)} title={fixText(d.observacion || "")}>
+                            {pillLabel(d.estado)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                {!loading && (!Array.isArray(docs) || docs.length === 0) && (
+                  <div className="empty">Este vehículo no tiene documentos todavía.</div>
+                )}
+              </div>
+            )}
           </>
         )}
       </Modal>

@@ -1,5 +1,3 @@
-// ✅ Archivo: prisma/schema.prisma (PARTE 1/2)
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -29,8 +27,10 @@ enum AuditEntity {
   WORKSHOP_TASK
   VEHICLE_FAILURE_REPORT
 
-  // ✅ NUEVO
   WORKSHOP_MAINTENANCE_TASK
+
+  // ✅ NUEVO: COTIZACIONES
+  QUOTATION
 }
 
 enum AuditAction {
@@ -185,7 +185,7 @@ enum VehicleFailureReportStatus {
 }
 
 // =========================
-// ✅ NUEVO: MANTENIMIENTO TALLER
+// ✅ MANTENIMIENTO TALLER
 // =========================
 
 enum WorkshopMaintenanceTaskStatus {
@@ -204,6 +204,16 @@ enum WorkshopMaintenanceSignatureRole {
   TALLER
   CONTROL_FLOTA
   ADMINISTRADORA
+}
+
+// =========================
+// ✅ NUEVO: COTIZACIONES
+// =========================
+
+enum QuotationStatus {
+  BORRADOR
+  EMITIDA
+  ANULADA
 }
 
 model User {
@@ -257,10 +267,12 @@ model User {
   vehicleFailureReportsAssigned VehicleFailureReport[] @relation("VehicleFailureReportAssignedTo")
   vehicleFailureReportEvidences VehicleFailureReportEvidence[] @relation("VehicleFailureReportEvidenceUploadedBy")
 
-  // ✅ NUEVO
   workshopMaintenanceTasksCreated  WorkshopMaintenanceTask[] @relation("WorkshopMaintenanceTaskCreatedBy")
   workshopMaintenanceTasksAssigned WorkshopMaintenanceTask[] @relation("WorkshopMaintenanceTaskAssignedTo")
   workshopMaintenanceSignatures    WorkshopMaintenanceSignature[] @relation("WorkshopMaintenanceSignatureSignedBy")
+
+  // ✅ NUEVO: COTIZACIONES
+  quotationsCreated Quotation[] @relation("QuotationCreatedBy")
 
   @@index([empresa])
   @@index([workerType])
@@ -365,14 +377,12 @@ model Vehicle {
   workshopTasks  WorkshopTask[]
   failureReports VehicleFailureReport[]
 
-  // ✅ NUEVO
   workshopMaintenanceTasks WorkshopMaintenanceTask[]
 
   @@index([empresa])
   @@index([estadoOperativo])
   @@index([activo])
 }
-// ✅ Archivo: prisma/schema.prisma (PARTE 2/2)
 
 model VehicleDocument {
   id               String       @id @default(uuid())
@@ -485,6 +495,9 @@ model Client {
   ciudad    String?
 
   workOrders WorkOrder[]
+
+  // ✅ NUEVO: COTIZACIONES
+  quotations Quotation[]
 
   @@unique([empresa, rut], name: "client_empresa_rut_unique")
   @@index([empresa])
@@ -824,6 +837,7 @@ model WorkshopTaskPart {
   @@index([workshopTaskId])
   @@index([nombre])
 }
+
 model WorkshopSupplyRequest {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
@@ -966,7 +980,7 @@ model VehicleFailureReportEvidence {
 }
 
 // =========================
-// ✅ NUEVO: TAREAS DE MANTENIMIENTO TALLER CON FIRMAS
+// ✅ TAREAS DE MANTENIMIENTO TALLER CON FIRMAS
 // =========================
 
 model WorkshopMaintenanceTask {
@@ -1049,4 +1063,93 @@ model WorkshopMaintenanceSignature {
   @@index([signedAt])
 
   @@unique([taskId, role], name: "workshop_maintenance_signature_unique")
+}
+
+// =========================
+// ✅ NUEVO: COTIZACIONES
+// =========================
+
+model Quotation {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  empresa Empresa @default(GRUAS_THOMAS)
+
+  numero Int
+  anio   Int
+
+  status QuotationStatus @default(BORRADOR)
+
+  fecha DateTime @default(now())
+
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  senores         String
+  rut             String?
+  giro            String?
+  direccion       String?
+  comuna          String?
+  ciudad          String?
+  atencion        String?
+  contacto        String?
+  condicionesPago String?
+
+  equipoTitulo      String?
+  equipoDescripcion String
+
+  atencionA   String?
+  obra        String?
+  equipo      String?
+  cotizadoPor String?
+
+  horarioOperacionTitulo  String?
+  horarioOperacionDetalle String?
+
+  observaciones String[] @default([])
+
+  neto  Decimal @default(0) @db.Decimal(12, 2)
+  iva   Decimal @default(0) @db.Decimal(12, 2)
+  total Decimal @default(0) @db.Decimal(12, 2)
+
+  createdById String
+  createdBy   User @relation("QuotationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  items QuotationItem[]
+
+  activo    Boolean   @default(true)
+  deletedAt DateTime?
+
+  @@unique([numero, anio], name: "quotation_numero_anio_unique")
+  @@index([empresa])
+  @@index([numero])
+  @@index([anio])
+  @@index([status])
+  @@index([fecha])
+  @@index([clientId])
+  @@index([createdById])
+  @@index([activo])
+  @@index([deletedAt])
+}
+
+model QuotationItem {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  cantidad Int @default(1)
+
+  detalleTitulo      String
+  detalleDescripcion String?
+
+  valorUnitario Decimal @default(0) @db.Decimal(12, 2)
+  total         Decimal @default(0) @db.Decimal(12, 2)
+
+  orden Int @default(0)
+
+  @@index([quotationId])
+  @@index([orden])
 }

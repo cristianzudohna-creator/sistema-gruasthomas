@@ -2023,6 +2023,21 @@ details.gt-actions summary::-webkit-details-marker {
   font-weight: 700;
   cursor: pointer;
 }
+@media (max-width: 960px) {
+  .admin-sidebar {
+    padding-bottom: calc(90px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .sb-footer {
+    margin-top: 18px !important;
+    padding-bottom: 24px !important;
+  }
+
+  .sb-logout {
+    min-height: 46px;
+    margin-bottom: 18px;
+  }
+}
 
 
 

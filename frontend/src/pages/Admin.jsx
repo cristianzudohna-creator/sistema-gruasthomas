@@ -1,9 +1,6 @@
 // ✅ Archivo: src/pages/Admin.jsx
 // ✅ COMPLETO - RESPONSIVE PRO + PERMISOS AJUSTADOS + SOLICITUD INSUMOS
-// ✅ Mantención taller:
-//    - "Mantenimiento taller" SOLO SUPERADMIN + CONTROL_FLOTA
-//    - "Gestionar mantenciones" SOLO SUPERADMIN + JEFE_TALLER + SUPERVISOR
-//    - "Firmar mantenciones" SOLO SUPERADMIN + ADMINISTRADORA
+// ✅ NUEVO: Cotizaciones para SUPERADMIN + ADMINISTRADORA
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useNavigate, useLocation, Link } from "react-router-dom";
@@ -89,6 +86,7 @@ export default function Admin() {
   const canSeeDashboard = isSuperadmin;
   const canSeeCamiones = isSuperadmin || isControlFlota;
   const canSeeWorkOrders = isSuperadmin || isAdministradora;
+  const canSeeCotizaciones = isSuperadmin || isAdministradora;
   const canSeeTrabajadores = isSuperadmin;
   const canSeeAuditoria = isSuperadmin;
   const canSeeConfiguracion = isSuperadmin;
@@ -120,6 +118,8 @@ export default function Admin() {
   const isWorkOrdersEliminados = path.startsWith(
     "/admin/ordenes-trabajo-eliminadas"
   );
+
+  const isCotizaciones = path.startsWith("/admin/cotizaciones");
 
   const isWorkshopMaintenance = path.startsWith("/admin/mantenimiento-taller");
   const isWorkshopMaintenanceManager = path.startsWith(
@@ -188,7 +188,7 @@ export default function Admin() {
     }
 
     if (isAdministradora) {
-      navigate("/admin/firmar-mantenciones", { replace: true });
+      navigate("/admin/cotizaciones", { replace: true });
       return;
     }
 
@@ -237,6 +237,7 @@ export default function Admin() {
 
     if (isWorkOrdersEliminados) return "Órdenes eliminadas";
     if (isWorkOrders) return "Órdenes de trabajo";
+    if (isCotizaciones) return "Cotizaciones";
 
     if (isWorkshopMaintenance) return "Mantenimiento taller";
     if (isWorkshopMaintenanceManager) return "Gestionar mantenciones";
@@ -388,6 +389,21 @@ export default function Admin() {
             >
               <span className="sb-ico" aria-hidden="true">🧾</span>
               <span>Órdenes de trabajo</span>
+            </button>
+          ) : null}
+
+          {canSeeCotizaciones ? (
+            <button
+              className={`sb-item ${isCotizaciones ? "active" : ""}`}
+              type="button"
+              onClick={() => {
+                setSidebarOpen(false);
+                navigate("/admin/cotizaciones");
+              }}
+              title="Crear y descargar cotizaciones"
+            >
+              <span className="sb-ico" aria-hidden="true">💼</span>
+              <span>Cotizaciones</span>
             </button>
           ) : null}
 

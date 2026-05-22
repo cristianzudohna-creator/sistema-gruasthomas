@@ -39,6 +39,9 @@ import { VehicleFailureReportsModule } from "./vehicle-failure-reports/vehicle-f
 // ✅ NUEVO: tareas de mantenimiento taller con firmas
 import { WorkshopMaintenanceModule } from "./workshop-maintenance/workshop-maintenance.module";
 
+// ✅ NUEVO: COTIZACIONES
+import { QuotationsModule } from "./quotations/quotations.module";
+
 @Module({
   imports: [
     ScheduleModule.forRoot(),
@@ -57,8 +60,10 @@ import { WorkshopMaintenanceModule } from "./workshop-maintenance/workshop-maint
     FirebaseModule,
     VehicleFailureReportsModule,
 
-    // ✅ NUEVO
     WorkshopMaintenanceModule,
+
+    // ✅ NUEVO
+    QuotationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
@@ -70,7 +75,3 @@ export class AppModule implements OnModuleInit {
     // await this.usersService.ensureAdmin();
   }
 }
-
-
-
-

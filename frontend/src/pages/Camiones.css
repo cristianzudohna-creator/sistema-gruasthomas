@@ -279,3 +279,91 @@
     width: 100%;
   }
 }
+.cam-mobile-list {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .vehicles-table {
+    display: none;
+  }
+
+  .table-wrap.no-inner-scroll {
+    display: none;
+  }
+
+  .cam-mobile-list {
+    display: grid;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .cam-mobile-card {
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 18px;
+    padding: 14px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
+  }
+
+  .cam-mobile-card-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .cam-mobile-logo {
+    width: 42px;
+    height: 42px;
+    object-fit: contain;
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.04);
+    padding: 6px;
+  }
+
+  .cam-mobile-patente {
+    font-weight: 1000;
+    font-size: 16px;
+    color: #111;
+  }
+
+  .cam-mobile-empresa {
+    font-size: 12px;
+    font-weight: 800;
+    color: rgba(0, 0, 0, 0.6);
+  }
+
+  .cam-mobile-card-top .status {
+    margin-left: auto;
+  }
+
+  .cam-mobile-info {
+    display: grid;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .cam-mobile-info span {
+    display: block;
+    font-size: 12px;
+    font-weight: 900;
+    color: rgba(0, 0, 0, 0.55);
+    margin-bottom: 3px;
+  }
+
+  .cam-mobile-info strong {
+    font-size: 14px;
+    color: #111;
+  }
+
+  .cam-mobile-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .cam-mobile-actions button {
+    width: 100%;
+  }
+}
