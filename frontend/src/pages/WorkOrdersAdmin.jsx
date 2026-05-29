@@ -1476,12 +1476,16 @@ const [quickFilter, setQuickFilter] = useState("TOTAL");
 
                 const st = String(x?.status || "").toUpperCase();
                 const isPendienteVB = st === "COMPLETADA";
-                const lockEdit = st === "COMPLETADA" || st === "APROBADA" || st === "CERRADA";
+                const lockEdit =
+  st === "CERRADA";
 
                 const approvalComment = String(x?.approvalComment || "").trim();
                 const rejectReason = String(x?.rejectReason || "").trim();
 
-                const canFixReport = st === "COMPLETADA" || st === "RECHAZADA";
+                const canFixReport =
+  st === "COMPLETADA" ||
+  st === "RECHAZADA" ||
+  st === "APROBADA";
 
                 const isDownloading = downloadingId === x.id;
                 const disableOtherDownload = !!downloadingId && downloadingId !== x.id;

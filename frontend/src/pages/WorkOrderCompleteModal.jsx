@@ -1,20 +1,10 @@
 // ✅ Archivo: src/pages/WorkOrderCompleteModal.jsx
-// ✅ COMPLETO + CSS PROPIO + BORRADOR + FIRMA BLOQUEABLE
-// ✅ FIX NUEVO:
-// - En modo admin ahora SÍ muestra "Recibí Conforme (cliente)" en solo lectura.
-// - Se visualiza nombre y rut guardados por el trabajador.
-// - Firma sigue siendo solo lectura en administración.
-// ✅ CAMBIO NUEVO:
-// - "Dirección de la faena" -> "Obra/Tramo"
-// ✅ CAMBIO NUEVO:
-// - "Días de trabajo" ahora muestra día + fecha usando diasProgramados cuando exista
-//   Ej: SAB 05-04-2026 | DOM 06-04-2026
-// ✅ CAMBIO NUEVO:
-// - La firma se recorta y centra automáticamente al guardarse,
-//   para que en el PDF salga centrada aunque el cliente firme en cualquier parte.
-// ✅ NUEVO:
-// - CSS propio en WorkOrderCompleteModal.css
-// - Responsive mobile sin perder el diseño
+// ✅ MODIFICADO: En modo admin ahora puede editar TODO el reporte del operador:
+// - Horas
+// - Kilómetros
+// - Movimientos
+// - Recibí conforme
+// - Firma del cliente
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -69,9 +59,6 @@ async function apiPatch(path, body) {
   return res.json();
 }
 
-/* =========================
-   Utils
-========================= */
 function normalizeText(s) {
   return fixText(String(s || "")).trim();
 }
@@ -120,9 +107,6 @@ function dowLabelFromISO(iso) {
   return dias[date.getDay()] || "";
 }
 
-/* =========================
-   UI helpers
-========================= */
 function FieldRO({ label, value }) {
   const cleanLabel = fixText(String(label ?? ""));
   const cleanValue = typeof value === "string" ? fixText(value) : value;
@@ -149,6 +133,17 @@ function Box({ title, children }) {
   );
 }
 
+function Row({ label, value }) {
+  return (
+    <div className="wocm-row">
+      <div className="wocm-row__label">{fixText(String(label ?? ""))}</div>
+      <div className="wocm-row__value">
+        {typeof value === "string" ? fixText(value) : value || "—"}
+      </div>
+    </div>
+  );
+}
+
 function Resumen({ f, firmaOk, mode, recibi }) {
   const isAdmin = mode === "admin";
   const recNombre = normalizeText(recibi?.nombre) || "—";
@@ -166,34 +161,12 @@ function Resumen({ f, firmaOk, mode, recibi }) {
         <Row label="Hora salida faena" value={normalizeText(f.salidaFaena) || "—"} />
         <Row label="Hora llegada planta" value={normalizeText(f.llegadaPlanta) || "—"} />
         <Row label="Horas colación (opcional)" value={normalizeText(f.colacion) || "—"} />
-
         <Row label="Km salida planta" value={normalizeText(f.kmSalidaPlanta) || "—"} />
-        
         <Row label="Km llegada planta" value={normalizeText(f.kmLlegadaPlanta) || "—"} />
-
-        <Row
-          label="Movimientos / ¿Qué se hizo?"
-          value={normalizeText(f.movimientos) || "—"}
-        />
-
-        {!isAdmin ? (
-          <>
-            <Row label="Recibí Conforme (nombre)" value={recNombre} />
-            <Row label="Recibí Conforme (RUT)" value={recRut} />
-            <Row label="Firma cliente" value={firmaOk ? "✅ Firmada" : "❌ Falta firma"} />
-          </>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function Row({ label, value }) {
-  return (
-    <div className="wocm-row">
-      <div className="wocm-row__label">{fixText(String(label ?? ""))}</div>
-      <div className="wocm-row__value">
-        {typeof value === "string" ? fixText(value) : value || "—"}
+        <Row label="Movimientos / ¿Qué se hizo?" value={normalizeText(f.movimientos) || "—"} />
+        <Row label="Recibí Conforme (nombre)" value={recNombre} />
+        <Row label="Recibí Conforme (RUT)" value={recRut} />
+        <Row label="Firma cliente" value={firmaOk ? "✅ Firmada" : "❌ Falta firma"} />
       </div>
     </div>
   );
@@ -261,9 +234,6 @@ function LabeledTextarea({
   );
 }
 
-/* =========================
-   Firma en Canvas
-========================= */
 function SignaturePad({
   value,
   onChange,
@@ -361,7 +331,6 @@ function SignaturePad({
 
     octx.imageSmoothingEnabled = true;
     octx.imageSmoothingQuality = "high";
-
     octx.drawImage(src, minX, minY, cropW, cropH, dx, dy, drawW, drawH);
 
     return out.toDataURL("image/png");
@@ -553,15 +522,12 @@ function SignaturePad({
 
       <div className="wocm-signature__help">
         {helperText ||
-          "Habilita la firma, pídele al cliente que firme dentro del recuadro. Luego presiona “Enviar a administración”."}
+          "Habilita la firma, pídele al cliente que firme dentro del recuadro."}
       </div>
     </div>
   );
 }
 
-/* =========================
-   Componente principal
-========================= */
 export default function WorkOrderCompleteModal({
   open,
   onClose,
@@ -659,7 +625,6 @@ export default function WorkOrderCompleteModal({
         salidaFaena: normalizeText(f.salidaFaena) || undefined,
         llegadaPlanta: normalizeText(f.llegadaPlanta) || undefined,
         colacion: normalizeText(f.colacion) || null,
-
         kmSalidaPlanta: normalizeText(f.kmSalidaPlanta) || null,
         kmLlegadaPlanta: normalizeText(f.kmLlegadaPlanta) || null,
       },
@@ -703,39 +668,29 @@ export default function WorkOrderCompleteModal({
 
     if (normalizeText(f.colacion)) {
       const n = Number(f.colacion);
-      if (isNaN(n) || n < 0) {
-        e.colacion = "Debe ser un número válido";
-      }
+      if (isNaN(n) || n < 0) e.colacion = "Debe ser un número válido";
     }
 
-    if (!normalizeText(f.kmSalidaPlanta)) {
-  e.kmSalidaPlanta = "Obligatorio";
-} else {
-  const n = Number(f.kmSalidaPlanta);
-  if (isNaN(n) || n < 0) {
-    e.kmSalidaPlanta = "Debe ser un número válido";
-  }
-}
+    if (!normalizeText(f.kmSalidaPlanta)) e.kmSalidaPlanta = "Obligatorio";
+    else {
+      const n = Number(f.kmSalidaPlanta);
+      if (isNaN(n) || n < 0) e.kmSalidaPlanta = "Debe ser un número válido";
+    }
 
-if (!normalizeText(f.kmLlegadaPlanta)) {
-  e.kmLlegadaPlanta = "Obligatorio";
-} else {
-  const n = Number(f.kmLlegadaPlanta);
-  if (isNaN(n) || n < 0) {
-    e.kmLlegadaPlanta = "Debe ser un número válido";
-  }
-}
+    if (!normalizeText(f.kmLlegadaPlanta)) e.kmLlegadaPlanta = "Obligatorio";
+    else {
+      const n = Number(f.kmLlegadaPlanta);
+      if (isNaN(n) || n < 0) e.kmLlegadaPlanta = "Debe ser un número válido";
+    }
 
     if (!normalizeText(f.movimientos)) e.movimientos = "Obligatorio";
 
-    if (!isAdmin) {
-      if (!normalizeText(recibi.nombre)) e.recibiNombre = "Obligatorio";
-      if (!normalizeText(recibi.rut)) e.recibiRut = "Obligatorio";
+    if (!normalizeText(recibi.nombre)) e.recibiNombre = "Obligatorio";
+    if (!normalizeText(recibi.rut)) e.recibiRut = "Obligatorio";
 
-      const firmaOkLocal =
-        !!normalizeText(signature) && String(signature).startsWith("data:image/");
-      if (!firmaOkLocal) e.signature = "Falta firma";
-    }
+    const firmaOkLocal =
+      !!normalizeText(signature) && String(signature).startsWith("data:image/");
+    if (!firmaOkLocal) e.signature = "Falta firma";
 
     setErrors(e);
 
@@ -793,8 +748,8 @@ if (!normalizeText(f.kmLlegadaPlanta)) {
       setDraftMsg("");
 
       const workerReportPayload = buildWorkerReportPayload({
-        includeSignature: !isAdmin,
-        includeRecibi: !isAdmin,
+        includeSignature: true,
+        includeRecibi: true,
       });
 
       if (isAdmin) {
@@ -849,7 +804,7 @@ if (!normalizeText(f.kmLlegadaPlanta)) {
   }, [workOrder, isAdmin]);
 
   const subtitle = isAdmin
-    ? "Corrige el reporte del trabajador (horas/movimientos). La firma del cliente es solo lectura."
+    ? "Corrige el reporte completo del trabajador, incluyendo firma y recibí conforme."
     : "Puedes guardar borrador y seguir después, o enviar a administración cuando esté completo.";
 
   const ro = useMemo(() => {
@@ -892,8 +847,6 @@ if (!normalizeText(f.kmLlegadaPlanta)) {
 
   const firmaOk =
     !!normalizeText(signature) && String(signature).startsWith("data:image/");
-  const recibiNombre = normalizeText(recibi.nombre);
-  const recibiRut = normalizeText(recibi.rut);
 
   return (
     <>
@@ -952,15 +905,12 @@ if (!normalizeText(f.kmLlegadaPlanta)) {
           <form id="ot-complete-form" onSubmit={handleSubmit} className="gt-form-grid">
             {formErr ? <div className="gt-error">{fixText(formErr)}</div> : null}
 
-            {draftMsg ? (
-              <div className="wocm-success">{fixText(draftMsg)}</div>
-            ) : null}
+            {draftMsg ? <div className="wocm-success">{fixText(draftMsg)}</div> : null}
 
             <Box title="Detalle OT (solo lectura)">
               <div className="wocm-grid wocm-grid--3">
                 <FieldRO label="Cliente" value={ro.cliente} />
                 <FieldRO label="RUT" value={ro.rut} />
-
                 <FieldRO label="Solicitado por" value={ro.solicitadoPor} />
                 <FieldRO label="Días de trabajo" value={ro.diasTrabajo} />
                 <FieldRO label="Horario llegada" value={ro.horario} />
@@ -972,7 +922,6 @@ if (!normalizeText(f.kmLlegadaPlanta)) {
                 <FieldRO label="Comuna" value={ro.comuna} />
                 <FieldRO label="Ciudad" value={ro.ciudad} />
                 <FieldRO label="Dirección (cliente)" value={ro.direccionCliente} />
-
                 <FieldRO label="Camión" value={ro.camion} />
                 <FieldRO label="Conductor" value={ro.conductor} />
                 <FieldRO label="Rigger" value={ro.rigger} />
@@ -1002,98 +951,86 @@ if (!normalizeText(f.kmLlegadaPlanta)) {
 
             <Box title="Detalle de horas">
               <div className="ot-grid-2">
-                <Box title="Detalle de horas">
-  <div className="ot-grid-2">
-    <LabeledInput
-      label="Hora salida planta"
-      placeholder="Ej: 20:30"
-      value={f.salidaPlanta}
-      onChange={(e) => setField("salidaPlanta", e.target.value)}
-      disabled={saving || savingDraft}
-      error={errors.salidaPlanta}
-    />
+                <LabeledInput
+                  label="Hora salida planta"
+                  placeholder="Ej: 20:30"
+                  value={f.salidaPlanta}
+                  onChange={(e) => setField("salidaPlanta", e.target.value)}
+                  disabled={saving || savingDraft}
+                  error={errors.salidaPlanta}
+                />
 
-    <LabeledInput
-      label="Km salida planta"
-      placeholder="Ej: 123456"
-      value={f.kmSalidaPlanta}
-      onChange={(e) => setField("kmSalidaPlanta", e.target.value)}
-      disabled={saving || savingDraft}
-      error={errors.kmSalidaPlanta}
-    />
+                <LabeledInput
+                  label="Km salida planta"
+                  placeholder="Ej: 123456"
+                  value={f.kmSalidaPlanta}
+                  onChange={(e) => setField("kmSalidaPlanta", e.target.value)}
+                  disabled={saving || savingDraft}
+                  error={errors.kmSalidaPlanta}
+                />
 
-    <LabeledInput
-      label="Hora llegada faena"
-      placeholder="Ej: 21:00"
-      value={f.llegadaFaena}
-      onChange={(e) => setField("llegadaFaena", e.target.value)}
-      disabled={saving || savingDraft}
-      error={errors.llegadaFaena}
-    />
+                <LabeledInput
+                  label="Hora llegada faena"
+                  placeholder="Ej: 21:00"
+                  value={f.llegadaFaena}
+                  onChange={(e) => setField("llegadaFaena", e.target.value)}
+                  disabled={saving || savingDraft}
+                  error={errors.llegadaFaena}
+                />
 
-    <div>
-      <div className="wocm-label">
-        Horas de colación (opcional)
-      </div>
+                <div>
+                  <div className="wocm-label">Horas de colación (opcional)</div>
 
-      <input
-        type="number"
-        min="0"
-        max="12"
-        step="1"
-        className="gt-input"
-        placeholder="Ej: 1"
-        value={f.colacion ?? ""}
-        onChange={(e) =>
-          setField(
-            "colacion",
-            e.target.value === "" ? "" : Number(e.target.value)
-          )
-        }
-        disabled={saving || savingDraft}
-      />
+                  <input
+                    type="number"
+                    min="0"
+                    max="12"
+                    step="1"
+                    className="gt-input"
+                    placeholder="Ej: 1"
+                    value={f.colacion ?? ""}
+                    onChange={(e) =>
+                      setField(
+                        "colacion",
+                        e.target.value === "" ? "" : Number(e.target.value)
+                      )
+                    }
+                    disabled={saving || savingDraft}
+                  />
 
-      <div className="wocm-help">
-        Cantidad de horas (ej: 1, 2, 3)
-      </div>
+                  <div className="wocm-help">Cantidad de horas (ej: 1, 2, 3)</div>
 
-      {errors.colacion && (
-        <div className="wocm-inline-error">
-          {errors.colacion}
-        </div>
-      )}
-    </div>
+                  {errors.colacion ? (
+                    <div className="wocm-inline-error">{errors.colacion}</div>
+                  ) : null}
+                </div>
 
-    <LabeledInput
-      label="Hora salida faena"
-      placeholder="Ej: 05:00"
-      value={f.salidaFaena}
-      onChange={(e) => setField("salidaFaena", e.target.value)}
-      disabled={saving || savingDraft}
-      error={errors.salidaFaena}
-    />
+                <LabeledInput
+                  label="Hora salida faena"
+                  placeholder="Ej: 05:00"
+                  value={f.salidaFaena}
+                  onChange={(e) => setField("salidaFaena", e.target.value)}
+                  disabled={saving || savingDraft}
+                  error={errors.salidaFaena}
+                />
 
-    <LabeledInput
-      label="Hora llegada planta"
-      placeholder="Ej: 06:00"
-      value={f.llegadaPlanta}
-      onChange={(e) => setField("llegadaPlanta", e.target.value)}
-      disabled={saving || savingDraft}
-      error={errors.llegadaPlanta}
-    />
+                <LabeledInput
+                  label="Hora llegada planta"
+                  placeholder="Ej: 06:00"
+                  value={f.llegadaPlanta}
+                  onChange={(e) => setField("llegadaPlanta", e.target.value)}
+                  disabled={saving || savingDraft}
+                  error={errors.llegadaPlanta}
+                />
 
-    <div className="wocm-km-grid">
-      <LabeledInput
-        label="Km llegada planta"
-        placeholder="Ej: 124500"
-        value={f.kmLlegadaPlanta}
-        onChange={(e) => setField("kmLlegadaPlanta", e.target.value)}
-        disabled={saving || savingDraft}
-        error={errors.kmLlegadaPlanta}
-      />
-    </div>
-  </div>
-</Box>
+                <LabeledInput
+                  label="Km llegada planta"
+                  placeholder="Ej: 124500"
+                  value={f.kmLlegadaPlanta}
+                  onChange={(e) => setField("kmLlegadaPlanta", e.target.value)}
+                  disabled={saving || savingDraft}
+                  error={errors.kmLlegadaPlanta}
+                />
               </div>
             </Box>
 
@@ -1109,84 +1046,54 @@ if (!normalizeText(f.kmLlegadaPlanta)) {
             </Box>
 
             <Box title="Recibí Conforme (cliente)">
-              {isAdmin ? (
-                <div className="ot-grid-2">
-                  <FieldRO label="Nombre quien recibe conforme" value={recibiNombre || "—"} />
-                  <FieldRO label="RUT quien recibe conforme" value={recibiRut || "—"} />
-                </div>
-              ) : (
-                <div className="ot-grid-2">
-                  <LabeledInput
-                    label="Nombre quien recibe conforme (obligatorio)"
-                    placeholder="Ej: Juan Pérez"
-                    value={recibi.nombre}
-                    onChange={(e) => setRecibiField("nombre", e.target.value)}
-                    disabled={saving || savingDraft}
-                    error={errors.recibiNombre}
-                  />
-                  <LabeledInput
-                    label="RUT quien recibe conforme (obligatorio)"
-                    placeholder="Ej: 12.345.678-9"
-                    value={recibi.rut}
-                    onChange={(e) => setRecibiField("rut", e.target.value)}
-                    disabled={saving || savingDraft}
-                    error={errors.recibiRut}
-                  />
-                </div>
-              )}
+              <div className="ot-grid-2">
+                <LabeledInput
+                  label="Nombre quien recibe conforme (obligatorio)"
+                  placeholder="Ej: Juan Pérez"
+                  value={recibi.nombre}
+                  onChange={(e) => setRecibiField("nombre", e.target.value)}
+                  disabled={saving || savingDraft}
+                  error={errors.recibiNombre}
+                />
+
+                <LabeledInput
+                  label="RUT quien recibe conforme (obligatorio)"
+                  placeholder="Ej: 12.345.678-9"
+                  value={recibi.rut}
+                  onChange={(e) => setRecibiField("rut", e.target.value)}
+                  disabled={saving || savingDraft}
+                  error={errors.recibiRut}
+                />
+              </div>
             </Box>
 
             <Box title="Firma del cliente">
-              {!isAdmin ? (
-                <>
-                  {errors.signature ? (
-                    <div className="gt-error wocm-signature-error">
-                      Debes pedir la firma del cliente antes de enviar.
-                    </div>
-                  ) : null}
+              {errors.signature ? (
+                <div className="gt-error wocm-signature-error">
+                  Debes pedir la firma del cliente antes de guardar.
+                </div>
+              ) : null}
 
-                  <SignaturePad
-                    value={signature}
-                    onChange={(v) => {
-                      setSignature(v);
-                      setErrors((prev) => ({ ...prev, signature: undefined }));
-                      setDraftMsg("");
-                    }}
-                    disabled={saving || savingDraft}
-                    enabled={signatureEnabled}
-                    onEnableChange={setSignatureEnabled}
-                    helperText='Habilita la firma, pide al cliente que firme dentro del recuadro. Luego presiona “Guardar borrador” o “Enviar a administración”.'
-                  />
+              <SignaturePad
+                value={signature}
+                onChange={(v) => {
+                  setSignature(v);
+                  setErrors((prev) => ({ ...prev, signature: undefined }));
+                  setDraftMsg("");
+                }}
+                disabled={saving || savingDraft}
+                enabled={signatureEnabled}
+                onEnableChange={setSignatureEnabled}
+                helperText={
+                  isAdmin
+                    ? "Puedes editar o volver a pedir la firma del cliente."
+                    : "Habilita la firma, pide al cliente que firme dentro del recuadro. Luego presiona guardar."
+                }
+              />
 
-                  <div className="wocm-signature-state">
-                    Estado firma: {firmaOk ? "✅ Firmada" : "❌ Falta firma"}
-                  </div>
-                </>
-              ) : (
-                <>
-                  {firmaOk ? (
-                    <div className="wocm-admin-signature">
-                      <div className="wocm-admin-signature__title">
-                        Firma registrada (solo lectura)
-                      </div>
-
-                      <div className="wocm-admin-signature__preview">
-                        <img
-                          src={signature}
-                          alt="Firma cliente"
-                          className="wocm-admin-signature__img"
-                        />
-                      </div>
-
-                      <div className="wocm-admin-signature__state">
-                        Estado firma: ✅ Firmada
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="wocm-muted">Sin firma registrada.</div>
-                  )}
-                </>
-              )}
+              <div className="wocm-signature-state">
+                Estado firma: {firmaOk ? "✅ Firmada" : "❌ Falta firma"}
+              </div>
             </Box>
           </form>
         )}

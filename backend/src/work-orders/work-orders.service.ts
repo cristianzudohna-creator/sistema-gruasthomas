@@ -1675,12 +1675,11 @@ export class WorkOrdersService {
       throw new BadRequestException("Completa al menos Cliente o Lugar.");
     }
 
-    if (
-      exists.status === WorkOrderStatus.APROBADA ||
-      exists.status === WorkOrderStatus.CERRADA
-    ) {
-      throw new BadRequestException("No se puede editar una OT aprobada/cerrada.");
-    }
+    if (exists.status === WorkOrderStatus.CERRADA) {
+  throw new BadRequestException(
+    "No se puede editar una OT cerrada."
+  );
+}
 
     const rutNorm = normalizeRut((dto as any).rut);
     const clientId = await this.resolveClientIdOrNull(dto, exists.empresa as any);
@@ -2179,12 +2178,11 @@ export class WorkOrdersService {
     if (!exists) throw new NotFoundException("OT no encontrada");
     if (exists.activo === false) throw new NotFoundException("OT no encontrada");
 
-    if (
-      exists.status === WorkOrderStatus.APROBADA ||
-      exists.status === WorkOrderStatus.CERRADA
-    ) {
-      throw new BadRequestException("No se puede corregir una OT aprobada/cerrada.");
-    }
+    if (exists.status === WorkOrderStatus.CERRADA) {
+  throw new BadRequestException(
+    "No se puede corregir una OT cerrada."
+  );
+}
 
     const data: any = {
       workerReport,
