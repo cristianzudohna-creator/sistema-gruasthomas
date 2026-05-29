@@ -1492,7 +1492,36 @@ const [quickFilter, setQuickFilter] = useState("TOTAL");
 
                 return (
                   <tr key={x.id} style={isPendienteVB ? { background: "rgba(245,179,1,.06)" } : undefined}>
-                    <td style={{ fontWeight: 900 }}>{shortOtId(x.id)}</td>
+                    <td>
+  <div
+    style={{
+      display: "flex",
+      flexDirection: "column",
+      gap: 6,
+    }}
+  >
+    <div style={{ fontWeight: 900 }}>
+      {shortOtId(x.id)}
+    </div>
+
+    <div
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "4px 10px",
+        borderRadius: 999,
+        background: "rgba(0,0,0,0.06)",
+        border: "1px solid rgba(0,0,0,0.08)",
+        fontSize: 12,
+        fontWeight: 900,
+        width: "fit-content",
+      }}
+    >
+      🚛 {x?.camion || "Sin patente"}
+    </div>
+  </div>
+</td>
 
                     <td style={{ fontWeight: 900 }}>{fmtDate(getDisplayWorkOrderDate(x))}</td>
 
