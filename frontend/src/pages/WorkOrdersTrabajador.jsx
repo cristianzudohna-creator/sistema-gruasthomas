@@ -399,17 +399,6 @@ const isRigger = isRiggerPrincipal && !isOperador;
 
       <div className="wot-stats-grid">
         <StatCard title="Total" value={stats.total} hint={totalHint} />
-        <StatCard title="Nuevas" value={stats.nuevas} hint="Últimas 24 horas" />
-        <StatCard
-          title="En proceso"
-          value={stats.enProceso}
-          hint="Guardadas como borrador"
-        />
-        <StatCard
-          title="En aprobación"
-          value={stats.enAprobacion}
-          hint="Esperando visto bueno"
-        />
       </div>
 
       <div className="panel">
