@@ -1,14 +1,9 @@
 // ✅ Archivo: src/pages/MaintenancesModal.jsx (COMPLETO)
-// ✅ CAMBIOS:
-// - quitado Fecha próxima
-// - quitado "Sin próxima mantención"
-// - quitado Observación / columna Obs.
-// - ajustada validación y payload
-// - se mantiene lista, edición, eliminación y archivo
-// ✅ FIX NUEVO:
-// - menú de acciones de 3 puntos ahora flotante con position: fixed
-// - z-index alto para quedar sobre el modal
-// - se cierra con click fuera, ESC o scroll
+// ✅ FIX: menú de 3 puntos funciona en móvil y PC
+// ✅ NUEVO: botón Compartir
+// ✅ NUEVO: mejor diseño móvil del menú
+// ✅ FIX: Ver / Descargar, Editar y Eliminar ya no quedan bloqueados
+// ✅ FIX: soporta archivoUrl / archivo / url / fileUrl / documentUrl / documentoUrl
 
 import { useEffect, useState } from "react";
 import ConfirmModal from "../components/ui/ConfirmModal";
@@ -30,15 +25,21 @@ function toDateInput(value) {
 
 function toAbsoluteFileUrl(urlOrPath) {
   if (!urlOrPath) return "";
-  const s = String(urlOrPath);
+
+  const s = String(urlOrPath).trim();
+  if (!s) return "";
+
   if (s.startsWith("http://") || s.startsWith("https://")) return s;
+
   const base = String(API_URL).replace(/\/$/, "");
   const path = s.startsWith("/") ? s : `/${s}`;
+
   return `${base}${path}`;
 }
 
 async function readError(res) {
   const ct = res.headers.get("content-type") || "";
+
   try {
     if (ct.includes("application/json")) {
       const data = await res.json();
@@ -46,6 +47,7 @@ async function readError(res) {
       if (typeof data?.message === "string") return data.message;
       return JSON.stringify(data);
     }
+
     const t = await res.text();
     return t || `HTTP ${res.status}`;
   } catch {
@@ -61,19 +63,8 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
   const [success, setSuccess] = useState("");
 
   const [modalWidth, setModalWidth] = useState(1000);
-  useEffect(() => {
-    function compute() {
-      const w = window.innerWidth || 1200;
-      if (w >= 1100) return setModalWidth(1000);
-      if (w >= 900) return setModalWidth(920);
-      setModalWidth(Math.max(320, Math.floor(w * 0.96)));
-    }
-    compute();
-    window.addEventListener("resize", compute);
-    return () => window.removeEventListener("resize", compute);
-  }, []);
 
-  const [mode, setMode] = useState("list"); // "list" | "add" | "edit"
+  const [mode, setMode] = useState("list");
   const [editing, setEditing] = useState(null);
 
   const [form, setForm] = useState({
@@ -85,7 +76,26 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
 
   const [actionMenu, setActionMenu] = useState(null);
 
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [toDelete, setToDelete] = useState(null);
+
   const isFormOpen = mode === "add" || mode === "edit";
+
+  useEffect(() => {
+    function compute() {
+      const w = window.innerWidth || 1200;
+
+      if (w >= 1100) return setModalWidth(1000);
+      if (w >= 900) return setModalWidth(920);
+
+      setModalWidth(Math.max(320, Math.floor(w * 0.96)));
+    }
+
+    compute();
+
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+  }, []);
 
   function flashSuccess(msg) {
     setSuccess(msg);
@@ -96,13 +106,25 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
     setActionMenu(null);
   }
 
+  function getMaintenanceFileUrl(m) {
+    return toAbsoluteFileUrl(
+      m?.archivoUrl ||
+        m?.archivo ||
+        m?.url ||
+        m?.fileUrl ||
+        m?.documentUrl ||
+        m?.documentoUrl ||
+        ""
+    );
+  }
+
   function openActionMenu(e, m) {
     e.preventDefault();
     e.stopPropagation();
 
     const rect = e.currentTarget.getBoundingClientRect();
-    const menuWidth = 220;
-    const menuHeight = 148;
+    const menuWidth = 250;
+    const menuHeight = 230;
     const gap = 8;
 
     let left = rect.right - menuWidth;
@@ -117,23 +139,43 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
     if (top + menuHeight > vh - 12) {
       top = rect.top - menuHeight - gap;
     }
+
     if (top < 12) top = 12;
 
     setActionMenu({
       id: m.id,
       left,
       top,
-      fileUrl: m.archivoUrl ? toAbsoluteFileUrl(m.archivoUrl) : "",
+      fileUrl: getMaintenanceFileUrl(m),
       item: m,
     });
   }
 
-  useEffect(() => {
-    function onDocPointerDown(e) {
-      if (!actionMenu) return;
-      closeActionMenu();
+  async function shareFile(url) {
+    if (!url) {
+      alert("Esta mantención no tiene archivo asociado.");
+      return;
     }
 
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: "Mantención vehículo",
+          text: `Mantención de ${vehicle?.patente || "vehículo"}`,
+          url,
+        });
+      } else {
+        await navigator.clipboard.writeText(url);
+        alert("Link copiado al portapapeles.");
+      }
+
+      closeActionMenu();
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  useEffect(() => {
     function onEsc(e) {
       if (e.key === "Escape") closeActionMenu();
     }
@@ -142,22 +184,17 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
       if (actionMenu) closeActionMenu();
     }
 
-    document.addEventListener("mousedown", onDocPointerDown);
     document.addEventListener("keydown", onEsc);
     window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", onScroll);
 
     return () => {
-      document.removeEventListener("mousedown", onDocPointerDown);
       document.removeEventListener("keydown", onEsc);
       window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onScroll);
     };
   }, [actionMenu]);
 
-  // =========================
-  // FETCH
-  // =========================
   async function fetchMaintenances() {
     if (!vehicle?.id) return;
 
@@ -211,12 +248,10 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
     } else {
       closeActionMenu();
     }
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, vehicle?.id]);
 
-  // =========================
-  // FORM
-  // =========================
   function resetForm() {
     setEditing(null);
     setForm({
@@ -250,21 +285,26 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
 
     setForm({
       typeText: m?.nombre || m?.type || "",
-      fechaRealizada: toDateInput(m.fechaRealizada),
+      fechaRealizada: toDateInput(m?.fechaRealizada),
     });
 
     setFile(null);
   }
 
-  // =========================
-  // GUARDAR
-  // =========================
   async function createWithUpload() {
     if (!vehicle?.id) return;
 
-    if (!form.typeText.trim()) throw new Error("Debes escribir el tipo de mantención.");
-    if (!form.fechaRealizada) throw new Error("Debes seleccionar la fecha realizada.");
-    if (!file) throw new Error("Debes seleccionar un archivo (PDF/DOC/DOCX).");
+    if (!form.typeText.trim()) {
+      throw new Error("Debes escribir el tipo de mantención.");
+    }
+
+    if (!form.fechaRealizada) {
+      throw new Error("Debes seleccionar la fecha realizada.");
+    }
+
+    if (!file) {
+      throw new Error("Debes seleccionar un archivo (PDF/DOC/DOCX).");
+    }
 
     const fileName = file?.name?.toLowerCase?.() || "";
     const okExt =
@@ -272,9 +312,12 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
       fileName.endsWith(".doc") ||
       fileName.endsWith(".docx");
 
-    if (!okExt) throw new Error("Formato no permitido. Solo PDF, DOC o DOCX.");
+    if (!okExt) {
+      throw new Error("Formato no permitido. Solo PDF, DOC o DOCX.");
+    }
 
     const MAX_MB = 12;
+
     if ((file?.size || 0) > MAX_MB * 1024 * 1024) {
       throw new Error(`Archivo demasiado grande. Máximo ${MAX_MB}MB.`);
     }
@@ -298,15 +341,23 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
       return;
     }
 
-    if (!res.ok) throw new Error((await readError(res)) || "Error al guardar");
+    if (!res.ok) {
+      throw new Error((await readError(res)) || "Error al guardar");
+    }
+
     await res.json().catch(() => null);
   }
 
   async function updateFieldsOnly() {
     if (!editing?.id) return;
 
-    if (!form.typeText.trim()) throw new Error("Debes escribir el tipo de mantención.");
-    if (!form.fechaRealizada) throw new Error("Debes seleccionar la fecha realizada.");
+    if (!form.typeText.trim()) {
+      throw new Error("Debes escribir el tipo de mantención.");
+    }
+
+    if (!form.fechaRealizada) {
+      throw new Error("Debes seleccionar la fecha realizada.");
+    }
 
     const payload = {
       type: "OTRO",
@@ -327,12 +378,16 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
       return;
     }
 
-    if (!res.ok) throw new Error((await readError(res)) || "Error al guardar");
+    if (!res.ok) {
+      throw new Error((await readError(res)) || "Error al guardar");
+    }
+
     await res.json().catch(() => null);
   }
 
   async function saveMaintenance(e) {
     e.preventDefault();
+
     if (!vehicle?.id || saving) return;
 
     try {
@@ -343,7 +398,11 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
       else await updateFieldsOnly();
 
       await fetchMaintenances();
-      flashSuccess(mode === "add" ? "✅ Mantención creada" : "✅ Cambios guardados");
+
+      flashSuccess(
+        mode === "add" ? "✅ Mantención creada" : "✅ Cambios guardados"
+      );
+
       cancelForm();
     } catch (e2) {
       setError(e2?.message || "Error al guardar");
@@ -351,12 +410,6 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
       setSaving(false);
     }
   }
-
-  // =========================
-  // DELETE
-  // =========================
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [toDelete, setToDelete] = useState(null);
 
   function askDelete(m) {
     closeActionMenu();
@@ -383,9 +436,12 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
         return;
       }
 
-      if (!res.ok) throw new Error((await readError(res)) || "No se pudo eliminar");
+      if (!res.ok) {
+        throw new Error((await readError(res)) || "No se pudo eliminar");
+      }
 
       await fetchMaintenances();
+
       flashSuccess("✅ Mantención eliminada");
 
       setConfirmOpen(false);
@@ -408,7 +464,12 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
         Cerrar
       </button>
 
-      <button className="gt-btn gt-btn-primary" type="button" onClick={openAdd} disabled={saving}>
+      <button
+        className="gt-btn gt-btn-primary"
+        type="button"
+        onClick={openAdd}
+        disabled={saving}
+      >
         + Agregar mantención
       </button>
     </>
@@ -416,22 +477,42 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
 
   return (
     <>
-      <Modal open={open} onClose={onClose} title={title} subtitle={subtitle} width={modalWidth} footer={footer}>
-        {!isFormOpen && (
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-            <button className="gt-btn ghost" type="button" onClick={fetchMaintenances} disabled={loading || saving}>
+      <Modal
+        open={open}
+        onClose={onClose}
+        title={title}
+        subtitle={subtitle}
+        width={modalWidth}
+        footer={footer}
+      >
+        {!isFormOpen ? (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: 10,
+              marginBottom: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <button
+              className="gt-btn ghost"
+              type="button"
+              onClick={fetchMaintenances}
+              disabled={loading || saving}
+            >
               {loading ? "Cargando..." : "Refrescar"}
             </button>
           </div>
-        )}
+        ) : null}
 
-        {error && (
+        {error ? (
           <div className="gt-error" style={{ marginBottom: 12 }}>
             {error}
           </div>
-        )}
+        ) : null}
 
-        {success && (
+        {success ? (
           <div
             style={{
               marginBottom: 12,
@@ -446,9 +527,9 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
           >
             {success}
           </div>
-        )}
+        ) : null}
 
-        {isFormOpen && (
+        {isFormOpen ? (
           <div
             style={{
               padding: 14,
@@ -457,7 +538,10 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
               background: "rgba(0,0,0,0.02)",
             }}
           >
-            <h4 style={{ margin: 0 }}>{mode === "edit" ? "Editar mantención" : "Agregar mantención"}</h4>
+            <h4 style={{ margin: 0 }}>
+              {mode === "edit" ? "Editar mantención" : "Agregar mantención"}
+            </h4>
+
             <div style={{ height: 10 }} />
 
             <form onSubmit={saveMaintenance}>
@@ -468,7 +552,9 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
                     className="gt-input"
                     placeholder='Ej: "Cambio de aceite", "Cambio de correa"...'
                     value={form.typeText}
-                    onChange={(e) => setForm({ ...form, typeText: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, typeText: e.target.value })
+                    }
                     disabled={saving}
                     required
                   />
@@ -480,7 +566,9 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
                     type="date"
                     className="gt-input"
                     value={form.fechaRealizada}
-                    onChange={(e) => setForm({ ...form, fechaRealizada: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, fechaRealizada: e.target.value })
+                    }
                     required
                     disabled={saving}
                   />
@@ -497,11 +585,13 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
                       disabled={saving}
                       required
                     />
-                    {file && (
+
+                    {file ? (
                       <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
-                        Seleccionado: <b>{file.name}</b> ({Math.round(file.size / 1024)} KB)
+                        Seleccionado: <b>{file.name}</b>{" "}
+                        ({Math.round(file.size / 1024)} KB)
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 ) : (
                   <div className="gt-field" style={{ gridColumn: "1 / -1" }}>
@@ -513,20 +603,33 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
                 )}
 
                 <div className="maint-form-actions">
-                  <button className="gt-btn ghost" type="button" onClick={cancelForm} disabled={saving}>
+                  <button
+                    className="gt-btn ghost"
+                    type="button"
+                    onClick={cancelForm}
+                    disabled={saving}
+                  >
                     Cancelar
                   </button>
 
-                  <button className="gt-btn gt-btn-primary" type="submit" disabled={saving}>
-                    {saving ? "Guardando..." : mode === "edit" ? "Guardar cambios" : "Guardar mantención"}
+                  <button
+                    className="gt-btn gt-btn-primary"
+                    type="submit"
+                    disabled={saving}
+                  >
+                    {saving
+                      ? "Guardando..."
+                      : mode === "edit"
+                      ? "Guardar cambios"
+                      : "Guardar mantención"}
                   </button>
                 </div>
               </div>
             </form>
           </div>
-        )}
+        ) : null}
 
-        {!isFormOpen && (
+        {!isFormOpen ? (
           <div className="gt-maint-wrap">
             <table className="gt-maint-table" style={{ width: "100%" }}>
               <thead>
@@ -553,12 +656,23 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
                         <div className="maint-tipo-main">{label}</div>
                       </td>
 
-                      <td className="col-realizada" style={{ whiteSpace: "nowrap" }}>
+                      <td
+                        className="col-realizada"
+                        style={{ whiteSpace: "nowrap" }}
+                      >
                         {toDateInput(m.fechaRealizada) || "-"}
                       </td>
 
-                      <td className="col-actions" style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                        <div style={{ display: "inline-flex", justifyContent: "flex-end" }}>
+                      <td
+                        className="col-actions"
+                        style={{ textAlign: "right", whiteSpace: "nowrap" }}
+                      >
+                        <div
+                          style={{
+                            display: "inline-flex",
+                            justifyContent: "flex-end",
+                          }}
+                        >
                           <button
                             type="button"
                             aria-label="Acciones"
@@ -588,20 +702,20 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
                   );
                 })}
 
-                {!loading && items.length === 0 && (
+                {!loading && items.length === 0 ? (
                   <tr>
                     <td colSpan={3} className="empty">
                       No hay mantenciones registradas.
                     </td>
                   </tr>
-                )}
+                ) : null}
               </tbody>
             </table>
           </div>
-        )}
+        ) : null}
       </Modal>
 
-      {actionMenu && (
+      {actionMenu ? (
         <div
           style={{
             position: "fixed",
@@ -610,7 +724,7 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
           }}
         >
           <div
-            onClick={closeActionMenu}
+            onMouseDown={closeActionMenu}
             style={{
               position: "absolute",
               inset: 0,
@@ -619,48 +733,86 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
           />
 
           <div
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
             style={{
               position: "fixed",
               top: actionMenu.top,
               left: actionMenu.left,
-              width: 220,
+              width: 250,
               zIndex: 2147483647,
               background: "#fff",
               border: "1px solid rgba(15,23,42,0.10)",
-              borderRadius: 16,
-              boxShadow: "0 18px 40px rgba(15,23,42,0.16)",
+              borderRadius: 18,
+              boxShadow: "0 20px 45px rgba(15,23,42,0.18)",
               overflow: "hidden",
             }}
           >
             {actionMenu.fileUrl ? (
-              <a
-                href={actionMenu.fileUrl}
-                target="_blank"
-                rel="noreferrer"
-                style={{
-                  display: "block",
-                  padding: "14px 16px",
-                  textDecoration: "none",
-                  color: "rgba(0,0,0,0.85)",
-                  fontWeight: 700,
-                  borderBottom: "1px solid rgba(0,0,0,0.06)",
-                  background: "#fff",
-                }}
-                onClick={closeActionMenu}
-              >
-                Ver / Descargar
-              </a>
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.open(
+                      actionMenu.fileUrl,
+                      "_blank",
+                      "noopener,noreferrer"
+                    );
+                    closeActionMenu();
+                  }}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "16px",
+                    textAlign: "left",
+                    border: "none",
+                    borderBottom: "1px solid rgba(0,0,0,0.06)",
+                    color: "#111827",
+                    fontWeight: 800,
+                    background: "#fff",
+                    cursor: "pointer",
+                    fontSize: 15,
+                  }}
+                >
+                  📄 Ver / Descargar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => shareFile(actionMenu.fileUrl)}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "16px",
+                    textAlign: "left",
+                    border: "none",
+                    borderBottom: "1px solid rgba(0,0,0,0.06)",
+                    color: "#111827",
+                    fontWeight: 800,
+                    background: "#fff",
+                    cursor: "pointer",
+                    fontSize: 15,
+                  }}
+                >
+                  📲 Compartir
+                </button>
+              </>
             ) : (
               <div
                 style={{
-                  padding: "14px 16px",
+                  padding: "16px",
                   color: "rgba(0,0,0,0.45)",
                   fontWeight: 700,
                   borderBottom: "1px solid rgba(0,0,0,0.06)",
                   background: "#fff",
+                  fontSize: 14,
                 }}
               >
-                Sin archivo
+                Sin archivo asociado
               </div>
             )}
 
@@ -670,17 +822,21 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
               disabled={saving}
               style={{
                 width: "100%",
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
                 textAlign: "left",
-                padding: "14px 16px",
+                padding: "16px",
                 border: "none",
                 borderBottom: "1px solid rgba(0,0,0,0.06)",
                 background: "#fff",
-                color: "rgba(0,0,0,0.85)",
-                fontWeight: 700,
+                color: "#111827",
+                fontWeight: 800,
                 cursor: saving ? "not-allowed" : "pointer",
+                fontSize: 15,
               }}
             >
-              Editar
+              ✏️ Editar
             </button>
 
             <button
@@ -689,20 +845,24 @@ export default function MaintenancesModal({ open, onClose, vehicle }) {
               disabled={saving}
               style={{
                 width: "100%",
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
                 textAlign: "left",
-                padding: "14px 16px",
+                padding: "16px",
                 border: "none",
                 background: "#fff",
-                color: "#b00020",
-                fontWeight: 800,
+                color: "#dc2626",
+                fontWeight: 900,
                 cursor: saving ? "not-allowed" : "pointer",
+                fontSize: 15,
               }}
             >
-              Eliminar
+              🗑️ Eliminar
             </button>
           </div>
         </div>
-      )}
+      ) : null}
 
       <ConfirmModal
         open={confirmOpen}

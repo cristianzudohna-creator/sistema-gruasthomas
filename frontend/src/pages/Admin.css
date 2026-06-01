@@ -1800,6 +1800,108 @@ details.gt-actions summary::-webkit-details-marker {
   opacity: 0.85;
 }
 
+/* =========================================
+   ✅ Maintenances Mobile PRO
+   ========================================= */
+
+.gt-maint-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.gt-maint-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.gt-maint-table th,
+.gt-maint-table td {
+  padding: 12px 10px;
+  vertical-align: middle;
+}
+
+.gt-maint-table .col-tipo {
+  width: auto;
+}
+
+.gt-maint-table .col-realizada {
+  width: 120px;
+  white-space: nowrap;
+}
+
+.gt-maint-table .col-actions {
+  width: 74px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* texto elegante */
+.maint-tipo-main {
+  font-weight: 800;
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+/* botón ⋮ */
+.gt-maint-table .col-actions button {
+  width: 42px !important;
+  height: 42px !important;
+  min-width: 42px !important;
+  padding: 0 !important;
+  border-radius: 14px !important;
+}
+
+/* =========================================
+   ✅ MOBILE
+   ========================================= */
+
+@media (max-width: 640px) {
+  .gt-maint-wrap {
+    overflow-x: visible;
+  }
+
+  .gt-maint-table {
+    table-layout: auto;
+  }
+
+  .gt-maint-table thead th {
+    font-size: 12px;
+  }
+
+  .gt-maint-table th,
+  .gt-maint-table td {
+    padding: 10px 6px;
+  }
+
+  .gt-maint-table .col-tipo {
+    width: auto;
+  }
+
+  .gt-maint-table .col-realizada {
+    width: 96px;
+    font-size: 12px;
+  }
+
+  .gt-maint-table .col-actions {
+    width: 58px;
+  }
+
+  .maint-tipo-main {
+    font-size: 13px;
+    line-height: 1.2;
+  }
+
+  .gt-maint-table .col-actions button {
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    border-radius: 12px !important;
+    font-size: 20px !important;
+  }
+}
+
 @media (max-width: 640px) {
   .maint-form-actions {
     grid-template-columns: 1fr;
@@ -2036,6 +2138,74 @@ details.gt-actions summary::-webkit-details-marker {
   .sb-logout {
     min-height: 46px;
     margin-bottom: 18px;
+  }
+}
+/* =========================================
+   ✅ MaintenancesModal MOBILE FINAL PRO
+   ========================================= */
+
+@media (max-width: 640px) {
+  .gt-maint-wrap {
+    margin-top: 4px;
+  }
+
+  .gt-maint-table {
+    width: 100%;
+    table-layout: fixed;
+  }
+
+  .gt-maint-table thead th {
+    font-size: 11px;
+    padding: 8px 4px;
+  }
+
+  .gt-maint-table tbody td {
+    padding: 12px 4px;
+  }
+
+  .gt-maint-table .col-tipo {
+    width: auto;
+    padding-right: 8px;
+  }
+
+  .gt-maint-table .col-realizada {
+    width: 92px;
+    font-size: 12px;
+  }
+
+  .gt-maint-table .col-actions {
+    width: 52px;
+  }
+
+  .maint-tipo-main {
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1.25;
+    word-break: break-word;
+  }
+
+  /* botón ⋮ */
+  .gt-maint-table .col-actions button {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    border-radius: 12px !important;
+    font-size: 18px !important;
+  }
+
+  /* footer botones */
+  .gt-modal__foot,
+  .modal-footer {
+    padding: 10px !important;
+    gap: 8px !important;
+  }
+
+  .gt-modal__foot .gt-btn,
+  .modal-footer .gt-btn {
+    height: 48px !important;
+    border-radius: 14px !important;
+    font-size: 15px;
+    font-weight: 900;
   }
 }
 
