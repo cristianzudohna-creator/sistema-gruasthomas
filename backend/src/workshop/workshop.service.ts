@@ -327,34 +327,72 @@ export class WorkshopService {
     return /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
   }
 
-  private calcExtraHours(horaEntrada: string, horaSalida: string) {
-    if (!this.isHHMM(horaEntrada)) {
-      throw new BadRequestException(
-        'Hora entrada inválida. Formato requerido: HH:MM',
-      );
-    }
-
-    if (!this.isHHMM(horaSalida)) {
-      throw new BadRequestException(
-        'Hora salida inválida. Formato requerido: HH:MM',
-      );
-    }
-
-    const [h1, m1] = horaEntrada.split(':').map(Number);
-    const [h2, m2] = horaSalida.split(':').map(Number);
-
-    const startMinutes = h1 * 60 + m1;
-    const endMinutes = h2 * 60 + m2;
-
-    if (endMinutes <= startMinutes) {
-      throw new BadRequestException(
-        'La hora salida debe ser mayor que la hora entrada',
-      );
-    }
-
-    const diffMinutes = endMinutes - startMinutes;
-    return Math.round((diffMinutes / 60) * 100) / 100;
+  private calcExtraHours(
+  fecha: Date,
+  horaEntrada: string,
+  horaSalida: string,
+) {
+  if (!this.isHHMM(horaEntrada)) {
+    throw new BadRequestException(
+      'Hora entrada inválida. Formato requerido: HH:MM',
+    );
   }
+
+  if (!this.isHHMM(horaSalida)) {
+    throw new BadRequestException(
+      'Hora salida inválida. Formato requerido: HH:MM',
+    );
+  }
+
+  const [h1, m1] = horaEntrada.split(':').map(Number);
+  const [h2, m2] = horaSalida.split(':').map(Number);
+
+  const startMinutes = h1 * 60 + m1;
+  const endMinutes = h2 * 60 + m2;
+
+  if (endMinutes <= startMinutes) {
+    throw new BadRequestException(
+      'La hora salida debe ser mayor que la hora entrada',
+    );
+  }
+
+  // ✅ TOTAL TRABAJADO
+  const workedMinutes = endMinutes - startMinutes;
+
+  // ✅ DÍA DE LA SEMANA
+  const day = fecha.getDay();
+
+  // Domingo = 0
+  // Lunes = 1
+  // Martes = 2
+  // Miércoles = 3
+  // Jueves = 4
+  // Viernes = 5
+  // Sábado = 6
+
+  let jornadaBaseMinutes = 0;
+
+  // ✅ LUNES Y MARTES
+  if (day === 1 || day === 2) {
+    jornadaBaseMinutes = 10 * 60;
+  }
+
+  // ✅ MIÉRCOLES A VIERNES
+  else if (day >= 3 && day <= 5) {
+    jornadaBaseMinutes = 9 * 60;
+  }
+
+  // ✅ SÁBADO Y DOMINGO
+  else {
+    jornadaBaseMinutes = 0;
+  }
+
+  const extraMinutes = workedMinutes - jornadaBaseMinutes;
+
+  const totalHoras = Math.max(extraMinutes, 0) / 60;
+
+  return Math.round(totalHoras * 100) / 100;
+}
 
   private parseExtraHourDate(fecha: any) {
     const raw = String(fecha || '').trim();
@@ -1483,7 +1521,11 @@ export class WorkshopService {
     const fecha = this.parseExtraHourDate(dto?.fecha);
     const horaEntrada = String(dto?.horaEntrada || '').trim();
     const horaSalida = String(dto?.horaSalida || '').trim();
-    const totalHoras = this.calcExtraHours(horaEntrada, horaSalida);
+    const totalHoras = this.calcExtraHours(
+  fecha,
+  horaEntrada,
+  horaSalida,
+);
 
     return this.prisma.workshopExtraHourReport.create({
       data: {

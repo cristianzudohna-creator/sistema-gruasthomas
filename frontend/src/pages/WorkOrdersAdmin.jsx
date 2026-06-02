@@ -518,7 +518,6 @@ const [quickFilter, setQuickFilter] = useState("TOTAL");
     try {
       const qs = new URLSearchParams();
       if (status !== "ALL") qs.set("status", status);
-      if (q.trim()) qs.set("q", q.trim());
 
       const data = await apiGet(`/work-orders?${qs.toString()}`);
       const list = Array.isArray(data) ? data : data?.items;
@@ -931,7 +930,8 @@ const [quickFilter, setQuickFilter] = useState("TOTAL");
 
   const filtered = useMemo(() => {
   const s = String(status || "ALL").toUpperCase();
-  const qq = q.trim().toLowerCase();
+  const rawQ = q.trim().toLowerCase();
+  const cleanQ = rawQ.replace(/[^a-z0-9]/gi, "");
   const qf = String(quickFilter || "TOTAL").toUpperCase();
 
   let list = Array.isArray(items) ? items : [];
@@ -944,30 +944,49 @@ const [quickFilter, setQuickFilter] = useState("TOTAL");
     list = list.filter((x) => String(x?.status || "").toUpperCase() === s);
   }
 
-  if (qq) {
+  if (rawQ) {
+    const words = rawQ.split(/\s+/).filter(Boolean);
+
     list = list.filter((x) => {
-      const blob = [
+      const fields = [
         x?.id,
+        shortOtId(x?.id),
         x?.cliente,
+        x?.razonSocial,
+        x?.clienteNombre,
         x?.rut,
         x?.giro,
         x?.camion,
+        String(x?.camion || "").replace(/[^a-z0-9]/gi, ""),
         x?.conductor,
         x?.operador,
         x?.rigger,
+        x?.assignedTo?.nombre,
+        x?.assignedTo?.apellido,
+        fullName(x?.assignedTo),
         x?.status,
         x?.titulo,
+        x?.direccionFaena,
+        x?.lugar,
         x?.approvalComment,
         x?.rejectReason,
-      ]
-        .map((v) => String(v || "").toLowerCase())
-        .join(" ");
+      ];
 
-      return blob.includes(qq);
+      const blob = fields.map((v) => String(v || "").toLowerCase()).join(" ");
+      const blobClean = blob.replace(/[^a-z0-9]/gi, "");
+
+      return (
+        words.every((word) => blob.includes(word)) ||
+        (cleanQ && blobClean.includes(cleanQ))
+      );
     });
   }
 
-  return list;
+  return [...list].sort((a, b) => {
+    const da = new Date(getDisplayWorkOrderDate(a) || a?.createdAt || 0).getTime();
+    const db = new Date(getDisplayWorkOrderDate(b) || b?.createdAt || 0).getTime();
+    return db - da;
+  });
 }, [items, status, q, quickFilter]);
 
   const stats = useMemo(() => {
