@@ -1,25 +1,5 @@
 // ✅ Archivo: src/pages/WorkOrdersTrabajador.jsx (COMPLETO)
-// ✅ Ajustado para flujo BORRADOR / EN_PROCESO / COMPLETADA
-// ✅ NUEVO:
-// - LUGAR clickeable a Google Maps
-// - se elimina columna GENERADA
-// - se elimina botón Descargar PDF
-// ✅ NUEVO RIGGER / OPERADOR:
-// - misma pantalla para ambos
-// - detecta workerType desde localStorage
-// - cambia textos según OPERADOR / RIGGER
-// - muestra columnas distintas para RIGGER
-// - RIGGER:
-//   - NO ve Cliente
-//   - NO ve Solicitado por
-//   - NO ve botón Completar
-//   - solo ve detalle e info útil de asignación
-// ✅ NUEVO RESPONSIVE:
-// - escritorio: tabla
-// - móvil: cards
-// ✅ FIX FECHA:
-// - FECHA muestra diasProgramados[0] si existe
-// - si no existe, fallback a createdAt
+// ✅ NUEVO: bloquea OT futuras hasta el día asignado
 
 import { useEffect, useMemo, useState } from "react";
 import "./Admin.css";
@@ -146,12 +126,47 @@ function fmtDate(v) {
   return `${dd}/${mm}/${yy}`;
 }
 
-// ✅ FIX REAL FECHA
 function getServiceDate(item) {
   if (Array.isArray(item?.diasProgramados) && item.diasProgramados.length > 0) {
     return item.diasProgramados[0];
   }
+
   return item?.createdAt || null;
+}
+
+function parseDateOnly(value) {
+  if (!value) return null;
+
+  const str = String(value).trim();
+  const match = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (match) {
+    const [, y, m, d] = match;
+    return new Date(Number(y), Number(m) - 1, Number(d));
+  }
+
+  const parsed = new Date(str);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function isFutureWorkOrder(item) {
+  const serviceDate = getServiceDate(item);
+  if (!serviceDate) return false;
+
+  const otDate = parseDateOnly(serviceDate);
+  if (!otDate) return false;
+
+  otDate.setHours(0, 0, 0, 0);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return otDate > today;
 }
 
 function isNew(v) {
@@ -262,18 +277,21 @@ export default function WorkOrdersTrabajador() {
 
   const user = useMemo(() => getUserFromStorage(), []);
   const workerType = useMemo(() => pickWorkerType(user), [user]);
-  const isRiggerPrincipal = workerType === "RIGGER";
-const isOperador =
-  workerType === "OPERADOR" ||
-  workerType === "CONDUCTOR" ||
-  workerType === "SUPERVISOR" ||
-  workerType === "SUPERVISOR_TERRENO";
 
-const isRigger = isRiggerPrincipal && !isOperador;
+  const isRiggerPrincipal = workerType === "RIGGER";
+
+  const isOperador =
+    workerType === "OPERADOR" ||
+    workerType === "CONDUCTOR" ||
+    workerType === "SUPERVISOR" ||
+    workerType === "SUPERVISOR_TERRENO";
+
+  const isRigger = isRiggerPrincipal && !isOperador;
 
   async function load() {
     setLoading(true);
     setErr("");
+
     try {
       const data = await apiGet("/work-orders/worker?includeFinalizadas=1");
       const list = Array.isArray(data) ? data : data?.items || [];
@@ -357,6 +375,7 @@ const isRigger = isRiggerPrincipal && !isOperador;
     const aprobadas = items.filter(
       (x) => String(x.status || "").toUpperCase() === "APROBADA"
     ).length;
+
     return { total, nuevas, enProceso, enAprobacion, aprobadas };
   }, [items]);
 
@@ -367,9 +386,11 @@ const isRigger = isRiggerPrincipal && !isOperador;
     : "Aquí ves tus órdenes asignadas.";
 
   const totalHint = isRigger ? "OT donde participas" : "Órdenes asignadas";
+
   const emptyActiveText = isRigger
     ? "No hay órdenes activas donde participes como rigger."
     : "No hay órdenes activas.";
+
   const emptyFinalText = isRigger
     ? "No hay órdenes finalizadas donde participes como rigger."
     : "No hay órdenes finalizadas (Aprobadas/Cerradas) para mostrar.";
@@ -425,7 +446,8 @@ const isRigger = isRiggerPrincipal && !isOperador;
                 onClick={() => setTab("finalizadas")}
                 title="APROBADA / CERRADA (solo lectura)"
               >
-                Finalizadas (solo lectura) ({items.filter((x) => isFinalizada(x.status)).length})
+                Finalizadas (solo lectura) (
+                {items.filter((x) => isFinalizada(x.status)).length})
               </button>
             </div>
 
@@ -480,10 +502,7 @@ const isRigger = isRiggerPrincipal && !isOperador;
             <tbody>
               {!loading && filtered.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={isRigger ? 8 : 10}
-                    className="wot-empty-row"
-                  >
+                  <td colSpan={isRigger ? 8 : 10} className="wot-empty-row">
                     {tab === "finalizadas" ? emptyFinalText : emptyActiveText}
                   </td>
                 </tr>
@@ -492,20 +511,20 @@ const isRigger = isRiggerPrincipal && !isOperador;
               {filtered.map((x) => {
                 const nueva = isNew(x.createdAt);
                 const st = String(x.status || "").toUpperCase();
-
                 const readOnlyTab = tab === "finalizadas";
+                const isFutureOt = isFutureWorkOrder(x);
 
                 const blockComplete =
+                  isFutureOt ||
                   readOnlyTab ||
                   st === "COMPLETADA" ||
                   st === "APROBADA" ||
                   st === "CERRADA";
 
-                  const assignedAsOperator = isOperatorAssignedToOt(x, user);
-const assignedAsRigger = isRiggerAssignedToOt(x, user);
+                const assignedAsOperator = isOperatorAssignedToOt(x, user);
+                const assignedAsRigger = isRiggerAssignedToOt(x, user);
 
-const canCompleteThisOt =
-  assignedAsOperator && !assignedAsRigger;
+                const canCompleteThisOt = assignedAsOperator && !assignedAsRigger;
 
                 const rejectReason = String(x.rejectReason || "").trim();
 
@@ -528,20 +547,21 @@ const canCompleteThisOt =
                 const mapsUrl = buildMapsUrl(rawMapsLink, lugar);
 
                 return (
-                  <tr
-                    key={x.id}
-                    className={nueva ? "wot-row-new" : ""}
-                  >
+                  <tr key={x.id} className={nueva ? "wot-row-new" : ""}>
                     <td>
-                      <div className="wot-cell-strong">
-                        {fmtDate(getServiceDate(x))}
-                      </div>
+                      <div className="wot-cell-strong">{fmtDate(getServiceDate(x))}</div>
                       {nueva ? <span className="wot-new-chip">🆕 Nueva</span> : null}
                     </td>
 
                     <td className="wot-status-cell">
                       <div className="wot-status-stack">
                         <Badge tone={statusTone(st)}>{statusLabel(st)}</Badge>
+
+                        {isFutureOt && !readOnlyTab ? (
+                          <Badge tone="neutral">
+                            🔒 Disponible {fmtDate(getServiceDate(x))}
+                          </Badge>
+                        ) : null}
 
                         {st === "RECHAZADA" && rejectReason ? (
                           <div className="wot-reject-reason" title={rejectReason}>
@@ -568,23 +588,23 @@ const canCompleteThisOt =
                     ) : null}
 
                     {!isRigger ? (
-  <td className="wot-cell-strong">
-    <div
-      className="linea-2l"
-      title={`${formatSolicitadoPor(x)}${
-        x.telefonoSolicitadoPor ? ` • ${x.telefonoSolicitadoPor}` : ""
-      }`}
-    >
-      {formatSolicitadoPor(x)}
-      {x.telefonoSolicitadoPor ? (
-        <span style={{ color: "#666", fontSize: 12, fontWeight: 800 }}>
-          {" "}
-          • 📞 {x.telefonoSolicitadoPor}
-        </span>
-      ) : null}
-    </div>
-  </td>
-) : null}
+                      <td className="wot-cell-strong">
+                        <div
+                          className="linea-2l"
+                          title={`${formatSolicitadoPor(x)}${
+                            x.telefonoSolicitadoPor ? ` • ${x.telefonoSolicitadoPor}` : ""
+                          }`}
+                        >
+                          {formatSolicitadoPor(x)}
+                          {x.telefonoSolicitadoPor ? (
+                            <span style={{ color: "#666", fontSize: 12, fontWeight: 800 }}>
+                              {" "}
+                              • 📞 {x.telefonoSolicitadoPor}
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+                    ) : null}
 
                     <td className="wot-cell-strong">
                       <div className="linea-2l" title={operador}>
@@ -642,7 +662,9 @@ const canCompleteThisOt =
                             onClick={() => openCompleteById(x.id)}
                             disabled={blockComplete}
                             title={
-                              readOnlyTab
+                              isFutureOt
+                                ? `Esta OT estará disponible el ${fmtDate(getServiceDate(x))}.`
+                                : readOnlyTab
                                 ? "Finalizada: solo lectura."
                                 : st === "COMPLETADA"
                                 ? "Esta OT ya fue enviada y está esperando aprobación."
@@ -662,7 +684,9 @@ const canCompleteThisOt =
                                 : undefined
                             }
                           >
-                            {readOnlyTab
+                            {isFutureOt
+                              ? `🔒 Disponible ${fmtDate(getServiceDate(x))}`
+                              : readOnlyTab
                               ? "👁 Solo lectura"
                               : st === "COMPLETADA"
                               ? "⏳ Esperando aprobación"
@@ -697,18 +721,19 @@ const canCompleteThisOt =
             const nueva = isNew(x.createdAt);
             const st = String(x.status || "").toUpperCase();
             const readOnlyTab = tab === "finalizadas";
+            const isFutureOt = isFutureWorkOrder(x);
 
             const blockComplete =
+              isFutureOt ||
               readOnlyTab ||
               st === "COMPLETADA" ||
               st === "APROBADA" ||
               st === "CERRADA";
 
-              const assignedAsOperator = isOperatorAssignedToOt(x, user);
-const assignedAsRigger = isRiggerAssignedToOt(x, user);
+            const assignedAsOperator = isOperatorAssignedToOt(x, user);
+            const assignedAsRigger = isRiggerAssignedToOt(x, user);
 
-const canCompleteThisOt =
-  assignedAsOperator && !assignedAsRigger;
+            const canCompleteThisOt = assignedAsOperator && !assignedAsRigger;
 
             const rejectReason = String(x.rejectReason || "").trim();
 
@@ -731,7 +756,10 @@ const canCompleteThisOt =
             const mapsUrl = buildMapsUrl(rawMapsLink, lugar);
 
             return (
-              <div key={x.id} className={`wot-mobile-card ${nueva ? "wot-mobile-card--new" : ""}`}>
+              <div
+                key={x.id}
+                className={`wot-mobile-card ${nueva ? "wot-mobile-card--new" : ""}`}
+              >
                 <div className="wot-mobile-card__head">
                   <div>
                     <div className="wot-mobile-card__ot">{otCode(x.id)}</div>
@@ -742,6 +770,11 @@ const canCompleteThisOt =
 
                   <div className="wot-mobile-card__badges">
                     <Badge tone={statusTone(st)}>{statusLabel(st)}</Badge>
+                    {isFutureOt && !readOnlyTab ? (
+                      <Badge tone="neutral">
+                        🔒 Disponible {fmtDate(getServiceDate(x))}
+                      </Badge>
+                    ) : null}
                     {nueva ? <span className="wot-new-chip">🆕 Nueva</span> : null}
                   </div>
                 </div>
@@ -761,20 +794,20 @@ const canCompleteThisOt =
                   ) : null}
 
                   {!isRigger ? (
-  <div className="wot-mobile-item">
-  <span className="wot-mobile-label">Solicitado por</span>
+                    <div className="wot-mobile-item">
+                      <span className="wot-mobile-label">Solicitado por</span>
 
-  <span className="wot-mobile-value">
-    {formatSolicitadoPor(x)}
-  </span>
+                      <span className="wot-mobile-value">
+                        {formatSolicitadoPor(x)}
+                      </span>
 
-  {x?.telefonoSolicitadoPor ? (
-  <div className="wot-mobile-phone">
-    📞 <strong>{x.telefonoSolicitadoPor}</strong>
-  </div>
-) : null}
-</div>
-) : null}
+                      {x?.telefonoSolicitadoPor ? (
+                        <div className="wot-mobile-phone">
+                          📞 <strong>{x.telefonoSolicitadoPor}</strong>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   <div className="wot-mobile-item">
                     <span className="wot-mobile-label">Operador</span>
@@ -829,7 +862,9 @@ const canCompleteThisOt =
                           : undefined
                       }
                     >
-                      {readOnlyTab
+                      {isFutureOt
+                        ? `🔒 Disponible ${fmtDate(getServiceDate(x))}`
+                        : readOnlyTab
                         ? "👁 Solo lectura"
                         : st === "COMPLETADA"
                         ? "⏳ Esperando aprobación"
