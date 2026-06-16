@@ -270,11 +270,14 @@ async function apiDownloadZip({ from, to, operadorId, rigger, cliente }) {
 // =========================
 // ✅ EXCEL helpers
 // =========================
-async function apiDownloadExcel({ from, to }) {
+async function apiDownloadExcel({ from, to, operadorId, rigger, cliente }) {
   const qs = new URLSearchParams();
 
   if (from) qs.set("from", from);
   if (to) qs.set("to", to);
+  if (operadorId) qs.set("operadorId", operadorId);
+  if (rigger) qs.set("rigger", rigger);
+  if (cliente) qs.set("cliente", cliente);
 
   const res = await fetch(`${API_URL}/work-orders/export-excel?${qs.toString()}`, {
     method: "GET",
@@ -733,9 +736,12 @@ const [quickFilter, setQuickFilter] = useState("TOTAL");
     try {
       setExcelLoading(true);
       await apiDownloadExcel({
-        from: exportFrom,
-        to: exportTo,
-      });
+  from: exportFrom,
+  to: exportTo,
+  operadorId: exportOperadorId,
+  rigger: exportRiggerText.trim(),
+  cliente: exportClienteText.trim(),
+});
     } catch (e) {
       setExcelErr(e.message || "Error descargando Excel");
     } finally {

@@ -1,15 +1,6 @@
 // ✅ Archivo: src/pages/EditWorkOrderModal.jsx (COMPLETO)
-// ✅ Cambio: reemplaza "días texto" por calendario multi-select (fechas ISO)
-// ✅ Resumen: muestra "Días programados" con fechas
-// ✅ Payload:
-//    - diasProgramados: ["YYYY-MM-DD", ...] (nuevo)
-//    - diasTrabajo: ["LUN","MAR"...] (compat)
-// ✅ Cambios UI solicitados:
-//    - ❌ Se elimina teléfono del cliente
-//    - ✅ Rigger deja de ser input normal y ahora usa autocomplete
-//    - ✅ Patente usa autocomplete
-//    - ✅ Operador usa autocomplete
-//    - ✅ Se agregan títulos (labels) arriba de cada campo
+// ✅ FIX: al editar operador ahora guarda conductorId
+// ✅ FIX: evita que quede nombre de un operador con ID de otro
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../components/ui/Modal";
@@ -66,10 +57,10 @@ function addIf(obj, key, value) {
 }
 
 /* =========================
-   Días programados (fechas)
+   Días programados
 ========================= */
 const WEEKDAYS_SHORT = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
-const DOW_CODE = ["DOM", "LUN", "MAR", "MIE", "JUE", "VIE", "SAB"]; // JS: 0=DOM
+const DOW_CODE = ["DOM", "LUN", "MAR", "MIE", "JUE", "VIE", "SAB"];
 
 function isValidISODate(s) {
   const v = String(s || "").trim();
@@ -109,27 +100,31 @@ function uniqueSortedISO(arr) {
   const clean = (Array.isArray(arr) ? arr : [])
     .map((x) => String(x || "").slice(0, 10))
     .filter((x) => isValidISODate(x));
+
   const set = new Set(clean);
   const out = Array.from(set);
   out.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   return out;
 }
 
-/* =========================
-   UI helpers
-========================= */
 function Row({ label, value }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: 10, padding: "6px 0" }}>
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "160px 1fr",
+        gap: 10,
+        padding: "6px 0",
+      }}
+    >
       <div style={{ fontWeight: 900, opacity: 0.7 }}>{label}</div>
-      <div style={{ fontWeight: 900, wordBreak: "break-word" }}>{value || "—"}</div>
+      <div style={{ fontWeight: 900, wordBreak: "break-word" }}>
+        {value || "—"}
+      </div>
     </div>
   );
 }
 
-/* =========================
-   Mini Calendar (multi-select)
-========================= */
 function monthNameEs(year, month0) {
   const names = [
     "Enero",
@@ -167,7 +162,13 @@ function buildCalendarMatrix(year, month0) {
   return rows;
 }
 
-function MiniCalendarMulti({ label = "Días programados", valueISO, onChangeISO, disabled, error }) {
+function MiniCalendarMulti({
+  label = "Días programados",
+  valueISO,
+  onChangeISO,
+  disabled,
+  error,
+}) {
   const selected = useMemo(() => new Set(uniqueSortedISO(valueISO)), [valueISO]);
 
   const initial = useMemo(() => {
@@ -182,10 +183,10 @@ function MiniCalendarMulti({ label = "Días programados", valueISO, onChangeISO,
   useEffect(() => {
     const arr = uniqueSortedISO(valueISO);
     if (!arr.length) return;
+
     const d = new Date(arr[0] + "T00:00:00");
     setViewY(d.getFullYear());
     setViewM(d.getMonth());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [valueISO?.length]);
 
   const matrix = useMemo(() => buildCalendarMatrix(viewY, viewM), [viewY, viewM]);
@@ -206,10 +207,13 @@ function MiniCalendarMulti({ label = "Días programados", valueISO, onChangeISO,
 
   function toggleDate(d) {
     if (disabled) return;
+
     const iso = toISODate(d);
     const set = new Set(selected);
+
     if (set.has(iso)) set.delete(iso);
     else set.add(iso);
+
     const out = Array.from(set);
     out.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
     onChangeISO?.(out);
@@ -230,17 +234,16 @@ function MiniCalendarMulti({ label = "Días programados", valueISO, onChangeISO,
     opacity: disabled ? 0.5 : 1,
   };
 
-  const dayHeaderStyle = {
-    fontSize: 12,
-    fontWeight: 900,
-    opacity: 0.65,
-    textAlign: "center",
-    padding: "8px 0",
-  };
-
   return (
     <div>
-      <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.75, marginBottom: 6 }}>
+      <div
+        style={{
+          fontSize: 12,
+          fontWeight: 900,
+          opacity: 0.75,
+          marginBottom: 6,
+        }}
+      >
         {label}
         {error ? <span style={{ color: "#dc2626" }}> • {error}</span> : null}
       </div>
@@ -254,21 +257,45 @@ function MiniCalendarMulti({ label = "Días programados", valueISO, onChangeISO,
           ...errStyle,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+          }}
+        >
           <button type="button" onClick={prevMonth} disabled={disabled} style={headerBtnStyle}>
             ←
           </button>
 
-          <div style={{ fontWeight: 900, opacity: 0.85 }}>{monthNameEs(viewY, viewM)}</div>
+          <div style={{ fontWeight: 900, opacity: 0.85 }}>
+            {monthNameEs(viewY, viewM)}
+          </div>
 
           <button type="button" onClick={nextMonth} disabled={disabled} style={headerBtnStyle}>
             →
           </button>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", marginTop: 10 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(7, 1fr)",
+            marginTop: 10,
+          }}
+        >
           {WEEKDAYS_SHORT.map((w) => (
-            <div key={w} style={dayHeaderStyle}>
+            <div
+              key={w}
+              style={{
+                fontSize: 12,
+                fontWeight: 900,
+                opacity: 0.65,
+                textAlign: "center",
+                padding: "8px 0",
+              }}
+            >
               {w}
             </div>
           ))}
@@ -276,7 +303,14 @@ function MiniCalendarMulti({ label = "Días programados", valueISO, onChangeISO,
 
         <div style={{ display: "grid", gap: 6, marginTop: 6 }}>
           {matrix.map((row, rIdx) => (
-            <div key={rIdx} style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6 }}>
+            <div
+              key={rIdx}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(7, 1fr)",
+                gap: 6,
+              }}
+            >
               {row.map((d, cIdx) => {
                 if (!d) return <div key={cIdx} style={{ height: 42 }} />;
 
@@ -293,7 +327,9 @@ function MiniCalendarMulti({ label = "Días programados", valueISO, onChangeISO,
                     style={{
                       height: 42,
                       borderRadius: 12,
-                      border: isSel ? "2px solid rgba(0,0,0,0.70)" : "1px solid rgba(0,0,0,0.12)",
+                      border: isSel
+                        ? "2px solid rgba(0,0,0,0.70)"
+                        : "1px solid rgba(0,0,0,0.12)",
                       background: isSel ? "rgba(0,0,0,0.06)" : "#fff",
                       cursor: disabled ? "not-allowed" : "pointer",
                       fontWeight: 900,
@@ -330,22 +366,24 @@ function MiniCalendarMulti({ label = "Días programados", valueISO, onChangeISO,
 
         {uniqueSortedISO(valueISO).length > 0 ? (
           <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {uniqueSortedISO(valueISO).slice(0, 14).map((iso) => (
-              <span
-                key={iso}
-                style={{
-                  padding: "6px 10px",
-                  borderRadius: 999,
-                  border: "1px solid rgba(0,0,0,0.12)",
-                  fontSize: 12,
-                  fontWeight: 900,
-                  opacity: 0.85,
-                  background: "rgba(0,0,0,0.03)",
-                }}
-              >
-                {dowLabelFromISO(iso)} {fmtDDMMYYYYFromISO(iso)}
-              </span>
-            ))}
+            {uniqueSortedISO(valueISO)
+              .slice(0, 14)
+              .map((iso) => (
+                <span
+                  key={iso}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    border: "1px solid rgba(0,0,0,0.12)",
+                    fontSize: 12,
+                    fontWeight: 900,
+                    opacity: 0.85,
+                    background: "rgba(0,0,0,0.03)",
+                  }}
+                >
+                  {dowLabelFromISO(iso)} {fmtDDMMYYYYFromISO(iso)}
+                </span>
+              ))}
           </div>
         ) : null}
       </div>
@@ -353,9 +391,6 @@ function MiniCalendarMulti({ label = "Días programados", valueISO, onChangeISO,
   );
 }
 
-/* =========================
-   Autocomplete (trabajadores)
-========================= */
 function WorkerAutocomplete({
   label,
   placeholder,
@@ -385,21 +420,30 @@ function WorkerAutocomplete({
 
     setLoading(true);
     setTip("");
+
     try {
       const qs = new URLSearchParams();
+
       if (empresa) qs.set("empresa", String(empresa).toUpperCase());
+
       qs.set("activo", "true");
       qs.set("role", "TRABAJADOR");
       qs.set("q", query);
       qs.set("limit", "12");
+
       if (workerType) qs.set("workerType", workerType);
 
       const data = await apiGet(`/users?${qs.toString()}`);
       const list = data?.items || [];
+
       setItems(list);
 
       if (list.length === 0) {
-        setTip(empresa ? `No se encontró en ${String(empresa).toUpperCase()}.` : "No se encontró.");
+        setTip(
+          empresa
+            ? `No se encontró en ${String(empresa).toUpperCase()}.`
+            : "No se encontró."
+        );
       }
     } catch (e) {
       setItems([]);
@@ -420,14 +464,12 @@ function WorkerAutocomplete({
 
   function pick(u) {
     const name = `${u?.nombre || ""}${u?.apellido ? " " + u.apellido : ""}`.trim();
+
     onChangeValue(name || u?.email || "");
     onPickUser?.(u);
+
     setOpen(false);
     setTimeout(() => inputRef.current?.blur?.(), 0);
-  }
-
-  function onKeyDown(e) {
-    if (e.key === "Escape") setOpen(false);
   }
 
   useEffect(() => {
@@ -435,14 +477,17 @@ function WorkerAutocomplete({
       if (!open) return;
 
       const path = typeof ev.composedPath === "function" ? ev.composedPath() : [];
+
       const inInput =
         inputRef.current &&
         (path.includes(inputRef.current) || inputRef.current.contains(ev.target));
+
       const inDrop =
         dropdownRef.current &&
         (path.includes(dropdownRef.current) || dropdownRef.current.contains(ev.target));
 
       if (inInput || inDrop) return;
+
       setOpen(false);
     }
 
@@ -452,7 +497,15 @@ function WorkerAutocomplete({
 
   return (
     <div style={{ position: "relative" }}>
-      <label style={{ display: "block", fontSize: 12, fontWeight: 900, opacity: 0.75, marginBottom: 6 }}>
+      <label
+        style={{
+          display: "block",
+          fontSize: 12,
+          fontWeight: 900,
+          opacity: 0.75,
+          marginBottom: 6,
+        }}
+      >
         {label}
       </label>
 
@@ -467,7 +520,9 @@ function WorkerAutocomplete({
           setOpen(true);
           if (normalizeText(value)) doSearch(value);
         }}
-        onKeyDown={onKeyDown}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setOpen(false);
+        }}
         onBlur={() => {}}
       />
 
@@ -492,7 +547,13 @@ function WorkerAutocomplete({
             Sugerencias {empresa ? `(${String(empresa).toUpperCase()})` : ""}
           </div>
 
-          <div style={{ maxHeight: 220, overflow: "auto", borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+          <div
+            style={{
+              maxHeight: 220,
+              overflow: "auto",
+              borderTop: "1px solid rgba(0,0,0,0.06)",
+            }}
+          >
             {loading ? (
               <div style={{ padding: 12, opacity: 0.75 }}>Buscando...</div>
             ) : items.length > 0 ? (
@@ -500,6 +561,7 @@ function WorkerAutocomplete({
                 const name = `${u?.nombre || ""}${u?.apellido ? " " + u.apellido : ""}`.trim();
                 const rut = u?.rut || "";
                 const emp = normalizeText(u?.empresa || "");
+
                 return (
                   <button
                     key={u.id}
@@ -516,7 +578,9 @@ function WorkerAutocomplete({
                     }}
                   >
                     <div style={{ fontWeight: 900 }}>{name || u.email}</div>
-                    <div style={{ fontSize: 12, opacity: 0.7 }}>{[rut, emp].filter(Boolean).join(" • ")}</div>
+                    <div style={{ fontSize: 12, opacity: 0.7 }}>
+                      {[rut, emp].filter(Boolean).join(" • ")}
+                    </div>
                   </button>
                 );
               })
@@ -530,9 +594,6 @@ function WorkerAutocomplete({
   );
 }
 
-/* =========================
-   Autocomplete (vehículos / patentes)
-========================= */
 function VehicleAutocomplete({
   label,
   placeholder,
@@ -553,6 +614,7 @@ function VehicleAutocomplete({
 
   async function doSearch(q) {
     const query = normalizeText(q).toUpperCase();
+
     if (!query) {
       setItems([]);
       setTip("Escribe para buscar por patente.");
@@ -561,18 +623,24 @@ function VehicleAutocomplete({
 
     setLoading(true);
     setTip("");
+
     try {
       const qs = new URLSearchParams();
+
       qs.set("q", query);
       qs.set("search", query);
       qs.set("limit", "8");
+
       if (empresa) qs.set("empresa", String(empresa).toUpperCase());
 
       const data = await apiGet(`/vehicles?${qs.toString()}`);
       const list = Array.isArray(data) ? data : data?.items || [];
 
       setItems(list);
-      if (list.length === 0) setTip("No se encontró. Puedes escribir la patente manual.");
+
+      if (list.length === 0) {
+        setTip("No se encontró. Puedes escribir la patente manual.");
+      }
     } catch (e) {
       setItems([]);
       setTip(e.message || "Error buscando vehículos");
@@ -592,14 +660,12 @@ function VehicleAutocomplete({
 
   function pick(v) {
     const patente = normalizeText(v?.patente || "");
+
     onChangeValue(patente);
     onPickVehicle?.(v);
+
     setOpen(false);
     setTimeout(() => inputRef.current?.blur?.(), 0);
-  }
-
-  function onKeyDown(e) {
-    if (e.key === "Escape") setOpen(false);
   }
 
   useEffect(() => {
@@ -607,14 +673,17 @@ function VehicleAutocomplete({
       if (!open) return;
 
       const path = typeof ev.composedPath === "function" ? ev.composedPath() : [];
+
       const inInput =
         inputRef.current &&
         (path.includes(inputRef.current) || inputRef.current.contains(ev.target));
+
       const inDrop =
         dropdownRef.current &&
         (path.includes(dropdownRef.current) || dropdownRef.current.contains(ev.target));
 
       if (inInput || inDrop) return;
+
       setOpen(false);
     }
 
@@ -624,7 +693,15 @@ function VehicleAutocomplete({
 
   return (
     <div style={{ position: "relative" }}>
-      <label style={{ display: "block", fontSize: 12, fontWeight: 900, opacity: 0.75, marginBottom: 6 }}>
+      <label
+        style={{
+          display: "block",
+          fontSize: 12,
+          fontWeight: 900,
+          opacity: 0.75,
+          marginBottom: 6,
+        }}
+      >
         {label}
       </label>
 
@@ -639,7 +716,9 @@ function VehicleAutocomplete({
           setOpen(true);
           if (normalizeText(value)) doSearch(value);
         }}
-        onKeyDown={onKeyDown}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setOpen(false);
+        }}
         onBlur={() => {}}
       />
 
@@ -664,7 +743,13 @@ function VehicleAutocomplete({
             Patentes {empresa ? `(${String(empresa).toUpperCase()})` : ""}
           </div>
 
-          <div style={{ maxHeight: 220, overflow: "auto", borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+          <div
+            style={{
+              maxHeight: 220,
+              overflow: "auto",
+              borderTop: "1px solid rgba(0,0,0,0.06)",
+            }}
+          >
             {loading ? (
               <div style={{ padding: 12, opacity: 0.75 }}>Buscando...</div>
             ) : items.length > 0 ? (
@@ -708,6 +793,7 @@ function Resumen({ f }) {
   const v = (x) => normalizeText(x) || "—";
 
   const diasProgramados = uniqueSortedISO(f?.diasProgramados || []);
+
   const prog =
     diasProgramados.length > 0
       ? diasProgramados
@@ -719,7 +805,14 @@ function Resumen({ f }) {
   return (
     <div style={{ paddingTop: 6 }}>
       <div style={{ fontWeight: 900, marginBottom: 8 }}>Resumen</div>
-      <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 14, padding: 12 }}>
+
+      <div
+        style={{
+          border: "1px solid rgba(0,0,0,0.08)",
+          borderRadius: 14,
+          padding: 12,
+        }}
+      >
         <Row label="Cliente" value={v(f.cliente)} />
         <Row label="RUT" value={v(f.rut)} />
         <Row label="Solicitado por" value={v(f.solicitadoPor)} />
@@ -738,7 +831,15 @@ function Resumen({ f }) {
   );
 }
 
-export default function EditWorkOrderModal({ open, onClose, data, loading, error, apiPut, onSaved }) {
+export default function EditWorkOrderModal({
+  open,
+  onClose,
+  data,
+  loading,
+  error,
+  apiPut,
+  onSaved,
+}) {
   const [saving, setSaving] = useState(false);
   const [formErr, setFormErr] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -755,6 +856,7 @@ export default function EditWorkOrderModal({ open, onClose, data, loading, error
     diasProgramados: [],
     camion: "",
     conductor: "",
+    conductorId: "",
     rigger: "",
     nota: "",
   });
@@ -765,10 +867,11 @@ export default function EditWorkOrderModal({ open, onClose, data, loading, error
 
     const rawNota = data.descripcion || data.nota || "";
 
-    const diasProg =
-      Array.isArray(data.diasProgramados) ? data.diasProgramados :
-      Array.isArray(data.programacion) ? data.programacion :
-      [];
+    const diasProg = Array.isArray(data.diasProgramados)
+      ? data.diasProgramados
+      : Array.isArray(data.programacion)
+      ? data.programacion
+      : [];
 
     setF({
       cliente: data.cliente || "",
@@ -781,7 +884,8 @@ export default function EditWorkOrderModal({ open, onClose, data, loading, error
       horario: data.horario || "",
       diasProgramados: uniqueSortedISO(diasProg),
       camion: data.camion || "",
-      conductor: data.conductor || "",
+      conductor: data.conductor || data.operador || "",
+      conductorId: data.assignedToId || data.assignedTo?.id || "",
       rigger: data.rigger || "",
       nota: rawNota || "",
     });
@@ -795,22 +899,29 @@ export default function EditWorkOrderModal({ open, onClose, data, loading, error
     setF((p) => ({ ...p, [k]: v }));
   }
 
-  const diasProgramadosSorted = useMemo(() => uniqueSortedISO(f.diasProgramados), [f.diasProgramados]);
+  const diasProgramadosSorted = useMemo(
+    () => uniqueSortedISO(f.diasProgramados),
+    [f.diasProgramados]
+  );
 
   const diasTrabajoDerivados = useMemo(() => {
     const set = new Set();
+
     for (const iso of diasProgramadosSorted) {
       const code = codeFromISO(iso);
       if (code) set.add(code);
     }
+
     const order = ["LUN", "MAR", "MIE", "JUE", "VIE", "SAB", "DOM"];
     const arr = Array.from(set);
     arr.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+
     return arr;
   }, [diasProgramadosSorted]);
 
   function handleClose() {
     if (saving) return;
+
     setConfirmOpen(false);
     setFormErr("");
     onClose?.();
@@ -830,12 +941,18 @@ export default function EditWorkOrderModal({ open, onClose, data, loading, error
       return;
     }
 
+    if (normalizeText(f.conductor) && !normalizeText(f.conductorId)) {
+      setFormErr("Debes seleccionar el operador desde la lista, no escribirlo manualmente.");
+      return;
+    }
+
     setConfirmOpen(true);
   }
 
   async function handleConfirm() {
     try {
       if (!data?.id) throw new Error("Falta id de OT");
+
       setSaving(true);
       setFormErr("");
 
@@ -855,12 +972,17 @@ export default function EditWorkOrderModal({ open, onClose, data, loading, error
       addIf(payload, "mapsLink", f.mapsLink);
 
       addIf(payload, "camion", f.camion);
+
       addIf(payload, "conductor", f.conductor);
+      addIf(payload, "conductorId", f.conductorId);
+
       addIf(payload, "rigger", f.rigger);
 
       payload.diasProgramados = diasProgramadosSorted;
 
-      if (diasTrabajoDerivados.length > 0) payload.diasTrabajo = diasTrabajoDerivados;
+      if (diasTrabajoDerivados.length > 0) {
+        payload.diasTrabajo = diasTrabajoDerivados;
+      }
 
       const notaBase = normalizeText(f.nota);
       payload.nota = notaBase || null;
@@ -890,14 +1012,22 @@ export default function EditWorkOrderModal({ open, onClose, data, loading, error
             <button className="gt-btn" onClick={handleClose} disabled={saving}>
               Cancelar
             </button>
-            <button form="ot-edit-form" type="submit" className="gt-btn gt-btn-primary" disabled={saving || loading}>
+
+            <button
+              form="ot-edit-form"
+              type="submit"
+              className="gt-btn gt-btn-primary"
+              disabled={saving || loading}
+            >
               {saving ? "Guardando..." : "Guardar cambios"}
             </button>
           </>
         }
       >
         {loading ? (
-          <div style={{ padding: 14, fontWeight: 900, opacity: 0.8 }}>Cargando OT...</div>
+          <div style={{ padding: 14, fontWeight: 900, opacity: 0.8 }}>
+            Cargando OT...
+          </div>
         ) : error ? (
           <div style={{ padding: 14, color: "#b00020", fontWeight: 900 }}>
             {error}
@@ -1029,10 +1159,17 @@ export default function EditWorkOrderModal({ open, onClose, data, loading, error
                   label="Operador"
                   placeholder="Escribe para buscar (ej: Juan)"
                   value={f.conductor}
-                  onChangeValue={(v) => setField("conductor", v)}
+                  onChangeValue={(v) => {
+                    setField("conductor", v);
+                    setField("conductorId", "");
+                  }}
                   onPickUser={(u) => {
-                    const name = `${u?.nombre || ""}${u?.apellido ? " " + u.apellido : ""}`.trim();
+                    const name = `${u?.nombre || ""}${
+                      u?.apellido ? " " + u.apellido : ""
+                    }`.trim();
+
                     setField("conductor", name || "");
+                    setField("conductorId", u?.id || "");
                   }}
                   disabled={saving}
                   empresa={data?.empresa}
@@ -1045,7 +1182,10 @@ export default function EditWorkOrderModal({ open, onClose, data, loading, error
                   value={f.rigger}
                   onChangeValue={(v) => setField("rigger", v)}
                   onPickUser={(u) => {
-                    const name = `${u?.nombre || ""}${u?.apellido ? " " + u.apellido : ""}`.trim();
+                    const name = `${u?.nombre || ""}${
+                      u?.apellido ? " " + u.apellido : ""
+                    }`.trim();
+
                     setField("rigger", name || "");
                   }}
                   disabled={saving}
@@ -1066,6 +1206,7 @@ export default function EditWorkOrderModal({ open, onClose, data, loading, error
 
             <div className="ot-box">
               <div className="ot-box-title">Descripción</div>
+
               <textarea
                 className="gt-input ot-textarea"
                 placeholder="Detalle del servicio"

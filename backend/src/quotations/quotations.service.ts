@@ -1016,90 +1016,121 @@ horarioLineas.slice(0, 6).forEach((line, index) => {
 
     const opY = extraY + 78;
 
-    doc.roundedRect(18, opY, 412, 35, 3).fillAndStroke("#ffffff", border);
-
     const opRows = [
       ["obra.png", "OBRA", quotation.obra || ""],
       ["rut.png", "COTIZADO POR", quotation.cotizadoPor || ""],
     ];
 
+    const opX = 18;
+    const opW = 576;
+    const opH = 35;
+    const opLeftW = 170;
+    const opRowH = opH / 2;
+    const opRightX = opX + opLeftW;
+
+    doc.roundedRect(opX, opY, opW, opH, 3).fillAndStroke("#ffffff", border);
+
     opRows.forEach((r, index) => {
-      const rowHeight = 17.5;
-      const ry = opY + index * rowHeight;
+      const ry = opY + index * opRowH;
 
-      doc.rect(18, ry, 95, rowHeight).fill(index % 2 === 0 ? lightBlue : "#ffffff");
+      doc.rect(opX, ry, opLeftW, opRowH).fill(lightBlue);
 
-      this.drawIcon(doc, r[0], 29, ry + 4, 9);
+      this.drawIcon(doc, r[0], opX + 18, ry + 4, 9);
 
       doc
         .font("Helvetica-Bold")
         .fontSize(7.1)
         .fillColor(blue)
-        .text(r[1], 54, ry + 5.5, {
-          width: 70,
+        .text(r[1], opX + 52, ry + 5.5, {
+          width: opLeftW - 60,
         });
 
       doc
         .font("Helvetica")
-        .fontSize(6.3)
+        .fontSize(6.8)
         .fillColor(text)
-        .text(this.text(r[2]).toUpperCase(), 128, ry + 5.5, {
-          width: 288,
+        .text(this.text(r[2]).toUpperCase(), opRightX + 18, ry + 5.5, {
+          width: opW - opLeftW - 28,
           lineBreak: false,
           ellipsis: true,
         });
-
-      if (index < opRows.length - 1) {
-        doc
-          .moveTo(18, ry + rowHeight)
-          .lineTo(430, ry + rowHeight)
-          .strokeColor(border)
-          .stroke();
-      }
     });
 
-    const circleX = 510;
-    const circleY = opY + 35;
+    doc
+      .moveTo(opRightX, opY)
+      .lineTo(opRightX, opY + opH)
+      .strokeColor(border)
+      .lineWidth(0.6)
+      .stroke();
 
-    doc.circle(circleX, circleY, 38).fillAndStroke(blue, border);
-    doc.circle(circleX, circleY, 31).strokeColor("#ffffff").lineWidth(1).stroke();
+    doc
+      .moveTo(opX, opY + opRowH)
+      .lineTo(opX + opW, opY + opRowH)
+      .strokeColor(border)
+      .lineWidth(0.6)
+      .stroke();
 
-    this.drawIcon(doc, "relojblanco.png", circleX - 7, circleY - 28, 14);
+    doc
+      .roundedRect(opX, opY, opW, opH, 3)
+      .lineWidth(0.7)
+      .strokeColor(border)
+      .stroke();
+
+    const footerY = 725;
+
+    // ============================
+    // FIRMA ARRIBA DE OBSERVACIONES
+    // ============================
+    const firmaY = opY + 68;
+    const signaturePath = this.resolveSignaturePath();
+
+    if (signaturePath) {
+      doc.image(signaturePath, 260, firmaY - 22, {
+        width: 70,
+      });
+    }
+
+    doc
+      .moveTo(220, firmaY)
+      .lineTo(375, firmaY)
+      .strokeColor(border)
+      .lineWidth(0.8)
+      .stroke();
 
     doc
       .font("Helvetica-Bold")
-      .fontSize(6.6)
-      .fillColor("#ffffff")
+      .fontSize(7)
+      .fillColor(blue)
+      .text("AUTORIZA", 220, firmaY + 5, {
+        width: 155,
+        align: "center",
+      });
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(6.4)
+      .fillColor(text)
       .text(
-        this.text(quotation.horarioOperacionTitulo, "HORARIO DE\nOPERACIÓN").toUpperCase(),
-        circleX - 31,
-        circleY - 10,
+        this.text(quotation.cotizadoPor, "MARGARITA NARANJO ROSSEL").toUpperCase(),
+        220,
+        firmaY + 15,
         {
-          width: 62,
+          width: 155,
           align: "center",
         },
       );
 
-    doc
-  .font("Helvetica-Bold")
-  .fontSize(4.2)
-  .fillColor("#ffffff")
-  .text("LUNES A VIERNES\n08:00 A 18:00 HRS.", circleX - 24, circleY + 13, {
-    width: 48,
-    align: "center",
-    lineGap: -1,
-    height: 22,
-    ellipsis: true,
-  });
+    // ============================
+    // OBSERVACIONES DEBAJO DE FIRMA
+    // ============================
+    let obsY = firmaY + 42;
 
-    let obsY = opY + 78;
-
-    if (obsY + 180 > 760) {
+    if (obsY + 95 > footerY - 8) {
       addNewPage();
       obsY = 40;
     }
 
-    doc.roundedRect(18, obsY, 576, 78, 3).fillAndStroke("#ffffff", border);
+    doc.roundedRect(18, obsY, 576, 95, 3).fillAndStroke("#ffffff", border);
 
     doc.rect(18, obsY, 120, 16).fill(blue);
 
@@ -1138,7 +1169,7 @@ horarioLineas.slice(0, 6).forEach((line, index) => {
         })
         .text(obsText, 50, obsTextY, {
           width: 520,
-          lineGap: 0,
+          lineGap: 1,
         });
 
       const h = doc.heightOfString(obsText, {
@@ -1146,56 +1177,8 @@ horarioLineas.slice(0, 6).forEach((line, index) => {
         lineGap: 0,
       });
 
-      obsTextY += Math.min(Math.max(h, 6.5), 13);
+      obsTextY += Math.min(Math.max(h + 2, 8), 15);
     });
-
-    let firmaY = doc.y + 55;
-    let footerY = firmaY + 58;
-
-    if (footerY + 40 > 760) {
-      addNewPage();
-
-      firmaY = 110;
-      footerY = firmaY + 58;
-    }
-
-    const signaturePath = this.resolveSignaturePath();
-
-    if (signaturePath) {
-      doc.image(signaturePath, 255, firmaY - 30, {
-        width: 82,
-      });
-    }
-
-    doc
-      .moveTo(220, firmaY)
-      .lineTo(375, firmaY)
-      .strokeColor(border)
-      .lineWidth(0.8)
-      .stroke();
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(7)
-      .fillColor(blue)
-      .text("AUTORIZA", 220, firmaY + 5, {
-        width: 155,
-        align: "center",
-      });
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(6.4)
-      .fillColor(text)
-      .text(
-        this.text(quotation.cotizadoPor, "MARGARITA NARANJO ROSSEL").toUpperCase(),
-        220,
-        firmaY + 15,
-        {
-          width: 155,
-          align: "center",
-        },
-      );
 
     drawFooter(footerY);
 

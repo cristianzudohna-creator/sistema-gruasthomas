@@ -153,12 +153,15 @@ export class WorkOrdersController {
   // ✅ SOLO OTs APROBADAS
   // =========================================================
   @Get("export-excel")
-  async exportExcel(
-    @Query("from") from: string,
-    @Query("to") to: string,
-    @Req() req: any,
-    @Res() res: Response
-  ) {
+async exportExcel(
+  @Query("from") from: string,
+  @Query("to") to: string,
+  @Query("operadorId") operadorId: string,
+  @Query("rigger") rigger: string,
+  @Query("cliente") cliente: string,
+  @Req() req: any,
+  @Res() res: Response
+) {
     const role = req.user?.role as Role | undefined;
 
     if (!this.isOtAdmin(role)) {
@@ -166,12 +169,15 @@ export class WorkOrdersController {
     }
 
     const { buffer, filename } = await this.service.exportApprovedExcel(
-      {
-        from,
-        to,
-      },
-      req.user
-    );
+  {
+    from,
+    to,
+    operadorId,
+    rigger,
+    cliente,
+  },
+  req.user
+);
 
     res.setHeader(
       "Content-Type",

@@ -784,9 +784,22 @@ export class WorkOrdersService {
     const obraTramo =
       cleanStr(item.direccionFaena) || cleanStr(item.lugar) || "";
 
-    const entrada = this.parseExcelHour(detalleHoras?.salidaPlanta);
-    const salida = this.parseExcelHour(detalleHoras?.llegadaPlanta);
-    const hrCol = this.parseColacionHours(detalleHoras?.colacion);
+    const fechaDia = fecha ? fecha.getDay() : null;
+// Domingo = 0, Lunes = 1, Martes = 2, Miércoles = 3...
+
+const entradaDefault = "08:00";
+const salidaDefault =
+  fechaDia === 1 || fechaDia === 2 ? "18:00" : "17:00";
+
+const entrada =
+  this.parseExcelHour(detalleHoras?.salidaPlanta) ??
+  this.parseExcelHour(entradaDefault);
+
+const salida =
+  this.parseExcelHour(detalleHoras?.llegadaPlanta) ??
+  this.parseExcelHour(salidaDefault);
+
+const hrCol = this.parseColacionHours(detalleHoras?.colacion);
 
     const row = sheet.addRow({
       fecha,
@@ -832,8 +845,8 @@ export class WorkOrdersService {
     };
 
     row.getCell("K").value = {
-      formula: `IFERROR(MAX(J${rowNumber}-9,0),0)`,
-    };
+  formula: `IFERROR(MAX(J${rowNumber}-IF(WEEKDAY(A${rowNumber},2)<=2,10,9),0),0)`,
+};
 
     row.getCell("L").value = {
       formula: `0`,
@@ -1217,144 +1230,204 @@ export class WorkOrdersService {
   }
 
   async exportApprovedExcel(
-    filters: {
-      from?: string;
-      to?: string;
-    },
-    actor?: any
-  ): Promise<{ buffer: Buffer; filename: string; total: number }> {
-    if (!this.isOtAdminRole(actor)) {
-      throw new ForbiddenException("No autorizado.");
-    }
-
-    const from = cleanStr(filters?.from);
-    const to = cleanStr(filters?.to);
-
-    const fromIso = from ? this.parseISODateOnly(from) : null;
-    const toIso = to ? this.parseISODateOnly(to) : null;
-
-    if (from && !fromIso) {
-      throw new BadRequestException("Fecha desde inválida. Usa YYYY-MM-DD.");
-    }
-    if (to && !toIso) {
-      throw new BadRequestException("Fecha hasta inválida. Usa YYYY-MM-DD.");
-    }
-
-    const rangeFrom = fromIso || toIso;
-    const rangeTo = toIso || fromIso;
-
-    if (rangeFrom && rangeTo && rangeFrom > rangeTo) {
-      throw new BadRequestException("El rango de fechas es inválido.");
-    }
-
-    const whereEmpresa = await this.empresaWhereByActor(actor);
-
-    const andWhere: any[] = [
-      whereEmpresa,
-      this.whereActivosOnly(),
-      { status: WorkOrderStatus.APROBADA },
-    ];
-
-    if (rangeFrom && rangeTo) {
-      const days = this.listIsoDaysBetween(rangeFrom, rangeTo);
-      andWhere.push({
-        diasProgramados: { hasSome: days },
-      });
-    }
-
-    const items = await this.prisma.workOrder.findMany({
-      where: {
-        AND: andWhere,
-      },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      select: {
-        id: true,
-        createdAt: true,
-        status: true,
-        cliente: true,
-        direccionFaena: true,
-        lugar: true,
-        operador: true,
-        conductor: true,
-        rigger: true,
-        workerReport: true,
-        diasProgramados: true,
-      },
-    });
-
-    if (!items.length) {
-      throw new NotFoundException("No se encontraron OTs APROBADAS con esos filtros.");
-    }
-
-    const workbook = new ExcelJS.Workbook();
-    workbook.creator = "Sistema Grúas Thomas";
-    workbook.lastModifiedBy = "Sistema Grúas Thomas";
-    workbook.created = new Date();
-    workbook.modified = new Date();
-
-    const operadoresSheet = this.addExcelTemplateSheet(
-      workbook,
-      "OPERADORES",
-      "OPERADOR"
-    );
-    const riggersSheet = this.addExcelTemplateSheet(
-      workbook,
-      "RIGGER",
-      "RIGGER"
-    );
-
-    let operadoresCount = 0;
-    let riggersCount = 0;
-
-    for (const item of items) {
-      const operador =
-        cleanStr(item.operador) || cleanStr(item.conductor) || "";
-      const rigger = cleanStr(item.rigger) || "";
-
-      if (operador) {
-        this.addExcelDataRow({
-          sheet: operadoresSheet,
-          item,
-          personName: operador,
-          personType: "OPERADOR",
-        });
-        operadoresCount += 1;
-      }
-
-      if (rigger) {
-        this.addExcelDataRow({
-          sheet: riggersSheet,
-          item,
-          personName: rigger,
-          personType: "RIGGER",
-        });
-        riggersCount += 1;
-      }
-    }
-
-    if (operadoresCount === 0) {
-      const row = operadoresSheet.addRow({
-        observaciones: "Sin registros para el período seleccionado",
-      });
-      this.styleExcelBodyRow(row);
-    }
-
-    if (riggersCount === 0) {
-      const row = riggersSheet.addRow({
-        observaciones: "Sin registros para el período seleccionado",
-      });
-      this.styleExcelBodyRow(row);
-    }
-
-    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
-    const filename = this.buildExcelFileName({ from, to });
-
-    return {
-      buffer,
-      filename,
-      total: items.length,
-    };
+  filters: {
+    from?: string;
+    to?: string;
+    operadorId?: string;
+    rigger?: string;
+    cliente?: string;
+  },
+  actor?: any
+): Promise<{ buffer: Buffer; filename: string; total: number }> {
+  if (!this.isOtAdminRole(actor)) {
+    throw new ForbiddenException("No autorizado.");
   }
+
+  const from = cleanStr(filters?.from);
+  const to = cleanStr(filters?.to);
+  const operadorId = cleanStr(filters?.operadorId);
+  const rigger = cleanStr(filters?.rigger);
+  const cliente = cleanStr(filters?.cliente);
+
+  const fromIso = from ? this.parseISODateOnly(from) : null;
+  const toIso = to ? this.parseISODateOnly(to) : null;
+
+  if (from && !fromIso) {
+    throw new BadRequestException("Fecha desde inválida. Usa YYYY-MM-DD.");
+  }
+
+  if (to && !toIso) {
+    throw new BadRequestException("Fecha hasta inválida. Usa YYYY-MM-DD.");
+  }
+
+  const rangeFrom = fromIso || toIso;
+  const rangeTo = toIso || fromIso;
+
+  if (rangeFrom && rangeTo && rangeFrom > rangeTo) {
+    throw new BadRequestException("El rango de fechas es inválido.");
+  }
+
+  const whereEmpresa = await this.empresaWhereByActor(actor);
+
+  const andWhere: any[] = [
+    whereEmpresa,
+    this.whereActivosOnly(),
+    { status: WorkOrderStatus.APROBADA },
+  ];
+
+  if (operadorId) {
+    andWhere.push({
+      assignedToId: operadorId,
+    });
+  }
+
+  if (rigger) {
+    andWhere.push({
+      rigger: { contains: rigger, mode: "insensitive" },
+    });
+  }
+
+  if (cliente) {
+    andWhere.push({
+      OR: [
+        { cliente: { contains: cliente, mode: "insensitive" } },
+        {
+          client: {
+            is: {
+              nombre: { contains: cliente, mode: "insensitive" },
+            },
+          },
+        },
+      ],
+    });
+  }
+
+  const itemsRaw = await this.prisma.workOrder.findMany({
+    where: {
+      AND: andWhere,
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: {
+      id: true,
+      createdAt: true,
+      status: true,
+      cliente: true,
+      direccionFaena: true,
+      lugar: true,
+      operador: true,
+      conductor: true,
+      rigger: true,
+      workerReport: true,
+      diasProgramados: true,
+    },
+  });
+
+  let items = itemsRaw;
+
+if (rangeFrom && rangeTo) {
+  const days = this.listIsoDaysBetween(rangeFrom, rangeTo);
+  const allowedDays = new Set(days);
+
+  items = itemsRaw.filter((item) => {
+    const dias = Array.isArray(item.diasProgramados)
+      ? item.diasProgramados
+      : [];
+
+    return dias.some((dia) => allowedDays.has(String(dia)));
+  });
+}
+
+// ✅ ORDENAR POR FECHA DEL SERVICIO
+items.sort((a, b) => {
+  const fechaA =
+    Array.isArray(a.diasProgramados) && a.diasProgramados.length > 0
+      ? a.diasProgramados[0]
+      : "9999-12-31";
+
+  const fechaB =
+    Array.isArray(b.diasProgramados) && b.diasProgramados.length > 0
+      ? b.diasProgramados[0]
+      : "9999-12-31";
+
+  return fechaA.localeCompare(fechaB);
+});
+
+if (!items.length) {
+  throw new NotFoundException(
+    "No se encontraron OTs APROBADAS con esos filtros."
+  );
+}
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Sistema Grúas Thomas";
+  workbook.lastModifiedBy = "Sistema Grúas Thomas";
+  workbook.created = new Date();
+  workbook.modified = new Date();
+
+  const operadoresSheet = this.addExcelTemplateSheet(
+    workbook,
+    "OPERADORES",
+    "OPERADOR"
+  );
+
+  const riggersSheet = this.addExcelTemplateSheet(
+    workbook,
+    "RIGGER",
+    "RIGGER"
+  );
+
+  let operadoresCount = 0;
+  let riggersCount = 0;
+
+  for (const item of items) {
+    const operador =
+      cleanStr(item.operador) || cleanStr(item.conductor) || "";
+    const riggerName = cleanStr(item.rigger) || "";
+
+    if (operador) {
+      this.addExcelDataRow({
+        sheet: operadoresSheet,
+        item,
+        personName: operador,
+        personType: "OPERADOR",
+      });
+      operadoresCount += 1;
+    }
+
+    if (riggerName) {
+      this.addExcelDataRow({
+        sheet: riggersSheet,
+        item,
+        personName: riggerName,
+        personType: "RIGGER",
+      });
+      riggersCount += 1;
+    }
+  }
+
+  if (operadoresCount === 0) {
+    const row = operadoresSheet.addRow({
+      observaciones: "Sin registros para el período seleccionado",
+    });
+    this.styleExcelBodyRow(row);
+  }
+
+  if (riggersCount === 0) {
+    const row = riggersSheet.addRow({
+      observaciones: "Sin registros para el período seleccionado",
+    });
+    this.styleExcelBodyRow(row);
+  }
+
+  const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+  const filename = this.buildExcelFileName({ from, to });
+
+  return {
+    buffer,
+    filename,
+    total: items.length,
+  };
+}
 
   async searchClients(search: string, actor?: any) {
     const q = cleanStr(search);
@@ -1730,13 +1803,11 @@ export class WorkOrdersService {
       }
     }
 
-    const conductorNombre =
-      cleanStr((dto as any).conductor) ||
-      (conductorUser
-        ? `${conductorUser.nombre || ""}${
-            conductorUser.apellido ? " " + conductorUser.apellido : ""
-          }`.trim()
-        : null);
+    const conductorNombre = conductorUser
+  ? `${conductorUser.nombre || ""}${
+      conductorUser.apellido ? " " + conductorUser.apellido : ""
+    }`.trim()
+  : cleanStr((dto as any).conductor);
 
     const operadorDto = cleanStr((dto as any).operador);
 
