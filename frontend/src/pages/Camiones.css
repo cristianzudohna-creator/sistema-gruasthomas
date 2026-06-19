@@ -367,3 +367,104 @@
     width: 100%;
   }
 }
+@media (max-width: 720px) {
+  .cam-horo-form-box {
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .cam-horo-form-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .cam-horo-form-field {
+    width: 100%;
+  }
+
+  .cam-horo-hours-input {
+    width: 100%;
+    height: 46px;
+    font-size: 16px;
+  }
+
+  .cam-horo-form-row button {
+    width: 100%;
+    height: 46px !important;
+  }
+
+  .cam-horo-badges-row {
+    gap: 8px;
+  }
+
+  .cam-horo-badges-row .status {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .cam-horo-table-shell {
+    border-radius: 16px;
+    overflow: hidden;
+  }
+
+  .cam-horo-table-shell table {
+    min-width: 0 !important;
+    width: 100%;
+  }
+
+  .cam-horo-table-shell thead {
+    display: none;
+  }
+
+  .cam-horo-table-shell tbody,
+  .cam-horo-table-shell tr,
+  .cam-horo-table-shell td {
+    display: block;
+    width: 100%;
+  }
+
+  .cam-horo-table-shell tr {
+    padding: 12px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .cam-horo-table-shell td {
+    padding: 6px 0 !important;
+    border: 0 !important;
+    text-align: left !important;
+  }
+
+  .cam-horo-table-shell td:nth-child(1)::before {
+    content: "Fecha: ";
+    font-weight: 900;
+  }
+
+  .cam-horo-table-shell td:nth-child(2)::before {
+    content: "Horas: ";
+    font-weight: 900;
+  }
+
+  .cam-horo-table-shell td:nth-child(3)::before {
+    content: "Registrado por: ";
+    font-weight: 900;
+  }
+
+  .cam-horo-table-shell td:nth-child(4)::before {
+    content: "Faltan: ";
+    font-weight: 900;
+  }
+
+  .cam-horo-actions-cell {
+    display: grid !important;
+    grid-template-columns: 1fr;
+    gap: 8px !important;
+    margin-top: 8px;
+  }
+
+  .cam-horo-actions-cell button {
+    width: 100%;
+    height: 42px !important;
+  }
+}

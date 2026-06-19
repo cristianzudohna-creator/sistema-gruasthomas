@@ -154,6 +154,8 @@ export default function WorkshopMaintenance() {
     descripcion: "",
   });
 
+  const [vehicleSearch, setVehicleSearch] = useState("");
+
   const [assignForm, setAssignForm] = useState({
     assignedToId: "",
   });
@@ -405,6 +407,23 @@ export default function WorkshopMaintenance() {
     };
   }, [tasks]);
 
+  const filteredVehicles = useMemo(() => {
+  const q = vehicleSearch.trim().toLowerCase();
+
+  if (!q) return vehicles.slice(0, 30);
+
+  return vehicles
+    .filter((v) => {
+      const text = [v.patente, v.marcaModelo, v.marca, v.modelo]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return text.includes(q);
+    })
+    .slice(0, 30);
+}, [vehicles, vehicleSearch]);
+
   function splitLines(value) {
     return String(value || "")
       .split("\n")
@@ -474,6 +493,7 @@ export default function WorkshopMaintenance() {
         vehicleId: "",
         descripcion: "",
       });
+      setVehicleSearch("");
       await loadAll();
     } catch (err) {
       alert(err?.message || "No se pudo crear la tarea");
@@ -988,23 +1008,44 @@ task.signatures.length > 0 ? (
               </select>
             </label>
 
-            <label>
-              Vehículo
-              <select
-                required
-                value={createForm.vehicleId}
-                onChange={(e) =>
-                  setCreateForm((f) => ({ ...f, vehicleId: e.target.value }))
-                }
-              >
-                <option value="">Seleccionar vehículo</option>
-                {vehicles.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.patente} · {v.marcaModelo}
-                  </option>
-                ))}
-              </select>
-            </label>
+           <label>
+  Buscar vehículo
+  <input
+    type="text"
+    value={vehicleSearch}
+    onChange={(e) => {
+      setVehicleSearch(e.target.value);
+      setCreateForm((f) => ({ ...f, vehicleId: "" }));
+    }}
+    placeholder="Escribe patente, número, marca o modelo..."
+  />
+</label>
+
+<div className="wm-vehicle-results">
+  {filteredVehicles.length === 0 ? (
+    <div className="wm-vehicle-empty">No hay coincidencias</div>
+  ) : (
+    filteredVehicles.map((v) => {
+      const selected = createForm.vehicleId === v.id;
+
+      return (
+        <button
+          key={v.id}
+          type="button"
+          className={`wm-vehicle-option ${
+            selected ? "wm-vehicle-option--selected" : ""
+          }`}
+          onClick={() => {
+            setCreateForm((f) => ({ ...f, vehicleId: v.id }));
+            setVehicleSearch(`${v.patente} · ${v.marcaModelo || ""}`);
+          }}
+        >
+          {v.patente} · {v.marcaModelo || "Sin modelo"}
+        </button>
+      );
+    })
+  )}
+</div>
 
             <label>
               Descripción de la mantención solicitada

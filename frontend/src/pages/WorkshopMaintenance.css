@@ -386,3 +386,39 @@
     padding: 18px;
   }
 }
+.wm-vehicle-results {
+  margin-top: -6px;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #fff;
+  padding: 6px;
+}
+
+.wm-vehicle-option {
+  width: 100%;
+  border: 0;
+  background: #fff;
+  padding: 12px 14px;
+  text-align: left;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 800;
+  color: #111827;
+}
+
+.wm-vehicle-option:hover {
+  background: #f3f4f6;
+}
+
+.wm-vehicle-option--selected {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.wm-vehicle-empty {
+  padding: 12px;
+  color: #6b7280;
+  font-weight: 700;
+}
