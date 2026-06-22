@@ -792,11 +792,11 @@ const salidaDefault =
   fechaDia === 1 || fechaDia === 2 ? "18:00" : "17:00";
 
 const entrada =
-  this.parseExcelHour(detalleHoras?.salidaPlanta) ??
+  this.parseExcelHour(detalleHoras?.llegadaFaena) ??
   this.parseExcelHour(entradaDefault);
 
 const salida =
-  this.parseExcelHour(detalleHoras?.llegadaPlanta) ??
+  this.parseExcelHour(detalleHoras?.salidaFaena) ??
   this.parseExcelHour(salidaDefault);
 
 const hrCol = this.parseColacionHours(detalleHoras?.colacion);
