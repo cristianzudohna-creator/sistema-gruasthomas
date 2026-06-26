@@ -1172,12 +1172,13 @@ const hrCol = this.parseColacionHours(detalleHoras?.colacion);
       },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: {
-        id: true,
-        createdAt: true,
-        status: true,
-        cliente: true,
-        diasProgramados: true,
-      },
+  id: true,
+  createdAt: true,
+  status: true,
+  cliente: true,
+  camion: true,
+  diasProgramados: true,
+},
     });
 
     if (!items.length) {
@@ -1211,12 +1212,16 @@ const hrCol = this.parseColacionHours(detalleHoras?.colacion);
       const datePart = fechaProgramada || fmtIsoDateOnly(item.createdAt) || "SIN_FECHA";
       const otNum = `OT-${String(item.id).slice(0, 6).toUpperCase()}`;
       const clientePart = safeFilePart(item.cliente || clientName || "");
-      const entryName = `${seq}_${safeFilePart(otNum)}${
-        clientePart ? `_${clientePart}` : ""
-      }_${datePart}.pdf`;
+      const clienteFolder = safeFilePart(item.cliente || clientName || "SIN_CLIENTE");
+const patenteFolder = safeFilePart(item.camion || "SIN_PATENTE");
 
-      archive.append(buffer, { name: entryName });
-      index += 1;
+const entryName = `${datePart}_${seq}_${safeFilePart(otNum)}.pdf`;
+
+archive.append(buffer, {
+  name: `${clienteFolder}/${patenteFolder}/${entryName}`,
+});
+
+index += 1;
     }
 
     await archive.finalize();
