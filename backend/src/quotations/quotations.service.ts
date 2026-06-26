@@ -934,14 +934,17 @@ export class QuotationsService {
     doc.rect(18, extraY, 282, 16).fill(blue);
 
     doc
-      .font("Helvetica-Bold")
-      .fontSize(6.1)
-      .fillColor("#ffffff")
-      .text(
-  "PARA HORAS EXTRAS TRABAJADAS SE APLICARÁ EL SIGUIENTE RECARGO:",
-        24,
-        extraY + 5,
-      );
+  .font("Helvetica-Bold")
+  .fontSize(6.1)
+  .fillColor("#ffffff")
+  .text(
+    this.text(
+      quotation.horarioOperacionTitulo,
+      "PARA HORAS EXTRAS TRABAJADAS SE APLICARÁ EL SIGUIENTE RECARGO:",
+    ).toUpperCase(),
+    24,
+    extraY + 5,
+  );
 
     const horarioTexto = this.text(
   quotation.horarioOperacionDetalle,

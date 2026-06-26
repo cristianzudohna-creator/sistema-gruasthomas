@@ -69,8 +69,9 @@ function getInitialForm() {
     equipos: [{ descripcion: "" }],
     obra: "",
     cotizadoPor: "",
-    horarioOperacionTitulo: "HORARIO DE OPERACIÓN",
-    horarioOperacionDetalle: DEFAULT_HORARIO,
+    horarioOperacionTitulo:
+  "PARA HORAS EXTRAS TRABAJADAS SE APLICARÁ EL SIGUIENTE RECARGO:",
+horarioOperacionDetalle: DEFAULT_HORARIO,
     observaciones: [],
     items: [],
   };
@@ -262,8 +263,10 @@ export default function Quotations() {
       equipoTitulo: "EQUIPO 1:",
       equipoDescripcion: equiposText,
       equipo: equiposText,
-      horarioOperacionTitulo: "HORARIO DE OPERACIÓN",
-      horarioOperacionDetalle: DEFAULT_HORARIO,
+      horarioOperacionTitulo:
+  form.horarioOperacionTitulo ||
+  "PARA HORAS EXTRAS TRABAJADAS SE APLICARÁ EL SIGUIENTE RECARGO:",
+horarioOperacionDetalle: form.horarioOperacionDetalle || "",
       observaciones: [],
       items: form.items.map((item) => {
         const cantidad = Number(item.cantidad || 0);
@@ -702,6 +705,33 @@ export default function Quotations() {
                   />
                 </div>
               </div>
+
+              <div className="quotation-section">
+  <h3 className="quotation-section-title">Horas extras / recargo</h3>
+
+  <input
+    className="quotation-input"
+    name="horarioOperacionTituloCotizacion"
+    autoComplete="off"
+    placeholder="Título"
+    value={form.horarioOperacionTitulo}
+    onChange={(e) =>
+      updateField("horarioOperacionTitulo", e.target.value)
+    }
+    style={{ marginBottom: 12 }}
+  />
+
+  <textarea
+    className="quotation-textarea"
+    name="horarioOperacionDetalleCotizacion"
+    autoComplete="off"
+    placeholder="Escribe aquí el texto que quieres que aparezca en el PDF"
+    value={form.horarioOperacionDetalle}
+    onChange={(e) =>
+      updateField("horarioOperacionDetalle", e.target.value)
+    }
+  />
+</div>
 
               <div className="quotation-section">
                 <h3 className="quotation-section-title">Valores</h3>
