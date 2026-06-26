@@ -697,11 +697,6 @@ const [quickFilter, setQuickFilter] = useState("TOTAL");
       return;
     }
 
-    if (!exportClienteText.trim()) {
-      setZipErr("Debes escribir o seleccionar un cliente para descargar el ZIP.");
-      return;
-    }
-
     try {
       setZipLoading(true);
       await apiDownloadZip({
