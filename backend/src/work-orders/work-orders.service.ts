@@ -728,27 +728,37 @@ export class WorkOrdersService {
     });
 
     sheet.columns = [
-      { header: "FECHA", key: "fecha", width: 14 },
-      { header: "ESTADO", key: "estado", width: 14 },
-      { header: "OT", key: "ot", width: 14 },
-      { header: "EMPRESA", key: "empresa", width: 34 },
-      { header: "OBRA_TRAMO", key: "obraTramo", width: 28 },
-      { header: personHeader, key: "persona", width: 30 },
-      { header: "ENTRADA", key: "entrada", width: 12 },
-      { header: "SALIDA", key: "salida", width: 12 },
-      { header: "HR. COL", key: "hrCol", width: 10 },
-      { header: "TOTAL HORAS", key: "totalHoras", width: 12 },
-      { header: "HORAS 50%", key: "horas50", width: 12 },
-      { header: "HORAS 100%", key: "horas100", width: 12 },
-      { header: "HORAS VIERNES", key: "horasViernes", width: 14 },
-      { header: "VALOR HR. 50%", key: "valor50", width: 14 },
-      { header: "VALOR HR. 100%", key: "valor100", width: 14 },
-      { header: "VALOR HR. VIER", key: "valorVier", width: 14 },
-      { header: "SABADOS", key: "sabados", width: 14 },
-      { header: "DOMINGOS Y FESTIVOS", key: "domingosFestivos", width: 20 },
-      { header: "TOTAL", key: "total", width: 14 },
-      { header: "OBSERVACIONES", key: "observaciones", width: 24 },
-    ];
+  { header: "FECHA", key: "fecha", width: 14 },
+  { header: "ESTADO", key: "estado", width: 14 },
+  { header: "OT", key: "ot", width: 14 },
+
+  { header: "PATENTE", key: "patente", width: 16 },
+
+  { header: "EMPRESA", key: "empresa", width: 34 },
+  { header: "OBRA_TRAMO", key: "obraTramo", width: 28 },
+
+  { header: "OPERADOR", key: "operador", width: 30 },
+  { header: "RIGGER", key: "rigger", width: 30 },
+
+  { header: "ENTRADA", key: "entrada", width: 12 },
+  { header: "SALIDA", key: "salida", width: 12 },
+  { header: "HR. COL", key: "hrCol", width: 10 },
+
+  { header: "TOTAL HORAS", key: "totalHoras", width: 12 },
+  { header: "HORAS 50%", key: "horas50", width: 12 },
+  { header: "HORAS 100%", key: "horas100", width: 12 },
+  { header: "HORAS VIERNES", key: "horasViernes", width: 14 },
+
+  { header: "VALOR HR. 50%", key: "valor50", width: 14 },
+  { header: "VALOR HR. 100%", key: "valor100", width: 14 },
+  { header: "VALOR HR. VIER", key: "valorVier", width: 14 },
+
+  { header: "SABADOS", key: "sabados", width: 14 },
+  { header: "DOMINGOS Y FESTIVOS", key: "domingosFestivos", width: 20 },
+
+  { header: "TOTAL", key: "total", width: 14 },
+  { header: "OBSERVACIONES", key: "observaciones", width: 24 },
+];
 
     const headerColor =
       sheetName.toUpperCase() === "RIGGER"
@@ -761,122 +771,126 @@ export class WorkOrdersService {
   }
 
   private addExcelDataRow(params: {
-    sheet: ExcelJS.Worksheet;
-    item: any;
-    personName: string;
-    personType: "OPERADOR" | "RIGGER";
-  }) {
-    const { sheet, item, personName, personType } = params;
+  sheet: ExcelJS.Worksheet;
+  item: any;
+  personName: string;
+  personType: "OPERADOR" | "RIGGER";
+}) {
+  const { sheet, item, personType } = params;
 
-    const wr = safeParseWorkerReport(item.workerReport);
-    const detalleHoras = wr?.detalleHoras || {};
+  const wr = safeParseWorkerReport(item.workerReport);
+  const detalleHoras = wr?.detalleHoras || {};
 
-    const fechaProgramada =
-      Array.isArray(item.diasProgramados) && item.diasProgramados.length > 0
-        ? item.diasProgramados[0]
-        : null;
+  const fechaProgramada =
+    Array.isArray(item.diasProgramados) && item.diasProgramados.length > 0
+      ? item.diasProgramados[0]
+      : null;
 
-    const fecha = this.parseExcelDateOnly(fechaProgramada || item.createdAt);
+  const fecha = this.parseExcelDateOnly(fechaProgramada || item.createdAt);
 
-    const estado = "Firmada";
-    const ot = `OT-${String(item.id).slice(0, 6).toUpperCase()}`;
-    const empresa = cleanStr(item.cliente) || "";
-    const obraTramo =
-      cleanStr(item.direccionFaena) || cleanStr(item.lugar) || "";
+  const estado = "Firmada";
+  const ot = `OT-${String(item.id).slice(0, 6).toUpperCase()}`;
+  const patente = cleanStr(item.camion) || "";
+  const empresa = cleanStr(item.cliente) || "";
+  const obraTramo = cleanStr(item.direccionFaena) || cleanStr(item.lugar) || "";
 
-    const fechaDia = fecha ? fecha.getDay() : null;
-// Domingo = 0, Lunes = 1, Martes = 2, Miércoles = 3...
+  const operador = cleanStr(item.operador) || cleanStr(item.conductor) || "";
+  const rigger = cleanStr(item.rigger) || "";
 
-const entradaDefault = "08:00";
-const salidaDefault =
-  fechaDia === 1 || fechaDia === 2 ? "18:00" : "17:00";
+  const fechaDia = fecha ? fecha.getDay() : null;
 
-const entrada =
-  this.parseExcelHour(detalleHoras?.llegadaFaena) ??
-  this.parseExcelHour(entradaDefault);
+  const entradaDefault = "08:00";
+  const salidaDefault = fechaDia === 1 || fechaDia === 2 ? "18:00" : "17:00";
 
-const salida =
-  this.parseExcelHour(detalleHoras?.salidaFaena) ??
-  this.parseExcelHour(salidaDefault);
+  const entrada =
+    this.parseExcelHour(detalleHoras?.llegadaFaena) ??
+    this.parseExcelHour(entradaDefault);
 
-const hrCol = this.parseColacionHours(detalleHoras?.colacion);
+  const salida =
+    this.parseExcelHour(detalleHoras?.salidaFaena) ??
+    this.parseExcelHour(salidaDefault);
 
-    const row = sheet.addRow({
-      fecha,
-      estado,
-      ot,
-      empresa,
-      obraTramo,
-      persona: cleanStr(personName) || "",
-      entrada,
-      salida,
-      hrCol,
-      horas50: 0,
-      horas100: 0,
-      horasViernes: 0,
-      valor50: 0,
-      valor100: 0,
-      valorVier: 0,
-      sabados: 0,
-      domingosFestivos: 0,
-      total: 0,
-      observaciones: "",
-    });
+  const hrCol = this.parseColacionHours(detalleHoras?.colacion);
 
-    const rowNumber = row.number;
+  const row = sheet.addRow({
+    fecha,
+    estado,
+    ot,
+    patente,
+    empresa,
+    obraTramo,
+    operador,
+    rigger,
+    entrada,
+    salida,
+    hrCol,
+    totalHoras: 0,
+    horas50: 0,
+    horas100: 0,
+    horasViernes: 0,
+    valor50: 0,
+    valor100: 0,
+    valorVier: 0,
+    sabados: 0,
+    domingosFestivos: 0,
+    total: 0,
+    observaciones: "",
+  });
 
-    row.getCell("A").numFmt = "dd-mm-yyyy";
-    row.getCell("G").numFmt = "hh:mm";
-    row.getCell("H").numFmt = "hh:mm";
-    row.getCell("I").numFmt = "0.0";
-    row.getCell("J").numFmt = "0.0";
-    row.getCell("K").numFmt = "0.0";
-    row.getCell("L").numFmt = "0.0";
-    row.getCell("M").numFmt = "0.0";
-    row.getCell("N").numFmt = "#,##0";
-    row.getCell("O").numFmt = "#,##0";
-    row.getCell("P").numFmt = "#,##0";
-    row.getCell("Q").numFmt = "#,##0";
-    row.getCell("R").numFmt = "#,##0";
-    row.getCell("S").numFmt = "#,##0";
+  const rowNumber = row.number;
 
-    row.getCell("J").value = {
-      formula: `IFERROR((H${rowNumber}-G${rowNumber})*24-I${rowNumber},0)`,
-    };
+  row.getCell("A").numFmt = "dd-mm-yyyy";
+  row.getCell("I").numFmt = "hh:mm";
+  row.getCell("J").numFmt = "hh:mm";
+  row.getCell("K").numFmt = "0.0";
+  row.getCell("L").numFmt = "0.0";
+  row.getCell("M").numFmt = "0.0";
+  row.getCell("N").numFmt = "0.0";
+  row.getCell("O").numFmt = "0.0";
+  row.getCell("P").numFmt = "#,##0";
+  row.getCell("Q").numFmt = "#,##0";
+  row.getCell("R").numFmt = "#,##0";
+  row.getCell("S").numFmt = "#,##0";
+  row.getCell("T").numFmt = "#,##0";
+  row.getCell("U").numFmt = "#,##0";
 
-    row.getCell("K").value = {
-  formula: `IFERROR(MAX(J${rowNumber}-IF(WEEKDAY(A${rowNumber},2)<=2,10,9),0),0)`,
-};
+  row.getCell("L").value = {
+    formula: `IFERROR((J${rowNumber}-I${rowNumber})*24-K${rowNumber},0)`,
+  };
 
-    row.getCell("L").value = {
-      formula: `0`,
-    };
+  row.getCell("M").value = {
+    formula: `IFERROR(MAX(L${rowNumber}-IF(WEEKDAY(A${rowNumber},2)<=2,10,9),0),0)`,
+  };
 
-    row.getCell("M").value = {
-      formula: `0`,
-    };
+  row.getCell("N").value = {
+    formula: `0`,
+  };
 
-    row.getCell("N").value = {
-      formula: `K${rowNumber}*5000`,
-    };
+  row.getCell("O").value = {
+    formula: `0`,
+  };
 
-    row.getCell("O").value = {
-      formula:
-        personType === "RIGGER"
-          ? `L${rowNumber}*5303`
-          : `L${rowNumber}*7000`,
-    };
+  row.getCell("P").value = {
+    formula: `M${rowNumber}*5000`,
+  };
 
-    row.getCell("P").value = {
-      formula: `M${rowNumber}*5000`,
-    };
+  row.getCell("Q").value = {
+    formula:
+      personType === "RIGGER"
+        ? `N${rowNumber}*5303`
+        : `N${rowNumber}*7000`,
+  };
 
-    row.getCell("S").value = {
-      formula: `R${rowNumber}+Q${rowNumber}+P${rowNumber}+O${rowNumber}+N${rowNumber}`,
-    };
+  row.getCell("R").value = {
+    formula: `O${rowNumber}*5000`,
+  };
 
-    this.styleExcelBodyRow(row);
-  }
+  row.getCell("U").value = {
+    formula: `T${rowNumber}+S${rowNumber}+R${rowNumber}+Q${rowNumber}+P${rowNumber}`,
+  };
+
+  this.styleExcelBodyRow(row);
+}
 
   private async findRiggerUserByName(
     empresa: Empresa,
@@ -1308,24 +1322,28 @@ index += 1;
   }
 
   const itemsRaw = await this.prisma.workOrder.findMany({
-    where: {
-      AND: andWhere,
-    },
-    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    select: {
-      id: true,
-      createdAt: true,
-      status: true,
-      cliente: true,
-      direccionFaena: true,
-      lugar: true,
-      operador: true,
-      conductor: true,
-      rigger: true,
-      workerReport: true,
-      diasProgramados: true,
-    },
-  });
+  where: {
+    AND: andWhere,
+  },
+  orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  select: {
+    id: true,
+    createdAt: true,
+    status: true,
+    cliente: true,
+    direccionFaena: true,
+    lugar: true,
+
+    camion: true, // ✅ PATENTE
+
+    operador: true,
+    conductor: true,
+    rigger: true,
+
+    workerReport: true,
+    diasProgramados: true,
+  },
+});
 
   let items = itemsRaw;
 
