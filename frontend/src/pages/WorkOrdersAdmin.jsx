@@ -1600,26 +1600,42 @@ const [quickFilter, setQuickFilter] = useState("TOTAL");
                         ) : null}
 
                         {isPendienteVB ? (
-                          <>
-                            <button
-                              className="btn"
-                              type="button"
-                              onClick={() => openApprove(x)}
-                              style={{ background: "#16a34a", borderColor: "#16a34a", color: "#fff" }}
-                            >
-                              ✅ Aprobar
-                            </button>
+  <>
+    <button
+      className="btn"
+      type="button"
+      onClick={() => openEdit(x.id)}
+    >
+      Editar
+    </button>
 
-                            <button
-                              className="btn"
-                              type="button"
-                              onClick={() => openReject(x)}
-                              style={{ background: "#dc2626", borderColor: "#dc2626", color: "#fff" }}
-                            >
-                              ❌ Rechazar
-                            </button>
-                          </>
-                        ) : (
+    <button
+      className="btn"
+      type="button"
+      onClick={() => openApprove(x)}
+      style={{
+        background: "#16a34a",
+        borderColor: "#16a34a",
+        color: "#fff",
+      }}
+    >
+      ✅ Aprobar
+    </button>
+
+    <button
+      className="btn"
+      type="button"
+      onClick={() => openReject(x)}
+      style={{
+        background: "#dc2626",
+        borderColor: "#dc2626",
+        color: "#fff",
+      }}
+    >
+      ❌ Rechazar
+    </button>
+  </>
+) : (
                           <>
                             <button
                               className="btn"
