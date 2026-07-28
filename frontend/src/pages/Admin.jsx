@@ -87,7 +87,7 @@ export default function Admin() {
   const canSeeCamiones = isSuperadmin || isControlFlota;
   const canSeeWorkOrders = isSuperadmin || isAdministradora;
   const canSeeCotizaciones = isSuperadmin || isAdministradora;
-  const canSeeTrabajadores = isSuperadmin;
+  const canSeeTrabajadores = isSuperadmin || isAdministradora;
   const canSeeAuditoria = isSuperadmin;
   const canSeeConfiguracion = isSuperadmin;
   const canSeePapelera = isSuperadmin;

@@ -111,6 +111,27 @@ export class UsersService {
     }
   }
 
+  private assertCanManageRole(actor: any, targetRole: Role) {
+    const actorRole = String(actor?.role || "")
+      .trim()
+      .toUpperCase();
+
+    if (!["SUPERADMIN", "ADMINISTRADORA"].includes(actorRole)) {
+      throw new BadRequestException(
+        "No autorizado para administrar usuarios."
+      );
+    }
+
+    if (
+      actorRole === "ADMINISTRADORA" &&
+      targetRole === Role.SUPERADMIN
+    ) {
+      throw new BadRequestException(
+        "La ADMINISTRADORA no puede crear ni asignar el rol SUPERADMIN."
+      );
+    }
+  }
+
   private snapshotUser(u: any) {
     if (!u) return null;
     return {
@@ -390,6 +411,8 @@ export class UsersService {
   const passwordHash = await bcrypt.hash(dto.password, 10);
   const role = (dto.role ?? Role.TRABAJADOR) as Role;
 
+  this.assertCanManageRole(actor, role);
+
     const empresa = this.normalizeEmpresa((dto as any).empresa);
     const workerTypeInput = this.normalizeWorkerType((dto as any).workerType);
 
@@ -643,6 +666,19 @@ export class UsersService {
 
     if (!beforeRaw) throw new NotFoundException("Trabajador no encontrado.");
 
+    const actorRole = String(actor?.role || "")
+      .trim()
+      .toUpperCase();
+
+    if (
+      actorRole === "ADMINISTRADORA" &&
+      beforeRaw.role === Role.SUPERADMIN
+    ) {
+      throw new BadRequestException(
+        "La ADMINISTRADORA no puede modificar usuarios SUPERADMIN."
+      );
+    }
+
     const before = this.snapshotUser(beforeRaw);
 
     const data: any = {};
@@ -702,6 +738,8 @@ export class UsersService {
     }
 
     const nextRole: Role = (data.role ?? beforeRaw.role) as Role;
+
+    this.assertCanManageRole(actor, nextRole);
 
     const nextEmpresaFinal =
       data.empresa !== undefined
@@ -912,6 +950,19 @@ export class UsersService {
     });
 
     if (!beforeRaw) throw new NotFoundException("Trabajador no encontrado.");
+
+    const actorRole = String(actor?.role || "")
+      .trim()
+      .toUpperCase();
+
+    if (
+      actorRole === "ADMINISTRADORA" &&
+      beforeRaw.role === Role.SUPERADMIN
+    ) {
+      throw new BadRequestException(
+        "La ADMINISTRADORA no puede activar ni desactivar usuarios SUPERADMIN."
+      );
+    }
 
     const updated = await this.prisma.user.update({
       where: { id },

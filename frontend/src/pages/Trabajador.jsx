@@ -39,11 +39,6 @@ function authHeaders(isJson = true) {
   };
 }
 
-function empresaLabel(code) {
-  if (!code) return "—";
-  return String(code).toUpperCase() === "INSPROTEL" ? "INSPROTEL" : "GRÚAS THOMAS";
-}
-
 function norm(v) {
   return String(v || "").trim().toUpperCase();
 }
@@ -133,9 +128,6 @@ export default function Trabajador() {
   const [page, setPage] = useState(1);
   const limit = 10;
 
-  // ✅ filtro empresa
-  const [empresaFilter, setEmpresaFilter] = useState("ALL"); // ALL | GRUAS_THOMAS | INSPROTEL | NONE
-
   // ✅ filtro rol
   const [roleFilter, setRoleFilter] = useState("ALL"); // ALL | TRABAJADOR | CONTROL_FLOTA | ADMINISTRADORA | SUPERADMIN
 
@@ -202,10 +194,6 @@ export default function Trabajador() {
     // ✅ YA NO forzamos TRABAJADOR
     if (roleFilter !== "ALL") params.set("role", roleFilter);
 
-    // empresa (backend)
-    if (empresaFilter === "GRUAS_THOMAS") params.set("empresa", "GRUAS_THOMAS");
-    if (empresaFilter === "INSPROTEL") params.set("empresa", "INSPROTEL");
-
     // tipo (backend) -> solo tiene sentido si estamos mirando trabajadores
     if (includesWorkers) {
       if (tipoFilter !== "ALL" && tipoFilter !== "NONE") {
@@ -214,7 +202,7 @@ export default function Trabajador() {
     }
 
     return params.toString();
-  }, [q, activo, page, limit, empresaFilter, roleFilter, tipoFilter, includesWorkers]);
+  }, [q, activo, page, limit, roleFilter, tipoFilter, includesWorkers]);
 
   // -------------------------
   // Fetch tabla
@@ -245,9 +233,6 @@ export default function Trabajador() {
 
       let list = data.items || [];
       let m = data.meta || { total: 0, page: 1, pages: 1, limit };
-
-      // NONE en front
-      if (empresaFilter === "NONE") list = list.filter((u) => !u.empresa);
 
       // tipo NONE solo cuando estamos mirando trabajadores
       if (includesWorkers && tipoFilter === "NONE") list = list.filter((u) => !u.workerType);
@@ -281,9 +266,6 @@ export default function Trabajador() {
       // ✅ stats siempre para trabajadores
       params.set("role", "TRABAJADOR");
 
-      if (empresaFilter === "GRUAS_THOMAS") params.set("empresa", "GRUAS_THOMAS");
-      if (empresaFilter === "INSPROTEL") params.set("empresa", "INSPROTEL");
-
       params.set("page", "1");
       params.set("limit", "5000");
 
@@ -306,8 +288,6 @@ export default function Trabajador() {
 
       const data = await res.json();
       let all = Array.isArray(data.items) ? data.items : [];
-
-      if (empresaFilter === "NONE") all = all.filter((u) => !u.empresa);
 
       const trabajadores = all.filter((u) => norm(u.role) === "TRABAJADOR");
       const operadores = trabajadores.filter((u) => hasWorkerType(u, "OPERADOR")).length;
@@ -333,7 +313,7 @@ const riggers = trabajadores.filter((u) => hasWorkerType(u, "RIGGER")).length;
   useEffect(() => {
     fetchStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, activo, empresaFilter, roleFilter]);
+  }, [q, activo, roleFilter]);
 
   function openToggleConfirm(u) {
     setError("");
@@ -481,7 +461,6 @@ const riggers = trabajadores.filter((u) => hasWorkerType(u, "RIGGER")).length;
     <>
       <div className="page-title">
         <h1>Usuarios</h1>
-        <p>Sesión: {user?.email}</p>
       </div>
 
       {/* ✅ Cards (solo las que quieres) */}
@@ -540,7 +519,7 @@ const riggers = trabajadores.filter((u) => hasWorkerType(u, "RIGGER")).length;
         <div className="panel-head">
           <div>
             <h2>Listado de Usuarios</h2>
-            <p>Gestiona usuarios, roles, empresa y tipo</p>
+            <p>Gestiona usuarios, roles y tipo</p>
 
             {tipoFilter !== "ALL" || roleFilter !== "ALL" ? (
               <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -601,7 +580,7 @@ const riggers = trabajadores.filter((u) => hasWorkerType(u, "RIGGER")).length;
             display: "grid",
             gap: 12,
             alignItems: "center",
-            gridTemplateColumns: "minmax(260px, 1fr) 160px 220px 200px 220px",
+            gridTemplateColumns: "minmax(260px, 1fr) 160px 200px 220px",
           }}
         >
           <div className="topbar-search" style={{ minWidth: 260 }}>
@@ -631,22 +610,6 @@ const riggers = trabajadores.filter((u) => hasWorkerType(u, "RIGGER")).length;
             <option value="true">Activos</option>
             <option value="false">Inactivos</option>
             <option value="">Todos</option>
-          </select>
-
-          <select
-            value={empresaFilter}
-            onChange={(e) => {
-              setPage(1);
-              setEmpresaFilter(e.target.value);
-            }}
-            className="gt-select"
-            style={{ width: "100%" }}
-            title="Filtrar por empresa"
-          >
-            <option value="ALL">Empresa: Todas</option>
-            <option value="GRUAS_THOMAS">GRÚAS THOMAS</option>
-            <option value="INSPROTEL">INSPROTEL</option>
-            <option value="NONE">Sin empresa</option>
           </select>
 
           {/* ✅ filtro rol */}
@@ -710,12 +673,12 @@ const riggers = trabajadores.filter((u) => hasWorkerType(u, "RIGGER")).length;
         <style>
           {`
             @media (max-width: 1200px) {
-              .panel > div[style*="gridTemplateColumns: minmax(260px, 1fr) 160px 220px 200px 220px"] {
+              .panel > div[style*="gridTemplateColumns: minmax(260px, 1fr) 160px 200px 220px"] {
                 grid-template-columns: 1fr 1fr;
               }
             }
             @media (max-width: 700px) {
-              .panel > div[style*="gridTemplateColumns: minmax(260px, 1fr) 160px 220px 200px 220px"] {
+              .panel > div[style*="gridTemplateColumns: minmax(260px, 1fr) 160px 200px 220px"] {
                 grid-template-columns: 1fr;
               }
             }
@@ -734,7 +697,6 @@ const riggers = trabajadores.filter((u) => hasWorkerType(u, "RIGGER")).length;
               <tr>
   <th>Nombre</th>
   <th>Tipo</th>
-  <th>Empresa</th>
   <th style={{ textAlign: "right" }}>Acciones</th>
 </tr>
             </thead>
@@ -742,7 +704,7 @@ const riggers = trabajadores.filter((u) => hasWorkerType(u, "RIGGER")).length;
             <tbody>
               {items.length === 0 && !loading ? (
                 <tr>
-                  <td colSpan={4} className="empty">
+                  <td colSpan={3} className="empty">
                     No hay resultados para este filtro.
                   </td>
                 </tr>
@@ -768,8 +730,10 @@ const riggers = trabajadores.filter((u) => hasWorkerType(u, "RIGGER")).length;
 
                       <td>
   <span className="mono" style={{ fontWeight: 800 }}>
-    {workerTypeLabel(u.workerType)}
-  </span>
+  {u.workerType
+    ? workerTypeLabel(u.workerType)
+    : roleLabel(u.role)}
+</span>
 
   {extrasText ? (
     <div style={{ marginTop: 4, fontSize: 12, fontWeight: 800, color: "#64748b" }}>
@@ -777,12 +741,6 @@ const riggers = trabajadores.filter((u) => hasWorkerType(u, "RIGGER")).length;
     </div>
   ) : null}
 </td>
-
-                      <td>
-                        <span className="mono" style={{ fontWeight: 800 }}>
-                          {empresaLabel(u.empresa)}
-                        </span>
-                      </td>
 
                       <td style={{ textAlign: "right" }}>
                         <div className="table-actions">
@@ -1028,23 +986,3 @@ const riggers = trabajadores.filter((u) => hasWorkerType(u, "RIGGER")).length;
     </>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

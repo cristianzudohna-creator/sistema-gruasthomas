@@ -27,6 +27,14 @@ function norm(r) {
   return String(r || "").trim().toUpperCase();
 }
 
+function normalizeRutPassword(rut) {
+  return String(rut || "")
+    .replace(/\./g, "")
+    .replace(/-/g, "")
+    .trim()
+    .toUpperCase();
+}
+
 async function readError(res) {
   const ct = res.headers.get("content-type") || "";
   try {
@@ -76,7 +84,6 @@ export default function TrabajadorModal({
   const WORKER_TYPE_OPTIONS = useMemo(
     () => [
       { value: "", label: "Selecciona tipo" },
-      { value: "CONDUCTOR", label: "Conductor" },
       { value: "OPERADOR", label: "Operador" },
       { value: "RIGGER", label: "Rigger" },
       { value: "MECANICO", label: "Mecánico" },
@@ -85,7 +92,6 @@ export default function TrabajadorModal({
       { value: "ADQUISICIONES", label: "Adquisiciones" },
       { value: "ASEO", label: "Aseo" },
       { value: "AYUDANTE_DE_MECANICO", label: "Ayudante de mecánico" },
-      { value: "CASA_PARTICULAR", label: "Casa particular" },
       { value: "LAVADOR_EQUIPOS", label: "Lavador equipos" },
       { value: "MECANICO_HIDRAULICO", label: "Mecánico hidráulico" },
       { value: "NOCHERO", label: "Nochero" },
@@ -105,10 +111,9 @@ export default function TrabajadorModal({
   rut: "",
   role: "TRABAJADOR",
   activo: true,
-  empresa: "",
+  empresa: "GRUAS_THOMAS",
   workerType: "",
   workerTypesExtra: [],
-  password: "",
 });
 
   const [touched, setTouched] = useState({});
@@ -131,12 +136,11 @@ export default function TrabajadorModal({
   rut: trabajador.rut || "",
   role: trabajador.role || "TRABAJADOR",
   activo: trabajador.activo ?? true,
-  empresa: trabajador.empresa || "",
+  empresa: "GRUAS_THOMAS",
   workerType: trabajador.workerType || "",
   workerTypesExtra: Array.isArray(trabajador.workerTypesExtra)
     ? trabajador.workerTypesExtra
     : [],
-  password: "",
 });
     } else {
       setForm({
@@ -146,10 +150,9 @@ export default function TrabajadorModal({
   rut: "",
   role: "TRABAJADOR",
   activo: true,
-  empresa: "",
+  empresa: "GRUAS_THOMAS",
   workerType: "",
   workerTypesExtra: [],
-  password: "",
 });
     }
 
@@ -172,15 +175,12 @@ export default function TrabajadorModal({
       e.empresa = "Empresa obligatoria.";
     }
 
-    if (!isEdit) {
-      if (!form.password) e.password = "Contraseña obligatoria.";
-      else if (form.password.length < 8) {
-        e.password = "Mínimo 8 caracteres.";
-      }
+    if (isTrabajadorRole && !form.workerType) {
+      e.workerType = "Debes seleccionar un tipo de trabajador.";
     }
 
     return e;
-  }, [form, isEdit, requiresEmpresa]);
+  }, [form, requiresEmpresa, isTrabajadorRole]);
 
   const canSubmit = Object.keys(errors).length === 0 && !loading;
 
@@ -204,12 +204,14 @@ export default function TrabajadorModal({
   rut: form.rut || null,
   role: form.role,
   activo: form.activo,
-  empresa: isSuperadmin ? null : form.empresa,
+  empresa: form.role === "SUPERADMIN" ? null : "GRUAS_THOMAS",
   workerType: isTrabajadorRole ? form.workerType || null : null,
   workerTypesExtra: isTrabajadorRole
     ? form.workerTypesExtra || []
     : [],
-  ...(!isEdit && { password: form.password }),
+  ...(!isEdit && {
+  password: normalizeRutPassword(form.rut),
+}),
 };
 
       const endpoint = isEdit
@@ -336,6 +338,7 @@ export default function TrabajadorModal({
     className="gt-select"
     value={form.workerType}
     disabled={!isTrabajadorRole}
+    onBlur={() => markTouched("workerType")}
     onChange={(e) =>
       setForm((s) => ({ ...s, workerType: e.target.value }))
     }
@@ -346,6 +349,12 @@ export default function TrabajadorModal({
       </option>
     ))}
   </select>
+
+  {touched.workerType && errors.workerType ? (
+    <div style={{ color: "#b91c1c", fontSize: 12 }}>
+      {errors.workerType}
+    </div>
+  ) : null}
 
   {isTrabajadorRole ? (
     <div style={{ marginTop: 12 }}>
@@ -397,42 +406,6 @@ export default function TrabajadorModal({
   ) : null}
 </div>
 
-        <div className="gt-field">
-          <label>Empresa</label>
-
-          <select
-            className="gt-select"
-            value={form.empresa}
-            disabled={isSuperadmin}
-            onChange={(e) =>
-              setForm((s) => ({ ...s, empresa: e.target.value }))
-            }
-          >
-            <option value="">Selecciona empresa</option>
-            <option value="GRUAS_THOMAS">GRÚAS THOMAS</option>
-            <option value="INSPROTEL">INSPROTEL</option>
-          </select>
-        </div>
-
-        {!isEdit && (
-          <div className="gt-field" style={{ gridColumn: "1 / -1" }}>
-            <label>Contraseña</label>
-
-            <input
-              className="gt-input"
-              type="password"
-              value={form.password}
-              placeholder="Mínimo 8 caracteres"
-              onChange={(e) =>
-                setForm((s) => ({ ...s, password: e.target.value }))
-              }
-            />
-
-            {touched.password && errors.password && (
-              <div className="gt-error">{errors.password}</div>
-            )}
-          </div>
-        )}
       </form>
     </Modal>
   );
@@ -462,16 +435,3 @@ function Field({
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
