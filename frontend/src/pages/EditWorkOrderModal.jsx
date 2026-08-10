@@ -817,6 +817,7 @@ function Resumen({ f }) {
         <Row label="RUT" value={v(f.rut)} />
         <Row label="Solicitado por" value={v(f.solicitadoPor)} />
         <Row label="Dirección" value={v(f.direccion)} />
+        <Row label="Obra / Tramo" value={v(f.direccionFaena)} />
         <Row label="Comuna" value={v(f.comuna)} />
         <Row label="Ciudad" value={v(f.ciudad)} />
         <Row label="Maps" value={v(f.mapsLink)} />
@@ -849,6 +850,7 @@ export default function EditWorkOrderModal({
     rut: "",
     solicitadoPor: "",
     direccion: "",
+    direccionFaena: "",
     comuna: "",
     ciudad: "",
     mapsLink: "",
@@ -878,6 +880,7 @@ export default function EditWorkOrderModal({
       rut: data.rut || "",
       solicitadoPor: data.solicitadoPor || "",
       direccion: data.direccion || data.lugar || "",
+      direccionFaena: data.direccionFaena || "",
       comuna: data.comuna || "",
       ciudad: data.ciudad || "",
       mapsLink: data.mapsLink || "",
@@ -965,6 +968,7 @@ export default function EditWorkOrderModal({
 
       addIf(payload, "direccion", f.direccion);
       addIf(payload, "comuna", f.comuna);
+      addIf(payload, "direccionFaena", f.direccionFaena);
       addIf(payload, "ciudad", f.ciudad);
 
       addIf(payload, "lugar", f.direccion);
@@ -1113,8 +1117,19 @@ export default function EditWorkOrderModal({
             <div className="ot-box">
               <div className="ot-box-title">Ubicación</div>
 
-              <div className="ot-grid-2">
+                <div className="ot-grid-2">
+  <div className="gt-field" style={{ gridColumn: "1 / -1" }}>
+    <label>Obra / Tramo</label>
+    <input
+      className="gt-input"
+      value={f.direccionFaena}
+      onChange={(e) => setField("direccionFaena", e.target.value)}
+      disabled={saving}
+      placeholder="Obra / Tramo"
+    />
+  </div>
                 <div className="gt-field" style={{ gridColumn: "1 / -1" }}>
+                
                   <label>Link Google Maps</label>
                   <input
                     className="gt-input"
